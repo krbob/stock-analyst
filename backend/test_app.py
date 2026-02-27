@@ -3,7 +3,7 @@ from unittest.mock import PropertyMock, patch
 import pandas as pd
 import pytest
 
-from app import app
+from app import app, _ticker_cache
 
 
 @pytest.fixture
@@ -11,6 +11,13 @@ def client():
     app.config["TESTING"] = True
     with app.test_client() as c:
         yield c
+
+
+@pytest.fixture(autouse=True)
+def clear_ticker_cache():
+    _ticker_cache.clear()
+    yield
+    _ticker_cache.clear()
 
 
 def _mock_ticker(history_df=None, dividends=None, info=None):
@@ -29,15 +36,19 @@ def _mock_ticker(history_df=None, dividends=None, info=None):
     return patcher, instance
 
 
+def _sample_history(date="2024-06-15"):
+    index = pd.DatetimeIndex([pd.Timestamp(date)])
+    return pd.DataFrame(
+        {"Open": [100.0], "Close": [101.0], "Low": [99.0], "High": [102.0], "Volume": [1000]},
+        index=index,
+    )
+
+
 class TestHistoryEndpoint:
     def test_returns_prices(self, client):
         index = pd.DatetimeIndex([pd.Timestamp("2024-06-15")])
-        history_df = pd.DataFrame(
-            {"Open": [100.0], "Close": [101.0], "Low": [99.0], "High": [102.0], "Volume": [1000]},
-            index=index,
-        )
         dividends = pd.Series([0.5], index=index)
-        patcher, _ = _mock_ticker(history_df=history_df, dividends=dividends)
+        patcher, _ = _mock_ticker(history_df=_sample_history(), dividends=dividends)
 
         try:
             response = client.get("/history/AAPL/1y")
@@ -52,12 +63,7 @@ class TestHistoryEndpoint:
         assert data[0]["dividend"] == 0.5
 
     def test_zero_dividend_when_none_on_date(self, client):
-        index = pd.DatetimeIndex([pd.Timestamp("2024-06-15")])
-        history_df = pd.DataFrame(
-            {"Open": [100.0], "Close": [101.0], "Low": [99.0], "High": [102.0], "Volume": [1000]},
-            index=index,
-        )
-        patcher, _ = _mock_ticker(history_df=history_df)
+        patcher, _ = _mock_ticker(history_df=_sample_history())
 
         try:
             response = client.get("/history/AAPL/1y")
@@ -154,8 +160,8 @@ class TestInfoEndpoint:
         assert "Internal details" not in str(body)
 
 
-class TestResponseHeaders:
-    def test_cache_control_is_set(self, client):
+class TestCacheHeaders:
+    def test_info_cache_1_hour(self, client):
         patcher, _ = _mock_ticker(info={"longName": "Test"})
 
         try:
@@ -163,4 +169,62 @@ class TestResponseHeaders:
         finally:
             patcher.stop()
 
-        assert response.headers["Cache-Control"] == "public, max-age=60"
+        assert response.headers["Cache-Control"] == "public, max-age=3600"
+
+    def test_history_5y_cache_24_hours(self, client):
+        patcher, _ = _mock_ticker(history_df=_sample_history())
+
+        try:
+            response = client.get("/history/AAPL/5y")
+        finally:
+            patcher.stop()
+
+        assert response.headers["Cache-Control"] == "public, max-age=86400"
+
+    def test_history_1d_cache_2_minutes(self, client):
+        patcher, _ = _mock_ticker(history_df=_sample_history())
+
+        try:
+            response = client.get("/history/AAPL/1d")
+        finally:
+            patcher.stop()
+
+        assert response.headers["Cache-Control"] == "public, max-age=120"
+
+    def test_history_1y_cache_4_hours(self, client):
+        patcher, _ = _mock_ticker(history_df=_sample_history())
+
+        try:
+            response = client.get("/history/AAPL/1y")
+        finally:
+            patcher.stop()
+
+        assert response.headers["Cache-Control"] == "public, max-age=14400"
+
+
+class TestTickerCache:
+    def test_reuses_ticker_within_ttl(self, client):
+        patcher, _ = _mock_ticker(
+            history_df=_sample_history(),
+            info={"longName": "Apple Inc."},
+        )
+
+        try:
+            client.get("/history/AAPL/1y")
+            client.get("/info/AAPL")
+        finally:
+            patcher.stop()
+
+        assert "AAPL" in _ticker_cache
+
+    def test_different_symbols_get_different_tickers(self, client):
+        patcher, _ = _mock_ticker(info={"longName": "Test"})
+
+        try:
+            client.get("/info/AAPL")
+            client.get("/info/MSFT")
+        finally:
+            patcher.stop()
+
+        assert "AAPL" in _ticker_cache
+        assert "MSFT" in _ticker_cache

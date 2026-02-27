@@ -33,7 +33,6 @@ fun Collection<HistoricalPrice>.toBarSeries(conversion: Collection<HistoricalPri
         day.toBar(conversion?.priceFor(day.date))
     }).build()
 
-@OptIn(ExperimentalTime::class)
 private fun HistoricalPrice.toBar(conversion: Double?): Bar? {
     if (setOf(open, close, low, high).any { it.isNaN() }) {
         return null
