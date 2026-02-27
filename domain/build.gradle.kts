@@ -11,6 +11,7 @@ repositories {
 dependencies {
     implementation(project(":core"))
     implementation(libs.koin.core)
+    implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.datetime)
     implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.ta4j.core)

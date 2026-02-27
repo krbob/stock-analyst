@@ -47,6 +47,7 @@ class AnalyzeStockUseCaseTest {
         coEvery { stockDataProvider.getInfo("INVALID") } returns BasicInfo(
             name = null, peRatio = null, pbRatio = null, eps = null, roe = null, marketCap = null
         )
+        coEvery { stockDataProvider.getHistory("INVALID", any()) } returns emptyList()
 
         val exception = assertThrows<BackendDataException> { useCase("INVALID") }
 
