@@ -4,10 +4,11 @@ WORKDIR /app
 
 COPY gradle /app/gradle
 COPY build.gradle.kts gradle.properties gradlew settings.gradle.kts /app/
+COPY core /app/core
+COPY domain /app/domain
 COPY src /app/src
 
-RUN --mount=type=cache,target=/root/.gradle \
-    ./gradlew shadowJar --no-daemon
+RUN ./gradlew shadowJar --no-daemon
 
 FROM eclipse-temurin:25.0.2_10-jre
 

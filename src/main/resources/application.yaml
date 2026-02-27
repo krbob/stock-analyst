@@ -1,0 +1,6 @@
+ktor:
+    application:
+        modules:
+            - net.bobinski.portfolio.ApplicationKt.module
+    deployment:
+        port: 7777
