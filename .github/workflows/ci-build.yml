@@ -33,6 +33,17 @@ jobs:
       - name: Run unit tests
         run: ./gradlew test
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Run backend tests
+        working-directory: backend
+        run: |
+          pip install -r requirements-dev.txt
+          pytest test_app.py
+
       - name: Test containers
         run: |
           echo "🛠️ Building and running containers locally for testing"
