@@ -1,14 +1,17 @@
 import logging
 import time
 import traceback
+from dataclasses import asdict, dataclass
+
 import yfinance as yf
-from dataclasses import dataclass
-from flask import Flask, request, jsonify, g
+from flask import Flask, g, jsonify, request
 
 app = Flask(__name__)
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
+VALID_PERIODS = {"1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"}
 
 
 @dataclass
@@ -21,17 +24,6 @@ class HistoricalPrice:
     volume: int
     dividend: float
 
-    def to_json(self):
-        return {
-            'date': self.date,
-            'open': self.open,
-            'close': self.close,
-            'low': self.low,
-            'high': self.high,
-            'volume': self.volume,
-            'dividend': self.dividend
-        }
-
 
 @dataclass
 class BasicInfo:
@@ -42,44 +34,32 @@ class BasicInfo:
     roe: float
     market_cap: float
 
-    def to_json(self):
-        return {
-            'name': self.name,
-            'pe_ratio': self.pe_ratio,
-            'pb_ratio': self.pb_ratio,
-            'eps': self.eps,
-            'roe': self.roe,
-            'market_cap': self.market_cap
-        }
-
 
 def get_history(symbol, period):
-    data = yf.Ticker(symbol)
-    history = data.history(period=period, auto_adjust=False)
-    dividends = data.dividends
+    ticker = yf.Ticker(symbol)
+    history = ticker.history(period=period, auto_adjust=False)
+    dividends = ticker.dividends
     for index, row in history.iterrows():
         yield HistoricalPrice(
-            date=index.strftime('%Y-%m-%d'),
-            open=row['Open'],
-            close=row['Close'],
-            low=row['Low'],
-            high=row['High'],
-            volume=int(row['Volume']),
-            dividend=dividends.loc[index] if index in dividends.index else 0.0
+            date=index.strftime("%Y-%m-%d"),
+            open=row["Open"],
+            close=row["Close"],
+            low=row["Low"],
+            high=row["High"],
+            volume=int(row["Volume"]),
+            dividend=dividends.loc[index] if index in dividends.index else 0.0,
         )
 
 
 def get_basic_info(symbol):
-    data = yf.Ticker(symbol)
-    info = data.info
-
+    info = yf.Ticker(symbol).info
     return BasicInfo(
-        name=info.get('longName') or info.get('shortName'),
-        pe_ratio=info.get('forwardPE'),
-        pb_ratio=info.get('priceToBook'),
-        eps=info.get('trailingEps'),
-        roe=info.get('returnOnEquity'),
-        market_cap=info.get('marketCap')
+        name=info.get("longName") or info.get("shortName"),
+        pe_ratio=info.get("forwardPE"),
+        pb_ratio=info.get("priceToBook"),
+        eps=info.get("trailingEps"),
+        roe=info.get("returnOnEquity"),
+        market_cap=info.get("marketCap"),
     )
 
 
@@ -90,63 +70,38 @@ def start_timer():
 
 @app.after_request
 def log_request_info(response):
-    if hasattr(g, 'start_time'):
-        duration = time.time() - g.start_time
-        duration_ms = int(duration * 1000)
-        log_params = [
-            request.method,
-            request.path,
-            response.status,
-            f"{duration_ms}ms"
-        ]
-        logger.info(" ".join(log_params))
-
+    if hasattr(g, "start_time"):
+        duration_ms = int((time.time() - g.start_time) * 1000)
+        logger.info("%s %s %s %dms", request.method, request.path, response.status, duration_ms)
     return response
 
 
 @app.after_request
-def set_headers(response):
-    response.headers['Content-Type'] = 'application/json; charset=UTF-8'
-    response.headers['Cache-Control'] = 'public, max-age=60'
+def set_cache_header(response):
+    response.headers["Cache-Control"] = "public, max-age=60"
     return response
 
 
 @app.errorhandler(Exception)
 def handle_exception(e):
-    tb = traceback.format_exc()
-    logger.error(f"Exception: {str(e)}\n{tb}")
+    logger.error("Exception: %s\n%s", e, traceback.format_exc())
     return jsonify({"error": "An internal error occurred"}), 500
 
 
-@app.route('/history/<string:symbol>/<string:period>', methods=['GET'])
+@app.route("/history/<symbol>/<period>")
 def history_endpoint(symbol, period):
-    if not symbol or not period:
-        return jsonify({"error": "Parameters 'symbol' and 'period' are required"}), 400
+    if period not in VALID_PERIODS:
+        return jsonify({"error": f"Invalid period: {period}"}), 400
 
-    try:
-        history = get_history(symbol, period)
-    except Exception as e:
-        logger.error(f"Error fetching history for {symbol} over period {period}: {str(e)}")
-        return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
-
-    return jsonify([day.to_json() for day in history])
+    return jsonify([asdict(day) for day in get_history(symbol, period)])
 
 
-@app.route('/info/<string:symbol>', methods=['GET'])
+@app.route("/info/<symbol>")
 def info_endpoint(symbol):
-    if not symbol:
-        return jsonify({"error": "Parameter 'symbol' is required"}), 400
-
-    try:
-        info = get_basic_info(symbol)
-    except Exception as e:
-        logger.error(f"Error fetching info for {symbol}: {str(e)}")
-        return jsonify({"error": f"Unexpected error: {str(e)}"}), 500
-
-    return jsonify(info.to_json())
+    return jsonify(asdict(get_basic_info(symbol)))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     from waitress import serve
 
-    serve(app, host='0.0.0.0', port=7776)
+    serve(app, host="0.0.0.0", port=7776)
