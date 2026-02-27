@@ -13,6 +13,35 @@ logger = logging.getLogger(__name__)
 
 VALID_PERIODS = {"1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"}
 
+HISTORY_CACHE_SECONDS = {
+    "1d": 120,
+    "5d": 300,
+    "1mo": 3600,
+    "3mo": 3600,
+    "6mo": 7200,
+    "1y": 14400,
+    "2y": 43200,
+    "5y": 86400,
+    "10y": 86400,
+    "ytd": 3600,
+    "max": 86400,
+}
+
+INFO_CACHE_SECONDS = 3600
+
+_ticker_cache = {}
+_TICKER_TTL = 300
+
+
+def get_ticker(symbol):
+    now = time.time()
+    cached = _ticker_cache.get(symbol)
+    if cached and (now - cached[1]) < _TICKER_TTL:
+        return cached[0]
+    ticker = yf.Ticker(symbol)
+    _ticker_cache[symbol] = (ticker, now)
+    return ticker
+
 
 @dataclass
 class HistoricalPrice:
@@ -36,7 +65,7 @@ class BasicInfo:
 
 
 def get_history(symbol, period):
-    ticker = yf.Ticker(symbol)
+    ticker = get_ticker(symbol)
     history = ticker.history(period=period, auto_adjust=False)
     dividends = ticker.dividends
     for index, row in history.iterrows():
@@ -52,7 +81,7 @@ def get_history(symbol, period):
 
 
 def get_basic_info(symbol):
-    info = yf.Ticker(symbol).info
+    info = get_ticker(symbol).info
     return BasicInfo(
         name=info.get("longName") or info.get("shortName"),
         pe_ratio=info.get("forwardPE"),
@@ -76,12 +105,6 @@ def log_request_info(response):
     return response
 
 
-@app.after_request
-def set_cache_header(response):
-    response.headers["Cache-Control"] = "public, max-age=60"
-    return response
-
-
 @app.errorhandler(Exception)
 def handle_exception(e):
     logger.error("Exception: %s\n%s", e, traceback.format_exc())
@@ -93,12 +116,17 @@ def history_endpoint(symbol, period):
     if period not in VALID_PERIODS:
         return jsonify({"error": f"Invalid period: {period}"}), 400
 
-    return jsonify([asdict(day) for day in get_history(symbol, period)])
+    response = jsonify([asdict(day) for day in get_history(symbol, period)])
+    max_age = HISTORY_CACHE_SECONDS.get(period, 60)
+    response.headers["Cache-Control"] = f"public, max-age={max_age}"
+    return response
 
 
 @app.route("/info/<symbol>")
 def info_endpoint(symbol):
-    return jsonify(asdict(get_basic_info(symbol)))
+    response = jsonify(asdict(get_basic_info(symbol)))
+    response.headers["Cache-Control"] = f"public, max-age={INFO_CACHE_SECONDS}"
+    return response
 
 
 if __name__ == "__main__":
