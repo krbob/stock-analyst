@@ -1,9 +1,11 @@
-from unittest.mock import PropertyMock, patch
+import threading
+import time
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pandas as pd
 import pytest
 
-from app import app, _ticker_cache
+from app import app, get_basic_info, get_ticker, _ticker_cache
 
 
 @pytest.fixture
@@ -304,3 +306,57 @@ class TestTickerCache:
         # Ticker should be refreshed (new timestamp)
         _, new_ts = _ticker_cache["AAPL"]
         assert new_ts > _ts - 600
+
+
+class TestConcurrency:
+    def test_concurrent_get_ticker_creates_single_instance(self):
+        barrier = threading.Barrier(2)
+
+        with patch("app.yf.Ticker") as mock_class:
+            mock_class.return_value = MagicMock()
+
+            def call():
+                barrier.wait()
+                get_ticker("AAPL")
+
+            threads = [threading.Thread(target=call) for _ in range(2)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+
+            assert mock_class.call_count == 1
+
+    def test_concurrent_info_requests_are_serialized(self, mock_ticker):
+        max_concurrent = 0
+        concurrent = 0
+        lock = threading.Lock()
+
+        def info_side_effect():
+            nonlocal concurrent, max_concurrent
+            with lock:
+                concurrent += 1
+                max_concurrent = max(max_concurrent, concurrent)
+            time.sleep(0.05)
+            with lock:
+                concurrent -= 1
+            return {"longName": "Apple"}
+
+        ticker = mock_ticker()
+        type(ticker).info = PropertyMock(side_effect=info_side_effect)
+
+        barrier = threading.Barrier(2)
+        results = []
+
+        def call():
+            barrier.wait()
+            results.append(get_basic_info("AAPL"))
+
+        threads = [threading.Thread(target=call) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert max_concurrent == 1
+        assert all(r is not None for r in results)

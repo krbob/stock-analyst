@@ -9,6 +9,9 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -154,6 +157,32 @@ class BackendProviderTest {
         val result = provider.getDividends("BAD")
 
         assertTrue(result.isEmpty())
+    }
+
+    @Test
+    fun `concurrent getInfo calls for same symbol coalesce into single request`() = runTest {
+        var requestCount = 0
+        val expected = BasicInfo(
+            "Apple Inc.", 195.0, 30.0f, 45.0f, 6.5f, 1.5f, 3e9,
+            "buy", 40, 210.0f, 150.0f, 1.2f, "Technology", "Consumer Electronics",
+            "2024-07-25", 1.0f, 0.96f
+        )
+        val engine = MockEngine { _ ->
+            requestCount++
+            delay(100)
+            respond(json.encodeToString(expected), HttpStatusCode.OK, jsonHeaders)
+        }
+        val client = HttpClient(engine) {
+            install(ContentNegotiation) { json(json) }
+        }
+        val provider = BackendProvider(client, "http://localhost:8081")
+
+        val results = (1..3).map {
+            async { provider.getInfo("AAPL") }
+        }.awaitAll()
+
+        assertEquals(1, requestCount)
+        results.forEach { assertEquals(expected, it) }
     }
 
     private fun providerWith(responseBody: String, status: HttpStatusCode): BackendProvider {
