@@ -94,13 +94,18 @@ def get_history(symbol, period):
 
 def get_dividends(symbol):
     ticker = get_ticker(symbol)
-    dividends = ticker.dividends
+    try:
+        dividends = ticker.dividends
+    except Exception:
+        return
     for date, amount in dividends.items():
         yield {"date": date.strftime("%Y-%m-%d"), "amount": float(amount)}
 
 
 def get_basic_info(symbol):
     info = get_ticker(symbol).info
+    if not info:
+        return None
     earnings = info.get("earningsDate")
     if isinstance(earnings, list) and earnings:
         earnings = earnings[0]
@@ -166,7 +171,10 @@ def history_endpoint(symbol, period):
 
 @app.route("/info/<symbol>")
 def info_endpoint(symbol):
-    response = jsonify(asdict(get_basic_info(symbol)))
+    result = get_basic_info(symbol)
+    if result is None:
+        return jsonify({"error": f"Symbol not found: {symbol}"}), 404
+    response = jsonify(asdict(result))
     response.headers["Cache-Control"] = f"public, max-age={INFO_CACHE_SECONDS}"
     return response
 
