@@ -147,6 +147,6 @@ class AnalysisRouteTest {
         pbRatio = 45.0f,
         eps = 6.5f,
         roe = 1.5f,
-        marketCap = 3_000_000_000f
+        marketCap = 3_000_000_000.0
     )
 }

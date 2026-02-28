@@ -109,7 +109,7 @@ class AnalyzeStockUseCaseTest {
 
     private fun basicInfo(name: String) = BasicInfo(
         name = name, peRatio = 25.0f, pbRatio = 10.0f, eps = 5.0f, roe = 0.3f,
-        marketCap = 1_000_000f
+        marketCap = 1_000_000.0
     )
 
     private fun priceHistory(days: Int): List<HistoricalPrice> = (0 until days).map { i ->
