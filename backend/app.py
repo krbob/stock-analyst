@@ -63,6 +63,16 @@ class BasicInfo:
     eps: float
     roe: float
     market_cap: float
+    recommendation: str
+    analyst_count: int
+    fifty_two_week_high: float
+    fifty_two_week_low: float
+    beta: float
+    sector: str
+    industry: str
+    earnings_date: str
+    dividend_rate: float
+    trailing_annual_dividend_rate: float
 
 
 def get_history(symbol, period):
@@ -83,6 +93,18 @@ def get_history(symbol, period):
 
 def get_basic_info(symbol):
     info = get_ticker(symbol).info
+    earnings = info.get("earningsDate")
+    if isinstance(earnings, list) and earnings:
+        earnings = earnings[0]
+    earnings_str = None
+    if earnings is not None:
+        try:
+            from datetime import datetime
+
+            earnings_str = datetime.fromtimestamp(earnings).strftime("%Y-%m-%d")
+        except (TypeError, ValueError, OSError):
+            earnings_str = str(earnings) if earnings else None
+
     return BasicInfo(
         name=info.get("longName") or info.get("shortName"),
         price=info.get("regularMarketPrice") or info.get("currentPrice"),
@@ -91,6 +113,16 @@ def get_basic_info(symbol):
         eps=info.get("trailingEps"),
         roe=info.get("returnOnEquity"),
         market_cap=info.get("marketCap"),
+        recommendation=info.get("recommendationKey"),
+        analyst_count=info.get("numberOfAnalystOpinions"),
+        fifty_two_week_high=info.get("fiftyTwoWeekHigh"),
+        fifty_two_week_low=info.get("fiftyTwoWeekLow"),
+        beta=info.get("beta"),
+        sector=info.get("sector"),
+        industry=info.get("industry"),
+        earnings_date=earnings_str,
+        dividend_rate=info.get("dividendRate"),
+        trailing_annual_dividend_rate=info.get("trailingAnnualDividendRate"),
     )
 
 

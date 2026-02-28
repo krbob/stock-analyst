@@ -57,6 +57,11 @@ class AnalyzeStockUseCase(
             }
             val conversionPrice = conversionInfo?.price
             val latestConvRate = conversionHistory?.latestPrice()
+            val convRate = conversionPrice ?: latestConvRate
+
+            val nanMacd = Analysis.Macd(Double.NaN, Double.NaN, Double.NaN)
+            val nanBollinger = Analysis.BollingerBands(Double.NaN, Double.NaN, Double.NaN)
+            val nanMa = Analysis.MovingAverages(Double.NaN, Double.NaN, Double.NaN, Double.NaN)
 
             Analysis(
                 symbol = symbol,
@@ -85,13 +90,38 @@ class AnalyzeStockUseCase(
                         weekly = CalculateRsi.weekly(history),
                         monthly = CalculateRsi.monthly(history)
                     ),
+                macd = nanMacd.takeIf { lacking } ?: CalculateMacd.daily(history),
+                bollingerBands = nanBollinger.takeIf { lacking }
+                    ?: CalculateBollingerBands.daily(history),
+                movingAverages = nanMa.takeIf { lacking }
+                    ?: CalculateMovingAverages.daily(history),
+                atr = Double.NaN.takeIf { lacking } ?: CalculateAtr.daily(history),
                 dividendYield = Double.NaN.takeIf { lacking }
                     ?: calculateYield.yearly(history, conversionHistory),
+                dividendGrowth = calculateDividendGrowth(
+                    info.dividendRate, info.trailingAnnualDividendRate
+                ),
                 peRatio = info.peRatio,
                 pbRatio = info.pbRatio,
-                eps = info.eps?.let { (conversionPrice ?: latestConvRate)?.times(it)?.toFloat() ?: it },
+                eps = info.eps?.let { convRate?.times(it)?.toFloat() ?: it },
                 roe = info.roe,
-                marketCap = info.marketCap?.let { (conversionPrice ?: latestConvRate)?.times(it) ?: it }
+                marketCap = info.marketCap?.let { convRate?.times(it) ?: it },
+                recommendation = info.recommendation,
+                analystCount = info.analystCount,
+                fiftyTwoWeekHigh = info.fiftyTwoWeekHigh,
+                fiftyTwoWeekLow = info.fiftyTwoWeekLow,
+                beta = info.beta,
+                sector = info.sector,
+                industry = info.industry,
+                earningsDate = info.earningsDate
             ).roundValues()
         }
+
+    private fun calculateDividendGrowth(
+        dividendRate: Float?,
+        trailingRate: Float?
+    ): Double? {
+        if (dividendRate == null || trailingRate == null || trailingRate == 0f) return null
+        return (dividendRate / trailingRate - 1).toDouble()
+    }
 }

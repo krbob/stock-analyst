@@ -142,11 +142,24 @@ class AnalysisRouteTest {
             quarterly = 0.1, yearly = 0.25
         ),
         rsi = Analysis.Rsi(daily = 55.0, weekly = 60.0, monthly = 65.0),
+        macd = Analysis.Macd(macd = 1.5, signal = 1.2, histogram = 0.3),
+        bollingerBands = Analysis.BollingerBands(upper = 200.0, middle = 195.0, lower = 190.0),
+        movingAverages = Analysis.MovingAverages(sma50 = 193.0, sma200 = 180.0, ema50 = 194.0, ema200 = 182.0),
+        atr = 3.5,
         dividendYield = 0.005,
+        dividendGrowth = 0.042,
         peRatio = 30.0f,
         pbRatio = 45.0f,
         eps = 6.5f,
         roe = 1.5f,
-        marketCap = 3_000_000_000.0
+        marketCap = 3_000_000_000.0,
+        recommendation = "buy",
+        analystCount = 40,
+        fiftyTwoWeekHigh = 210.0f,
+        fiftyTwoWeekLow = 150.0f,
+        beta = 1.2f,
+        sector = "Technology",
+        industry = "Consumer Electronics",
+        earningsDate = "2024-07-25"
     )
 }

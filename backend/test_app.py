@@ -104,6 +104,15 @@ class TestInfoEndpoint:
             "trailingEps": 6.5,
             "returnOnEquity": 1.5,
             "marketCap": 3_000_000_000,
+            "recommendationKey": "buy",
+            "numberOfAnalystOpinions": 40,
+            "fiftyTwoWeekHigh": 210.0,
+            "fiftyTwoWeekLow": 150.0,
+            "beta": 1.2,
+            "sector": "Technology",
+            "industry": "Consumer Electronics",
+            "dividendRate": 1.0,
+            "trailingAnnualDividendRate": 0.96,
         }
         patcher, _ = _mock_ticker(info=info)
 
@@ -118,6 +127,15 @@ class TestInfoEndpoint:
         assert data["price"] == 195.0
         assert data["pe_ratio"] == 30.0
         assert data["market_cap"] == 3_000_000_000
+        assert data["recommendation"] == "buy"
+        assert data["analyst_count"] == 40
+        assert data["fifty_two_week_high"] == 210.0
+        assert data["fifty_two_week_low"] == 150.0
+        assert data["beta"] == 1.2
+        assert data["sector"] == "Technology"
+        assert data["industry"] == "Consumer Electronics"
+        assert data["dividend_rate"] == 1.0
+        assert data["trailing_annual_dividend_rate"] == 0.96
 
     def test_falls_back_to_short_name(self, client):
         patcher, _ = _mock_ticker(info={"shortName": "AAPL"})
@@ -144,6 +162,9 @@ class TestInfoEndpoint:
         assert data["price"] is None
         assert data["pe_ratio"] is None
         assert data["eps"] is None
+        assert data["recommendation"] is None
+        assert data["sector"] is None
+        assert data["beta"] is None
 
     def test_yfinance_error_returns_generic_500(self, client):
         patcher = patch("app.yf.Ticker")

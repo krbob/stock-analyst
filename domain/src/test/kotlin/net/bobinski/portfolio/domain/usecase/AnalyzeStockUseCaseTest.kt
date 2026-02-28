@@ -46,7 +46,10 @@ class AnalyzeStockUseCaseTest {
     fun `throws BackendDataException for unknown symbol`() = runTest {
         coEvery { stockDataProvider.getInfo("INVALID") } returns BasicInfo(
             name = null, price = null, peRatio = null, pbRatio = null, eps = null, roe = null,
-            marketCap = null
+            marketCap = null, recommendation = null, analystCount = null,
+            fiftyTwoWeekHigh = null, fiftyTwoWeekLow = null, beta = null, sector = null,
+            industry = null, earningsDate = null, dividendRate = null,
+            trailingAnnualDividendRate = null
         )
         coEvery { stockDataProvider.getHistory("INVALID", any()) } returns emptyList()
 
@@ -81,6 +84,21 @@ class AnalyzeStockUseCaseTest {
     }
 
     @Test
+    fun `includes technical indicators for valid symbol`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
+        coEvery { stockDataProvider.getHistory("AAPL", Period._5y) } returns priceHistory(500)
+
+        val result = useCase("AAPL")
+
+        assertTrue(!result.macd.macd.isNaN(), "MACD should not be NaN")
+        assertTrue(!result.bollingerBands.upper.isNaN(), "Bollinger upper should not be NaN")
+        assertTrue(!result.movingAverages.sma50.isNaN(), "SMA50 should not be NaN")
+        assertTrue(!result.atr.isNaN(), "ATR should not be NaN")
+        assertEquals("buy", result.recommendation)
+        assertEquals("Technology", result.sector)
+    }
+
+    @Test
     fun `sets NaN values when data is lacking`() = runTest {
         coEvery { stockDataProvider.getInfo("LACK") } returns basicInfo("Lacking Stock")
         coEvery { stockDataProvider.getHistory("LACK", Period._5y) } returns listOf(singlePrice())
@@ -93,6 +111,10 @@ class AnalyzeStockUseCaseTest {
         assertTrue(result.gain.daily.isNaN())
         assertTrue(result.gain.weekly.isNaN())
         assertTrue(result.rsi.daily.isNaN())
+        assertTrue(result.macd.macd.isNaN())
+        assertTrue(result.bollingerBands.upper.isNaN())
+        assertTrue(result.movingAverages.sma50.isNaN())
+        assertTrue(result.atr.isNaN())
         assertTrue(result.dividendYield.isNaN())
     }
 
@@ -111,9 +133,8 @@ class AnalyzeStockUseCaseTest {
 
     @Test
     fun `converts eps and marketCap when conversion is provided`() = runTest {
-        coEvery { stockDataProvider.getInfo("AAPL") } returns BasicInfo(
-            name = "Apple Inc.", price = 150.0, peRatio = 25.0f, pbRatio = 10.0f, eps = 6.0f,
-            roe = 0.3f, marketCap = 1_000_000.0
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.").copy(
+            eps = 6.0f
         )
         coEvery { stockDataProvider.getInfo("eur=x") } returns basicInfo("EUR/USD")
         coEvery { stockDataProvider.getHistory("AAPL", Period._5y) } returns priceHistory(500)
@@ -128,7 +149,10 @@ class AnalyzeStockUseCaseTest {
 
     private fun basicInfo(name: String) = BasicInfo(
         name = name, price = 150.0, peRatio = 25.0f, pbRatio = 10.0f, eps = 5.0f, roe = 0.3f,
-        marketCap = 1_000_000.0
+        marketCap = 1_000_000.0, recommendation = "buy", analystCount = 30,
+        fiftyTwoWeekHigh = 200.0f, fiftyTwoWeekLow = 120.0f, beta = 1.2f,
+        sector = "Technology", industry = "Consumer Electronics", earningsDate = "2024-07-25",
+        dividendRate = 1.0f, trailingAnnualDividendRate = 0.96f
     )
 
     private fun priceHistory(days: Int): List<HistoricalPrice> = (0 until days).map { i ->
