@@ -2,6 +2,7 @@ package net.bobinski.stockanalyst.domain.model
 
 import kotlinx.datetime.LocalDate
 import kotlinx.serialization.Serializable
+import java.util.Locale
 
 @Serializable
 data class Analysis(
@@ -114,10 +115,10 @@ data class Analysis(
     )
 
     private fun Double.round(decimals: Int): Double {
-        return "%.${decimals}f".format(java.util.Locale.ROOT, this).toDouble()
+        return "%.${decimals}f".format(Locale.ROOT, this).toDouble()
     }
 
     private fun Float.round(decimals: Int): Float {
-        return "%.${decimals}f".format(java.util.Locale.ROOT, this).toFloat()
+        return "%.${decimals}f".format(Locale.ROOT, this).toFloat()
     }
 }
