@@ -98,6 +98,7 @@ class TestInfoEndpoint:
     def test_returns_basic_info(self, client):
         info = {
             "longName": "Apple Inc.",
+            "regularMarketPrice": 195.0,
             "forwardPE": 30.0,
             "priceToBook": 45.0,
             "trailingEps": 6.5,
@@ -114,6 +115,7 @@ class TestInfoEndpoint:
         assert response.status_code == 200
         data = response.get_json()
         assert data["name"] == "Apple Inc."
+        assert data["price"] == 195.0
         assert data["pe_ratio"] == 30.0
         assert data["market_cap"] == 3_000_000_000
 
@@ -139,6 +141,7 @@ class TestInfoEndpoint:
         assert response.status_code == 200
         data = response.get_json()
         assert data["name"] == "Test Corp"
+        assert data["price"] is None
         assert data["pe_ratio"] is None
         assert data["eps"] is None
 
@@ -161,7 +164,7 @@ class TestInfoEndpoint:
 
 
 class TestCacheHeaders:
-    def test_info_cache_1_hour(self, client):
+    def test_info_cache_5_minutes(self, client):
         patcher, _ = _mock_ticker(info={"longName": "Test"})
 
         try:
@@ -169,7 +172,7 @@ class TestCacheHeaders:
         finally:
             patcher.stop()
 
-        assert response.headers["Cache-Control"] == "public, max-age=3600"
+        assert response.headers["Cache-Control"] == "public, max-age=300"
 
     def test_history_5y_cache_24_hours(self, client):
         patcher, _ = _mock_ticker(history_df=_sample_history())

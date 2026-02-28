@@ -27,7 +27,7 @@ HISTORY_CACHE_SECONDS = {
     "max": 86400,
 }
 
-INFO_CACHE_SECONDS = 3600
+INFO_CACHE_SECONDS = 300
 
 _ticker_cache = {}
 _TICKER_TTL = 300
@@ -57,6 +57,7 @@ class HistoricalPrice:
 @dataclass
 class BasicInfo:
     name: str
+    price: float
     pe_ratio: float
     pb_ratio: float
     eps: float
@@ -84,6 +85,7 @@ def get_basic_info(symbol):
     info = get_ticker(symbol).info
     return BasicInfo(
         name=info.get("longName") or info.get("shortName"),
+        price=info.get("regularMarketPrice") or info.get("currentPrice"),
         pe_ratio=info.get("forwardPE"),
         pb_ratio=info.get("priceToBook"),
         eps=info.get("trailingEps"),

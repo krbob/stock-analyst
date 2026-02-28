@@ -6,6 +6,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class BasicInfo(
     val name: String?,
+    val price: Double?,
     @SerialName("pe_ratio")
     val peRatio: Float?,
     @SerialName("pb_ratio")

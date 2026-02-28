@@ -45,7 +45,8 @@ class AnalyzeStockUseCaseTest {
     @Test
     fun `throws BackendDataException for unknown symbol`() = runTest {
         coEvery { stockDataProvider.getInfo("INVALID") } returns BasicInfo(
-            name = null, peRatio = null, pbRatio = null, eps = null, roe = null, marketCap = null
+            name = null, price = null, peRatio = null, pbRatio = null, eps = null, roe = null,
+            marketCap = null
         )
         coEvery { stockDataProvider.getHistory("INVALID", any()) } returns emptyList()
 
@@ -111,8 +112,8 @@ class AnalyzeStockUseCaseTest {
     @Test
     fun `converts eps and marketCap when conversion is provided`() = runTest {
         coEvery { stockDataProvider.getInfo("AAPL") } returns BasicInfo(
-            name = "Apple Inc.", peRatio = 25.0f, pbRatio = 10.0f, eps = 6.0f, roe = 0.3f,
-            marketCap = 1_000_000.0
+            name = "Apple Inc.", price = 150.0, peRatio = 25.0f, pbRatio = 10.0f, eps = 6.0f,
+            roe = 0.3f, marketCap = 1_000_000.0
         )
         coEvery { stockDataProvider.getInfo("eur=x") } returns basicInfo("EUR/USD")
         coEvery { stockDataProvider.getHistory("AAPL", Period._5y) } returns priceHistory(500)
@@ -126,7 +127,7 @@ class AnalyzeStockUseCaseTest {
     }
 
     private fun basicInfo(name: String) = BasicInfo(
-        name = name, peRatio = 25.0f, pbRatio = 10.0f, eps = 5.0f, roe = 0.3f,
+        name = name, price = 150.0, peRatio = 25.0f, pbRatio = 10.0f, eps = 5.0f, roe = 0.3f,
         marketCap = 1_000_000.0
     )
 
