@@ -20,6 +20,6 @@ USER stock-analyst
 
 COPY --from=builder /app/build/libs/stock-analyst-all.jar stock-analyst.jar
 
-EXPOSE 7777
+EXPOSE 8080
 
 CMD ["java", "-jar", "stock-analyst.jar"]

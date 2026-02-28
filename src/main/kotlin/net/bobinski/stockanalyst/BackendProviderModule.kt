@@ -42,7 +42,7 @@ val BackendProviderModule = module {
     single<StockDataProvider> {
         BackendProvider(
             client = get(),
-            backendUrl = System.getenv("BACKEND_URL") ?: "http://localhost:7776"
+            backendUrl = System.getenv("BACKEND_URL") ?: "http://localhost:8081"
         )
     }
 }

@@ -8,11 +8,11 @@ Stock analysis API providing technical indicators and fundamental data. Built wi
 
 Two-service Docker setup:
 
-- **Kotlin API** (port 7777) — Ktor server, business logic, technical analysis via [TA4J](https://github.com/ta4j/ta4j)
-- **Python backend** (port 7776, internal) — Flask wrapper around yfinance, serves historical prices and stock info
+- **Kotlin API** (port 8080) — Ktor server, business logic, technical analysis via [TA4J](https://github.com/ta4j/ta4j)
+- **Python backend** (port 8081, internal) — Flask wrapper around yfinance, serves historical prices and stock info
 
 ```
-Client → Kotlin API (:7777) → Python backend (:7776) → Yahoo Finance
+Client → Kotlin API (:8080) → Python backend (:8081) → Yahoo Finance
 ```
 
 ### Project structure
@@ -53,8 +53,8 @@ Returns full analysis for a stock symbol.
 | `conversion` | query  | Optional currency pair (e.g., `eur=x`)        |
 
 ```bash
-curl http://localhost:7777/analysis/aapl
-curl http://localhost:7777/analysis/aapl?conversion=eur=x
+curl http://localhost:8080/analysis/aapl
+curl http://localhost:8080/analysis/aapl?conversion=eur=x
 ```
 
 ### `GET /price/{symbol}`
@@ -67,7 +67,7 @@ Returns lightweight price and gain data. Faster than `/analysis` — no technica
 | `conversion` | query  | Optional currency pair (e.g., `eur=x`)        |
 
 ```bash
-curl http://localhost:7777/price/aapl
+curl http://localhost:8080/price/aapl
 ```
 
 #### Example response
@@ -98,7 +98,7 @@ Compares multiple stocks in a single request. Returns a list of full analysis ob
 | `conversion` | query  | Optional currency pair (e.g., `eur=x`)             |
 
 ```bash
-curl "http://localhost:7777/compare?symbols=AAPL,MSFT,GOOG"
+curl "http://localhost:8080/compare?symbols=AAPL,MSFT,GOOG"
 ```
 
 Each element in the response array has the same schema as the `/analysis/{symbol}` response.
@@ -112,7 +112,7 @@ Returns dividend payment history and summary statistics.
 | `symbol`  | path | Stock ticker (e.g., `AAPL`, `JNJ`, `KO`)    |
 
 ```bash
-curl http://localhost:7777/dividends/aapl
+curl http://localhost:8080/dividends/aapl
 ```
 
 #### Example response
