@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 import traceback
 from dataclasses import asdict, dataclass
@@ -33,16 +34,28 @@ DIVIDENDS_CACHE_SECONDS = 3600
 
 _ticker_cache = {}
 _TICKER_TTL = 300
+_ticker_lock = threading.Lock()
+
+_op_locks = {}
+_op_locks_lock = threading.Lock()
+
+
+def _symbol_lock(key):
+    with _op_locks_lock:
+        if key not in _op_locks:
+            _op_locks[key] = threading.Lock()
+        return _op_locks[key]
 
 
 def get_ticker(symbol):
     now = time.time()
-    cached = _ticker_cache.get(symbol)
-    if cached and (now - cached[1]) < _TICKER_TTL:
-        return cached[0]
-    ticker = yf.Ticker(symbol)
-    _ticker_cache[symbol] = (ticker, now)
-    return ticker
+    with _ticker_lock:
+        cached = _ticker_cache.get(symbol)
+        if cached and (now - cached[1]) < _TICKER_TTL:
+            return cached[0]
+        ticker = yf.Ticker(symbol)
+        _ticker_cache[symbol] = (ticker, now)
+        return ticker
 
 
 @dataclass
@@ -78,16 +91,17 @@ class BasicInfo:
 
 
 def get_history(symbol, period):
-    ticker = get_ticker(symbol)
-    try:
-        history = ticker.history(period=period, auto_adjust=False)
-    except Exception:
-        logger.warning("Failed to fetch history for %s (%s)", symbol, period)
-        return
-    try:
-        dividends = ticker.dividends
-    except Exception:
-        dividends = pd.Series(dtype=float)
+    with _symbol_lock(f"history:{symbol}"):
+        ticker = get_ticker(symbol)
+        try:
+            history = ticker.history(period=period, auto_adjust=False)
+        except Exception:
+            logger.warning("Failed to fetch history for %s (%s)", symbol, period)
+            return
+        try:
+            dividends = ticker.dividends
+        except Exception:
+            dividends = pd.Series(dtype=float)
     for index, row in history.iterrows():
         yield HistoricalPrice(
             date=index.strftime("%Y-%m-%d"),
@@ -101,24 +115,26 @@ def get_history(symbol, period):
 
 
 def get_dividends(symbol):
-    ticker = get_ticker(symbol)
-    try:
-        dividends = ticker.dividends
-    except Exception:
-        logger.warning("Failed to fetch dividends for %s", symbol)
-        return
+    with _symbol_lock(f"dividends:{symbol}"):
+        ticker = get_ticker(symbol)
+        try:
+            dividends = ticker.dividends
+        except Exception:
+            logger.warning("Failed to fetch dividends for %s", symbol)
+            return
     for date, amount in dividends.items():
         yield {"date": date.strftime("%Y-%m-%d"), "amount": float(amount)}
 
 
 def get_basic_info(symbol):
-    try:
-        info = get_ticker(symbol).info
-    except Exception:
-        logger.warning("Failed to fetch info for %s", symbol)
-        return None
-    if not info:
-        return None
+    with _symbol_lock(f"info:{symbol}"):
+        try:
+            info = get_ticker(symbol).info
+        except Exception:
+            logger.warning("Failed to fetch info for %s", symbol)
+            return None
+        if not info:
+            return None
     earnings = info.get("earningsDate")
     if isinstance(earnings, list) and earnings:
         earnings = earnings[0]
