@@ -6,6 +6,7 @@ import net.bobinski.portfolio.core.time.CurrentTimeProvider
 import net.bobinski.portfolio.domain.error.BackendDataException
 import net.bobinski.portfolio.domain.model.Analysis
 import net.bobinski.portfolio.domain.model.HistoricalPrice
+import net.bobinski.portfolio.domain.model.latestPrice
 import net.bobinski.portfolio.domain.provider.StockDataProvider
 import net.bobinski.portfolio.domain.provider.StockDataProvider.Period
 
@@ -46,15 +47,19 @@ class AnalyzeStockUseCase(
             val conversionInfo = convInfoDeferred?.await()
             val conversionHistory = conversion?.let {
                 stockDataProvider.getHistory(it, period).also { convHistory ->
-                    if (convHistory.size < history.size) {
+                    val stockMinDate = history.minOf { p -> p.date }
+                    val convMinDate = convHistory.minOfOrNull { p -> p.date }
+                    if (convMinDate == null || convMinDate > stockMinDate) {
                         throw BackendDataException.insufficientConversion(it)
                     }
                 }
             }
+            val latestConvRate = conversionHistory?.latestPrice()
 
             Analysis(
                 symbol = symbol,
-                name = name + (conversionInfo?.let { " ${it.name}" } ?: ""),
+                name = name,
+                conversionName = conversionInfo?.name,
                 date = currentTimeProvider.localDate(),
                 lastPrice = CalculateLastPrice(history, conversionHistory),
                 gain = Analysis.Gain(
@@ -73,17 +78,17 @@ class AnalyzeStockUseCase(
                 rsi = Analysis.Rsi(daily = Double.NaN, weekly = Double.NaN, monthly = Double.NaN)
                     .takeIf { lacking }
                     ?: Analysis.Rsi(
-                        daily = CalculateRsi.daily(history, conversionHistory),
-                        weekly = CalculateRsi.weekly(history, conversionHistory),
-                        monthly = CalculateRsi.monthly(history, conversionHistory)
+                        daily = CalculateRsi.daily(history),
+                        weekly = CalculateRsi.weekly(history),
+                        monthly = CalculateRsi.monthly(history)
                     ),
                 dividendYield = Double.NaN.takeIf { lacking }
                     ?: calculateYield.yearly(history, conversionHistory),
                 peRatio = info.peRatio,
                 pbRatio = info.pbRatio,
-                eps = info.eps,
+                eps = info.eps?.let { latestConvRate?.times(it)?.toFloat() ?: it },
                 roe = info.roe,
-                marketCap = info.marketCap
+                marketCap = info.marketCap?.let { latestConvRate?.times(it) ?: it }
             ).roundValues()
         }
 }

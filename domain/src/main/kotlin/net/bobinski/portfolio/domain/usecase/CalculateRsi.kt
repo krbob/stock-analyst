@@ -10,28 +10,16 @@ import org.ta4j.core.indicators.helpers.ClosePriceIndicator
 
 object CalculateRsi {
 
-    fun daily(
-        data: Collection<HistoricalPrice>,
-        conversion: Collection<HistoricalPrice>?,
-        period: Int = 14
-    ): Double {
-        return forBars(data.toBarSeries(conversion), period)
+    fun daily(data: Collection<HistoricalPrice>, period: Int = 14): Double {
+        return forBars(data.toBarSeries(null), period)
     }
 
-    fun weekly(
-        data: Collection<HistoricalPrice>,
-        conversion: Collection<HistoricalPrice>?,
-        period: Int = 14
-    ): Double {
-        return data.weekly().toBarSeries(conversion).let { forBars(it, period) }
+    fun weekly(data: Collection<HistoricalPrice>, period: Int = 14): Double {
+        return data.weekly().toBarSeries(null).let { forBars(it, period) }
     }
 
-    fun monthly(
-        data: Collection<HistoricalPrice>,
-        conversion: Collection<HistoricalPrice>?,
-        period: Int = 14
-    ): Double {
-        return data.monthly().toBarSeries(conversion).let { forBars(it, period) }
+    fun monthly(data: Collection<HistoricalPrice>, period: Int = 14): Double {
+        return data.monthly().toBarSeries(null).let { forBars(it, period) }
     }
 
     private fun forBars(data: BarSeries, period: Int = 14): Double {

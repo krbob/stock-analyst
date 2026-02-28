@@ -12,7 +12,7 @@ class CalculateRsiTest {
     fun `rsi is between 0 and 100 for normal data`() {
         val data = generatePriceData(30)
 
-        val result = CalculateRsi.daily(data, null)
+        val result = CalculateRsi.daily(data)
 
         assertTrue(result in 0.0..100.0, "RSI should be between 0 and 100, was $result")
     }
@@ -23,7 +23,7 @@ class CalculateRsiTest {
             price(LocalDate(2024, 1, 1).plus(i), close = 100.0 + i * 2.0)
         }
 
-        val result = CalculateRsi.daily(data, null)
+        val result = CalculateRsi.daily(data)
 
         assertTrue(result > 70.0, "RSI for rising prices should be > 70, was $result")
     }
@@ -34,7 +34,7 @@ class CalculateRsiTest {
             price(LocalDate(2024, 1, 1).plus(i), close = 200.0 - i * 2.0)
         }
 
-        val result = CalculateRsi.daily(data, null)
+        val result = CalculateRsi.daily(data)
 
         assertTrue(result < 30.0, "RSI for falling prices should be < 30, was $result")
     }
