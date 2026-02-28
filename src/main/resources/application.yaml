@@ -1,6 +1,6 @@
 ktor:
     application:
         modules:
-            - net.bobinski.portfolio.ApplicationKt.module
+            - net.bobinski.stockanalyst.ApplicationKt.module
     deployment:
         port: 7777

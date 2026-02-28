@@ -1,6 +1,6 @@
-# Portfolio
+# Stock Analyst
 
-![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/krbob/portfolio/ci-build.yml)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/krbob/stock-analyst/ci-build.yml)
 
 Stock analysis API providing technical indicators and fundamental data. Built with Kotlin/Ktor and Python/Flask, data sourced from Yahoo Finance via [yfinance](https://github.com/ranaroussi/yfinance).
 
@@ -18,7 +18,7 @@ Client → Kotlin API (:7777) → Python backend (:7776) → Yahoo Finance
 ### Project structure
 
 ```
-portfolio/
+stock-analyst/
 ├── core/           Shared utilities (serialization, DI, time provider)
 ├── domain/         Business logic, models, use cases
 ├── src/            Ktor application (routes, HTTP client, config)
@@ -30,8 +30,8 @@ portfolio/
 Requires Docker Compose.
 
 ```bash
-git clone https://github.com/krbob/portfolio.git
-cd portfolio
+git clone https://github.com/krbob/stock-analyst.git
+cd stock-analyst
 docker compose up -d
 ```
 

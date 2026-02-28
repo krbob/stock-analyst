@@ -1,4 +1,4 @@
-rootProject.name = "portfolio"
+rootProject.name = "stock-analyst"
 
 include("core")
 include("domain")

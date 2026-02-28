@@ -1,14 +1,14 @@
 services:
-  portfolio:
-    image: ghcr.io/krbob/portfolio:main
+  stock-analyst:
+    image: ghcr.io/krbob/stock-analyst:main
     ports:
       - "7777:7777"
     depends_on:
-      - portfolio-backend
+      - stock-analyst-backend
     environment:
-      - BACKEND_URL=http://portfolio-backend:7776
+      - BACKEND_URL=http://stock-analyst-backend:7776
     restart: unless-stopped
 
-  portfolio-backend:
-    image: ghcr.io/krbob/portfolio-backend:main
+  stock-analyst-backend:
+    image: ghcr.io/krbob/stock-analyst-backend:main
     restart: unless-stopped
