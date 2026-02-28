@@ -3,8 +3,9 @@ package net.bobinski.stockanalyst.domain.usecase
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
-import kotlinx.datetime.number
+import kotlinx.datetime.minus
 import net.bobinski.stockanalyst.core.time.MutableCurrentTimeProvider
 import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.model.BasicInfo
@@ -167,10 +168,7 @@ class AnalyzeStockUseCaseTest {
     )
 
     private fun priceHistory(days: Int): List<HistoricalPrice> = (0 until days).map { i ->
-        val date = LocalDate(2024, 6, 15).let { d ->
-            val jd = java.time.LocalDate.of(d.year, d.month.number, d.day).minusDays(i.toLong())
-            LocalDate(jd.year, jd.monthValue, jd.dayOfMonth)
-        }
+        val date = LocalDate(2024, 6, 15).minus(i, DateTimeUnit.DAY)
         HistoricalPrice(
             date = date,
             open = 100.0 + i * 0.1,
