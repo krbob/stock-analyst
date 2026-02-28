@@ -7,6 +7,7 @@ import kotlinx.serialization.Serializable
 data class Analysis(
     val symbol: String,
     val name: String,
+    val conversionName: String? = null,
     val date: LocalDate,
     val lastPrice: Double,
     val gain: Gain,

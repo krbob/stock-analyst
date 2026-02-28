@@ -14,6 +14,7 @@ import org.ta4j.core.num.NaN
 import java.time.DayOfWeek
 import java.time.Duration
 import java.time.temporal.WeekFields
+import java.util.TreeMap
 import kotlin.time.toJavaInstant
 
 @Serializable
@@ -27,10 +28,18 @@ data class HistoricalPrice(
     val dividend: Double
 )
 
-fun Collection<HistoricalPrice>.toBarSeries(conversion: Collection<HistoricalPrice>?): BarSeries =
-    BaseBarSeriesBuilder().withBars(sortedBy { it.date }.mapNotNull { day ->
-        day.toBar(conversion?.priceFor(day.date))
+fun Collection<HistoricalPrice>.toBarSeries(conversion: Collection<HistoricalPrice>?): BarSeries {
+    val conversionLookup = conversion?.toSortedLookup()
+    return BaseBarSeriesBuilder().withBars(sortedBy { it.date }.mapNotNull { day ->
+        day.toBar(conversionLookup?.priceFor(day.date))
     }).build()
+}
+
+private fun Collection<HistoricalPrice>.toSortedLookup(): TreeMap<LocalDate, Double> =
+    associateTo(TreeMap()) { it.date to it.close }
+
+private fun TreeMap<LocalDate, Double>.priceFor(date: LocalDate): Double =
+    floorEntry(date)?.value ?: Double.NaN
 
 private fun HistoricalPrice.toBar(conversion: Double?): Bar? {
     if (setOf(open, close, low, high).any { it.isNaN() }) {

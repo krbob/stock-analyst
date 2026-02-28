@@ -96,7 +96,7 @@ class AnalyzeStockUseCaseTest {
     }
 
     @Test
-    fun `includes conversion name in result`() = runTest {
+    fun `includes conversion name as separate field`() = runTest {
         coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
         coEvery { stockDataProvider.getInfo("eur=x") } returns basicInfo("EUR/USD")
         coEvery { stockDataProvider.getHistory("AAPL", Period._5y) } returns priceHistory(500)
@@ -104,7 +104,25 @@ class AnalyzeStockUseCaseTest {
 
         val result = useCase("AAPL", "eur=x")
 
-        assertEquals("Apple Inc. EUR/USD", result.name)
+        assertEquals("Apple Inc.", result.name)
+        assertEquals("EUR/USD", result.conversionName)
+    }
+
+    @Test
+    fun `converts eps and marketCap when conversion is provided`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns BasicInfo(
+            name = "Apple Inc.", peRatio = 25.0f, pbRatio = 10.0f, eps = 6.0f, roe = 0.3f,
+            marketCap = 1_000_000.0
+        )
+        coEvery { stockDataProvider.getInfo("eur=x") } returns basicInfo("EUR/USD")
+        coEvery { stockDataProvider.getHistory("AAPL", Period._5y) } returns priceHistory(500)
+        coEvery { stockDataProvider.getHistory("eur=x", Period._5y) } returns priceHistory(500)
+
+        val result = useCase("AAPL", "eur=x")
+
+        assertTrue(result.eps!! != 6.0f, "EPS should be converted")
+        assertTrue(result.marketCap!! != 1_000_000.0, "Market cap should be converted")
+        assertEquals(25.0f, result.peRatio, "PE ratio should not be converted")
     }
 
     private fun basicInfo(name: String) = BasicInfo(
