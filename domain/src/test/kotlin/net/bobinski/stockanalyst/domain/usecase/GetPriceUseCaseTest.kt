@@ -92,6 +92,25 @@ class GetPriceUseCaseTest {
         assertEquals("EUR/USD", result.conversionName)
     }
 
+    @Test
+    fun `throws when conversion symbol info has no name`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
+        coEvery { stockDataProvider.getInfo("invalid=x") } returns BasicInfo(
+            name = null, price = null, peRatio = null, pbRatio = null, eps = null, roe = null,
+            marketCap = null, recommendation = null, analystCount = null,
+            fiftyTwoWeekHigh = null, fiftyTwoWeekLow = null, beta = null, sector = null,
+            industry = null, earningsDate = null, dividendRate = null,
+            trailingAnnualDividendRate = null
+        )
+        coEvery { stockDataProvider.getHistory("AAPL", Period._1y) } returns priceHistory(200)
+        coEvery { stockDataProvider.getHistory("invalid=x", Period._1y) } returns priceHistory(200)
+
+        val result = useCase("AAPL", "invalid=x")
+
+        assertEquals("AAPL", result.symbol)
+        assertTrue(result.conversionName == null)
+    }
+
     private fun basicInfo(name: String) = BasicInfo(
         name = name, price = 150.0, peRatio = 25.0f, pbRatio = 10.0f, eps = 5.0f, roe = 0.3f,
         marketCap = 1_000_000.0, recommendation = "buy", analystCount = 30,

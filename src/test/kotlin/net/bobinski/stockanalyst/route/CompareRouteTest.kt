@@ -100,6 +100,29 @@ class CompareRouteTest {
         coVerify { useCase.invoke(listOf("AAPL"), "eur=x") }
     }
 
+    @Test
+    fun `responds with 400 when symbols is only commas`() = testApplication {
+        val useCase = mockk<CompareStocksUseCase>()
+        configureApp(useCase)
+
+        val response = client.get("/compare?symbols=,,,")
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        assertTrue(response.bodyAsText().contains("No symbols"))
+    }
+
+    @Test
+    fun `responds with 422 for insufficient conversion data`() = testApplication {
+        val useCase = mockk<CompareStocksUseCase>()
+        coEvery { useCase.invoke(listOf("AAPL"), "eur=x") } throws
+            BackendDataException.insufficientConversion("eur=x")
+        configureApp(useCase)
+
+        val response = client.get("/compare?symbols=AAPL&conversion=eur=x")
+
+        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+    }
+
     private fun ApplicationTestBuilder.configureApp(useCase: CompareStocksUseCase) {
         application {
             configureKoin(useCase)
