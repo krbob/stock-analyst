@@ -3,7 +3,6 @@ package net.bobinski.portfolio
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
-import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
 import net.bobinski.portfolio.domain.error.BackendDataException
 import net.bobinski.portfolio.domain.model.BasicInfo
@@ -31,7 +30,12 @@ internal class BackendProvider(
             logger.warn("Backend returned {} for history of {} ({})", response.status, symbol, period.value)
             return emptyList()
         }
-        return response.body()
+        return try {
+            response.body()
+        } catch (e: Exception) {
+            logger.error("Failed to deserialize history for {} ({})", symbol, period.value, e)
+            throw BackendDataException.backendError(symbol)
+        }
     }
 
     override suspend fun getInfo(symbol: String): BasicInfo? {
@@ -44,6 +48,11 @@ internal class BackendProvider(
             logger.warn("Backend returned {} for info of {}", response.status, symbol)
             return null
         }
-        return response.body()
+        return try {
+            response.body()
+        } catch (e: Exception) {
+            logger.error("Failed to deserialize info for {}", symbol, e)
+            throw BackendDataException.backendError(symbol)
+        }
     }
 }

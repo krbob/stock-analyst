@@ -13,5 +13,5 @@ data class BasicInfo(
     val eps: Float?,
     val roe: Float?,
     @SerialName("market_cap")
-    val marketCap: Float?
+    val marketCap: Double?
 )
