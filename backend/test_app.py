@@ -26,13 +26,15 @@ def mock_ticker():
     mock_class = patcher.start()
     instance = mock_class.return_value
 
-    def configure(history_df=None, dividends=None, info=None):
+    _sentinel = object()
+
+    def configure(history_df=None, dividends=None, info=_sentinel):
         if history_df is not None:
             instance.history.return_value = history_df
         type(instance).dividends = PropertyMock(
             return_value=dividends if dividends is not None else pd.Series(dtype=float)
         )
-        if info is not None:
+        if info is not _sentinel:
             type(instance).info = PropertyMock(return_value=info)
         return instance
 
@@ -151,6 +153,13 @@ class TestInfoEndpoint:
         assert data["sector"] is None
         assert data["beta"] is None
 
+    def test_none_info_returns_404(self, client, mock_ticker):
+        mock_ticker(info=None)
+
+        response = client.get("/info/INVALID")
+
+        assert response.status_code == 404
+
     def test_yfinance_error_returns_generic_500(self, client, mock_ticker):
         ticker = mock_ticker()
         type(ticker).info = PropertyMock(side_effect=Exception("Internal details"))
@@ -187,16 +196,14 @@ class TestDividendsEndpoint:
         assert response.status_code == 200
         assert response.get_json() == []
 
-    def test_yfinance_error_returns_generic_500(self, client, mock_ticker):
+    def test_yfinance_error_returns_empty_list(self, client, mock_ticker):
         ticker = mock_ticker()
-        type(ticker).dividends = PropertyMock(side_effect=Exception("API secret details"))
+        type(ticker).dividends = PropertyMock(side_effect=Exception("API error"))
 
         response = client.get("/dividends/AAPL")
 
-        assert response.status_code == 500
-        body = response.get_json()
-        assert body["error"] == "An internal error occurred"
-        assert "secret" not in str(body)
+        assert response.status_code == 200
+        assert response.get_json() == []
 
     def test_cache_header_set(self, client, mock_ticker):
         mock_ticker(dividends=pd.Series(dtype=float))
