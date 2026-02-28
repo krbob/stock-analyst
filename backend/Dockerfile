@@ -14,12 +14,12 @@ FROM debian:stable-slim
 
 WORKDIR /app
 
-RUN useradd -m portfolio
+RUN useradd -m stock-analyst
 
-USER portfolio
+USER stock-analyst
 
-COPY --from=builder /app/dist/app portfolio-backend
+COPY --from=builder /app/dist/app stock-analyst-backend
 
 EXPOSE 7776
 
-CMD ["./portfolio-backend"]
+CMD ["./stock-analyst-backend"]
