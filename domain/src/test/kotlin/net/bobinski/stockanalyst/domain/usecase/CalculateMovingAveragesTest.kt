@@ -1,7 +1,8 @@
 package net.bobinski.stockanalyst.domain.usecase
 
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
-import kotlinx.datetime.number
+import kotlinx.datetime.plus
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -35,10 +36,7 @@ class CalculateMovingAveragesTest {
         )
     }
 
-    private fun LocalDate.plus(days: Int): LocalDate {
-        val jd = java.time.LocalDate.of(year, month.number, day).plusDays(days.toLong())
-        return LocalDate(jd.year, jd.monthValue, jd.dayOfMonth)
-    }
+    private fun LocalDate.plus(days: Int): LocalDate = plus(days, DateTimeUnit.DAY)
 
     private fun price(date: LocalDate, close: Double) = HistoricalPrice(
         date = date, open = close, close = close, low = close * 0.99, high = close * 1.01,
