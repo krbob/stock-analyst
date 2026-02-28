@@ -12,12 +12,25 @@ data class Analysis(
     val lastPrice: Double,
     val gain: Gain,
     val rsi: Rsi,
+    val macd: Macd,
+    val bollingerBands: BollingerBands,
+    val movingAverages: MovingAverages,
+    val atr: Double,
     val dividendYield: Double,
+    val dividendGrowth: Double?,
     val peRatio: Float?,
     val pbRatio: Float?,
     val eps: Float?,
     val roe: Float?,
-    val marketCap: Double?
+    val marketCap: Double?,
+    val recommendation: String?,
+    val analystCount: Int?,
+    val fiftyTwoWeekHigh: Float?,
+    val fiftyTwoWeekLow: Float?,
+    val beta: Float?,
+    val sector: String?,
+    val industry: String?,
+    val earningsDate: String?
 ) {
 
     @Serializable
@@ -36,6 +49,28 @@ data class Analysis(
         val monthly: Double
     )
 
+    @Serializable
+    data class Macd(
+        val macd: Double,
+        val signal: Double,
+        val histogram: Double
+    )
+
+    @Serializable
+    data class BollingerBands(
+        val upper: Double,
+        val middle: Double,
+        val lower: Double
+    )
+
+    @Serializable
+    data class MovingAverages(
+        val sma50: Double,
+        val sma200: Double,
+        val ema50: Double,
+        val ema200: Double
+    )
+
     fun roundValues() = copy(
         lastPrice = lastPrice.round(2),
         gain = Gain(
@@ -50,11 +85,32 @@ data class Analysis(
             weekly = rsi.weekly.round(2),
             monthly = rsi.monthly.round(2)
         ),
+        macd = Macd(
+            macd = macd.macd.round(2),
+            signal = macd.signal.round(2),
+            histogram = macd.histogram.round(2)
+        ),
+        bollingerBands = BollingerBands(
+            upper = bollingerBands.upper.round(2),
+            middle = bollingerBands.middle.round(2),
+            lower = bollingerBands.lower.round(2)
+        ),
+        movingAverages = MovingAverages(
+            sma50 = movingAverages.sma50.round(2),
+            sma200 = movingAverages.sma200.round(2),
+            ema50 = movingAverages.ema50.round(2),
+            ema200 = movingAverages.ema200.round(2)
+        ),
+        atr = atr.round(2),
         dividendYield = dividendYield.round(3),
+        dividendGrowth = dividendGrowth?.round(3),
         peRatio = peRatio?.round(2),
         pbRatio = pbRatio?.round(2),
         eps = eps?.round(2),
-        roe = roe?.round(2)
+        roe = roe?.round(2),
+        fiftyTwoWeekHigh = fiftyTwoWeekHigh?.round(2),
+        fiftyTwoWeekLow = fiftyTwoWeekLow?.round(2),
+        beta = beta?.round(2)
     )
 
     private fun Double.round(decimals: Int): Double {
