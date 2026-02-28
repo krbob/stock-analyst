@@ -6,6 +6,7 @@ import net.bobinski.portfolio.core.time.CurrentTimeProvider
 import net.bobinski.portfolio.domain.error.BackendDataException
 import net.bobinski.portfolio.domain.model.Analysis
 import net.bobinski.portfolio.domain.model.HistoricalPrice
+import net.bobinski.portfolio.domain.model.applyConversion
 import net.bobinski.portfolio.domain.model.latestPrice
 import net.bobinski.portfolio.domain.provider.StockDataProvider
 import net.bobinski.portfolio.domain.provider.StockDataProvider.Period
@@ -54,6 +55,7 @@ class AnalyzeStockUseCase(
                     }
                 }
             }
+            val conversionPrice = conversionInfo?.price
             val latestConvRate = conversionHistory?.latestPrice()
 
             Analysis(
@@ -61,7 +63,8 @@ class AnalyzeStockUseCase(
                 name = name,
                 conversionName = conversionInfo?.name,
                 date = currentTimeProvider.localDate(),
-                lastPrice = CalculateLastPrice(history, conversionHistory),
+                lastPrice = (info.price ?: CalculateLastPrice(history, null))
+                    .applyConversion(conversionPrice),
                 gain = Analysis.Gain(
                     daily = Double.NaN,
                     weekly = Double.NaN,
@@ -86,9 +89,9 @@ class AnalyzeStockUseCase(
                     ?: calculateYield.yearly(history, conversionHistory),
                 peRatio = info.peRatio,
                 pbRatio = info.pbRatio,
-                eps = info.eps?.let { latestConvRate?.times(it)?.toFloat() ?: it },
+                eps = info.eps?.let { (conversionPrice ?: latestConvRate)?.times(it)?.toFloat() ?: it },
                 roe = info.roe,
-                marketCap = info.marketCap?.let { latestConvRate?.times(it) ?: it }
+                marketCap = info.marketCap?.let { (conversionPrice ?: latestConvRate)?.times(it) ?: it }
             ).roundValues()
         }
 }
