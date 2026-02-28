@@ -14,7 +14,6 @@ import org.ta4j.core.num.NaN
 import java.time.DayOfWeek
 import java.time.Duration
 import java.time.temporal.WeekFields
-import kotlin.time.ExperimentalTime
 import kotlin.time.toJavaInstant
 
 @Serializable
