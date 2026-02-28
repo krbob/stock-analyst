@@ -1,11 +1,13 @@
 package net.bobinski.stockanalyst.domain.provider
 
 import net.bobinski.stockanalyst.domain.model.BasicInfo
+import net.bobinski.stockanalyst.domain.model.DividendPayment
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
 
 interface StockDataProvider {
     suspend fun getHistory(symbol: String, period: Period): Collection<HistoricalPrice>
     suspend fun getInfo(symbol: String): BasicInfo?
+    suspend fun getDividends(symbol: String): List<DividendPayment>
 
     enum class Period(val value: String) {
         _1d("1d"),

@@ -74,6 +74,21 @@ jobs:
             echo "❌ analysis with conversion endpoint did not respond properly"
             exit 1
           fi
+
+          if ! curl --fail -X GET http://localhost:7777/price/aapl; then
+            echo "❌ price endpoint did not respond properly"
+            exit 1
+          fi
+
+          if ! curl --fail -X GET "http://localhost:7777/compare?symbols=AAPL,MSFT"; then
+            echo "❌ compare endpoint did not respond properly"
+            exit 1
+          fi
+
+          if ! curl --fail -X GET http://localhost:7777/dividends/aapl; then
+            echo "❌ dividends endpoint did not respond properly"
+            exit 1
+          fi
       - name: Clean up test containers
         if: always()
         run: docker compose -f docker-compose-build.yml down

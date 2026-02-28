@@ -184,6 +184,61 @@ class TestInfoEndpoint:
         assert "Internal details" not in str(body)
 
 
+class TestDividendsEndpoint:
+    def test_returns_dividends(self, client):
+        index = pd.DatetimeIndex([pd.Timestamp("2024-01-15"), pd.Timestamp("2024-04-15")])
+        dividends = pd.Series([0.24, 0.25], index=index)
+        patcher, _ = _mock_ticker(dividends=dividends)
+
+        try:
+            response = client.get("/dividends/AAPL")
+        finally:
+            patcher.stop()
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data) == 2
+        assert data[0]["date"] == "2024-01-15"
+        assert data[0]["amount"] == 0.24
+        assert data[1]["date"] == "2024-04-15"
+        assert data[1]["amount"] == 0.25
+
+    def test_returns_empty_for_no_dividends(self, client):
+        patcher, _ = _mock_ticker(dividends=pd.Series(dtype=float))
+
+        try:
+            response = client.get("/dividends/AAPL")
+        finally:
+            patcher.stop()
+
+        assert response.status_code == 200
+        assert response.get_json() == []
+
+    def test_yfinance_error_returns_generic_500(self, client):
+        patcher, ticker = _mock_ticker()
+        type(ticker).dividends = PropertyMock(side_effect=Exception("API secret details"))
+
+        try:
+            response = client.get("/dividends/AAPL")
+        finally:
+            patcher.stop()
+
+        assert response.status_code == 500
+        body = response.get_json()
+        assert body["error"] == "An internal error occurred"
+        assert "secret" not in str(body)
+
+    def test_cache_header_set(self, client):
+        patcher, _ = _mock_ticker(dividends=pd.Series(dtype=float))
+
+        try:
+            response = client.get("/dividends/AAPL")
+        finally:
+            patcher.stop()
+
+        assert response.headers["Cache-Control"] == "public, max-age=3600"
+
+
 class TestCacheHeaders:
     def test_info_cache_5_minutes(self, client):
         patcher, _ = _mock_ticker(info={"longName": "Test"})

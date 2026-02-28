@@ -6,6 +6,7 @@ import io.ktor.client.request.get
 import io.ktor.http.isSuccess
 import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.model.BasicInfo
+import net.bobinski.stockanalyst.domain.model.DividendPayment
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider
 import org.slf4j.LoggerFactory
@@ -34,6 +35,24 @@ internal class BackendProvider(
             response.body()
         } catch (e: Exception) {
             logger.error("Failed to deserialize history for {} ({})", symbol, period.value, e)
+            throw BackendDataException.backendError(symbol)
+        }
+    }
+
+    override suspend fun getDividends(symbol: String): List<DividendPayment> {
+        val response = client.get("$backendUrl/dividends/$symbol")
+        if (response.status.value >= 500) {
+            logger.error("Backend returned {} for dividends of {}", response.status, symbol)
+            throw BackendDataException.backendError(symbol)
+        }
+        if (!response.status.isSuccess()) {
+            logger.warn("Backend returned {} for dividends of {}", response.status, symbol)
+            return emptyList()
+        }
+        return try {
+            response.body()
+        } catch (e: Exception) {
+            logger.error("Failed to deserialize dividends for {}", symbol, e)
             throw BackendDataException.backendError(symbol)
         }
     }

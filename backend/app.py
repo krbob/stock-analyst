@@ -28,6 +28,7 @@ HISTORY_CACHE_SECONDS = {
 }
 
 INFO_CACHE_SECONDS = 300
+DIVIDENDS_CACHE_SECONDS = 3600
 
 _ticker_cache = {}
 _TICKER_TTL = 300
@@ -89,6 +90,13 @@ def get_history(symbol, period):
             volume=int(row["Volume"]),
             dividend=dividends.loc[index] if index in dividends.index else 0.0,
         )
+
+
+def get_dividends(symbol):
+    ticker = get_ticker(symbol)
+    dividends = ticker.dividends
+    for date, amount in dividends.items():
+        yield {"date": date.strftime("%Y-%m-%d"), "amount": float(amount)}
 
 
 def get_basic_info(symbol):
@@ -160,6 +168,14 @@ def history_endpoint(symbol, period):
 def info_endpoint(symbol):
     response = jsonify(asdict(get_basic_info(symbol)))
     response.headers["Cache-Control"] = f"public, max-age={INFO_CACHE_SECONDS}"
+    return response
+
+
+@app.route("/dividends/<symbol>")
+def dividends_endpoint(symbol):
+    data = list(get_dividends(symbol))
+    response = jsonify(data)
+    response.headers["Cache-Control"] = f"public, max-age={DIVIDENDS_CACHE_SECONDS}"
     return response
 
 
