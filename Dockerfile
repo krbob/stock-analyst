@@ -14,12 +14,12 @@ FROM eclipse-temurin:25.0.2_10-jre
 
 WORKDIR /app
 
-RUN useradd -m portfolio
+RUN useradd -m stock-analyst
 
-USER portfolio
+USER stock-analyst
 
-COPY --from=builder /app/build/libs/portfolio-all.jar portfolio.jar
+COPY --from=builder /app/build/libs/stock-analyst-all.jar stock-analyst.jar
 
 EXPOSE 7777
 
-CMD ["java", "-jar", "portfolio.jar"]
+CMD ["java", "-jar", "stock-analyst.jar"]
