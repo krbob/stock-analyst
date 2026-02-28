@@ -79,6 +79,18 @@ class TestHistoryEndpoint:
         assert response.status_code == 400
         assert "Invalid period" in response.get_json()["error"]
 
+    def test_returns_empty_history_as_empty_list(self, client, mock_ticker):
+        empty_df = pd.DataFrame(
+            {"Open": [], "Close": [], "Low": [], "High": [], "Volume": []},
+            index=pd.DatetimeIndex([]),
+        )
+        mock_ticker(history_df=empty_df)
+
+        response = client.get("/history/AAPL/1y")
+
+        assert response.status_code == 200
+        assert response.get_json() == []
+
     def test_yfinance_error_returns_generic_500(self, client, mock_ticker):
         ticker = mock_ticker()
         ticker.history.side_effect = Exception("API secret details")
@@ -196,6 +208,23 @@ class TestDividendsEndpoint:
         assert response.status_code == 200
         assert response.get_json() == []
 
+    def test_multiple_dividends_ordering(self, client, mock_ticker):
+        index = pd.DatetimeIndex([
+            pd.Timestamp("2024-01-15"),
+            pd.Timestamp("2024-04-15"),
+            pd.Timestamp("2024-07-15"),
+        ])
+        dividends = pd.Series([0.24, 0.25, 0.26], index=index)
+        mock_ticker(dividends=dividends)
+
+        response = client.get("/dividends/AAPL")
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data) == 3
+        dates = [d["date"] for d in data]
+        assert dates == sorted(dates)
+
     def test_yfinance_error_returns_empty_list(self, client, mock_ticker):
         ticker = mock_ticker()
         type(ticker).dividends = PropertyMock(side_effect=Exception("API error"))
@@ -263,3 +292,19 @@ class TestTickerCache:
 
         assert "AAPL" in _ticker_cache
         assert "MSFT" in _ticker_cache
+
+    def test_ticker_expired_after_ttl(self, client, mock_ticker):
+        mock_ticker(info={"longName": "Test"})
+
+        client.get("/info/AAPL")
+        assert "AAPL" in _ticker_cache
+
+        # Simulate TTL expiration by backdating the timestamp
+        ticker, _ts = _ticker_cache["AAPL"]
+        _ticker_cache["AAPL"] = (ticker, _ts - 600)
+
+        client.get("/info/AAPL")
+
+        # Ticker should be refreshed (new timestamp)
+        _, new_ts = _ticker_cache["AAPL"]
+        assert new_ts > _ts - 600

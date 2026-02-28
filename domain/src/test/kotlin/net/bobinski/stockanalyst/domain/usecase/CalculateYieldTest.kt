@@ -4,6 +4,7 @@ import kotlinx.datetime.LocalDate
 import net.bobinski.stockanalyst.core.time.MutableCurrentTimeProvider
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class CalculateYieldTest {
@@ -46,6 +47,24 @@ class CalculateYieldTest {
         val result = calculateYield.yearly(data, null)
 
         assertEquals(0.0, result, 0.001)
+    }
+
+    @Test
+    fun `yield returns NaN when price is zero`() {
+        val data = listOf(
+            price(LocalDate(2024, 6, 15), close = 0.0, dividend = 0.5)
+        )
+
+        val result = calculateYield.yearly(data, null)
+
+        assertTrue(result.isNaN())
+    }
+
+    @Test
+    fun `yield returns NaN when data is empty`() {
+        val result = calculateYield.yearly(emptyList(), null)
+
+        assertTrue(result.isNaN())
     }
 
     private fun price(date: LocalDate, close: Double, dividend: Double) = HistoricalPrice(

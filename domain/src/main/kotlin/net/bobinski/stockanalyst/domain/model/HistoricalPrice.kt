@@ -45,6 +45,7 @@ private fun HistoricalPrice.toBar(conversion: Double?): Bar? {
     if (setOf(open, close, low, high).any { it.isNaN() }) {
         return null
     }
+    if (conversion != null && !conversion.isFinite()) return null
     val endTime = date.atStartOfDayIn(TimeZone.UTC).toJavaInstant()
     return BaseBar(
         /* timePeriod = */ Duration.ofDays(1),

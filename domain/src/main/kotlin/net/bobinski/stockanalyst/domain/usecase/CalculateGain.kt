@@ -32,6 +32,7 @@ class CalculateGain(private val currentTimeProvider: CurrentTimeProvider) {
         val currentPrice = CalculateLastPrice(data, conversion)
         val oldPrice = data.priceFor(targetDate)
             .applyConversion(conversion?.priceFor(targetDate))
+        if (oldPrice == 0.0 || !oldPrice.isFinite()) return Double.NaN
         return (currentPrice - oldPrice) / oldPrice
     }
 }

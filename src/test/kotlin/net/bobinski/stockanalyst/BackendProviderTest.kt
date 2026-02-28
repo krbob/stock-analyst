@@ -129,6 +129,33 @@ class BackendProviderTest {
         assertEquals(BackendDataException.Reason.BACKEND_ERROR, exception.reason)
     }
 
+    @Test
+    fun `getInfo returns null on 400`() = runTest {
+        val provider = providerWith("{}", HttpStatusCode.BadRequest)
+
+        val result = provider.getInfo("BAD")
+
+        assertNull(result)
+    }
+
+    @Test
+    fun `getHistory returns empty on 400`() = runTest {
+        val provider = providerWith("{}", HttpStatusCode.BadRequest)
+
+        val result = provider.getHistory("BAD", StockDataProvider.Period._1y)
+
+        assertTrue(result.isEmpty())
+    }
+
+    @Test
+    fun `getDividends returns empty on 400`() = runTest {
+        val provider = providerWith("{}", HttpStatusCode.BadRequest)
+
+        val result = provider.getDividends("BAD")
+
+        assertTrue(result.isEmpty())
+    }
+
     private fun providerWith(responseBody: String, status: HttpStatusCode): BackendProvider {
         val engine = MockEngine { _ ->
             respond(responseBody, status, jsonHeaders)

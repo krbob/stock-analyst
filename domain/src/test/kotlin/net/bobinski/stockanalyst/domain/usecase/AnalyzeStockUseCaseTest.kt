@@ -147,6 +147,17 @@ class AnalyzeStockUseCaseTest {
         assertEquals(25.0f, result.peRatio, "PE ratio should not be converted")
     }
 
+    @Test
+    fun `throws when all fallback periods return empty history`() = runTest {
+        coEvery { stockDataProvider.getInfo("GHOST") } returns basicInfo("Ghost Stock")
+        coEvery { stockDataProvider.getHistory("GHOST", any()) } returns emptyList()
+
+        val exception = assertThrows<BackendDataException> { useCase("GHOST") }
+
+        assertTrue(exception.message!!.contains("Missing history"))
+        assertEquals(BackendDataException.Reason.NOT_FOUND, exception.reason)
+    }
+
     private fun basicInfo(name: String) = BasicInfo(
         name = name, price = 150.0, peRatio = 25.0f, pbRatio = 10.0f, eps = 5.0f, roe = 0.3f,
         marketCap = 1_000_000.0, recommendation = "buy", analystCount = 30,

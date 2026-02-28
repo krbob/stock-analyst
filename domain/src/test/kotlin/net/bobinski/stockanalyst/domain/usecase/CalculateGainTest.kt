@@ -4,6 +4,7 @@ import kotlinx.datetime.LocalDate
 import net.bobinski.stockanalyst.core.time.MutableCurrentTimeProvider
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class CalculateGainTest {
@@ -61,6 +62,25 @@ class CalculateGainTest {
         val result = calculateGain.yearly(data, conversion)
 
         assertEquals(0.5, result, 0.001)
+    }
+
+    @Test
+    fun `gain returns NaN when old price is zero`() {
+        val data = listOf(
+            price(LocalDate(2024, 6, 14), close = 0.0),
+            price(LocalDate(2024, 6, 15), close = 100.0)
+        )
+
+        val result = calculateGain.daily(data, null)
+
+        assertTrue(result.isNaN())
+    }
+
+    @Test
+    fun `gain returns NaN when data is empty`() {
+        val result = calculateGain.daily(emptyList(), null)
+
+        assertTrue(result.isNaN())
     }
 
     private fun price(date: LocalDate, close: Double) = HistoricalPrice(

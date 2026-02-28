@@ -15,8 +15,10 @@ class CalculateYield(private val currentTimeProvider: CurrentTimeProvider) {
         conversion: Collection<HistoricalPrice>?
     ): Double {
         val oneYearAgo = currentTimeProvider.localDate().minus(1, DateTimeUnit.YEAR)
+        val price = data.latestPrice().applyConversion(conversion?.latestPrice())
+        if (price == 0.0 || !price.isFinite()) return Double.NaN
         return data.filter { it.date >= oneYearAgo }.sumOf {
             it.dividend.applyConversion(conversion?.priceFor(it.date))
-        } / data.latestPrice().applyConversion(conversion?.latestPrice())
+        } / price
     }
 }
