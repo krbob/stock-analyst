@@ -1,6 +1,7 @@
 package net.bobinski.stockanalyst.domain.usecase
 
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import net.bobinski.stockanalyst.domain.model.Analysis
 
@@ -14,6 +15,6 @@ class CompareStocksUseCase(
     ): List<Analysis> = coroutineScope {
         symbols.map { symbol ->
             async { analyzeStockUseCase(symbol, conversion) }
-        }.map { it.await() }
+        }.awaitAll()
     }
 }

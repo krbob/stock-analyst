@@ -6,6 +6,7 @@ kotlinx-coroutines-version = "1.10.2"
 junit-version = "6.0.3"
 koin-version = "4.1.1"
 ta4j-version = "0.22.2"
+detekt-version = "2.0.0-alpha.2"
 
 [libraries]
 # Server
@@ -53,3 +54,4 @@ mockk = { module = "io.mockk:mockk", version = "1.14.9" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin-version" }
 ktor = { id = "io.ktor.plugin", version.ref = "ktor-version" }
 kotlin-plugin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin-version" }
+detekt = { id = "dev.detekt", version.ref = "detekt-version" }

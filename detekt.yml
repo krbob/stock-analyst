@@ -1,0 +1,19 @@
+exceptions:
+  TooGenericExceptionCaught:
+    excludes:
+      - "**/route/**"
+      - "**/BackendProvider.kt"
+
+style:
+  MagicNumber:
+    ignorePropertyDeclaration: true
+    ignoreAnnotation: true
+    ignoreHashCodeFunction: true
+    ignoreEnums: true
+    ignoreRanges: true
+    ignoreNumbers:
+      - "-1"
+      - "0"
+      - "1"
+      - "2"
+      - "500"
