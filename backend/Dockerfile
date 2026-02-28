@@ -14,7 +14,9 @@ FROM debian:stable-slim
 
 WORKDIR /app
 
-RUN useradd -m stock-analyst
+RUN useradd -m stock-analyst \
+    && mkdir -p /home/stock-analyst/.cache/py-yfinance \
+    && chown -R stock-analyst:stock-analyst /home/stock-analyst/.cache
 
 USER stock-analyst
 
