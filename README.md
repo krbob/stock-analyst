@@ -57,7 +57,92 @@ curl http://localhost:7777/analysis/aapl
 curl http://localhost:7777/analysis/aapl?conversion=eur=x
 ```
 
-### Example response
+### `GET /price/{symbol}`
+
+Returns lightweight price and gain data. Faster than `/analysis` — no technical indicators.
+
+| Parameter    | Type   | Description                                   |
+|--------------|--------|-----------------------------------------------|
+| `symbol`     | path   | Stock ticker (e.g., `AAPL`, `MSFT`, `GC=F`)  |
+| `conversion` | query  | Optional currency pair (e.g., `eur=x`)        |
+
+```bash
+curl http://localhost:7777/price/aapl
+```
+
+#### Example response
+
+```json
+{
+  "symbol": "aapl",
+  "name": "Apple Inc.",
+  "date": "2026-02-28",
+  "lastPrice": 242.41,
+  "gain": {
+    "daily": 0.005,
+    "weekly": 0.031,
+    "monthly": 0.089,
+    "quarterly": 0.102,
+    "yearly": 0.283
+  }
+}
+```
+
+### `GET /compare?symbols=...`
+
+Compares multiple stocks in a single request. Returns a list of full analysis objects.
+
+| Parameter    | Type   | Description                                        |
+|--------------|--------|----------------------------------------------------|
+| `symbols`    | query  | Comma-separated tickers (max 10). Required.        |
+| `conversion` | query  | Optional currency pair (e.g., `eur=x`)             |
+
+```bash
+curl "http://localhost:7777/compare?symbols=AAPL,MSFT,GOOG"
+```
+
+Each element in the response array has the same schema as the `/analysis/{symbol}` response.
+
+### `GET /dividends/{symbol}`
+
+Returns dividend payment history and summary statistics.
+
+| Parameter | Type | Description                                  |
+|-----------|------|----------------------------------------------|
+| `symbol`  | path | Stock ticker (e.g., `AAPL`, `JNJ`, `KO`)    |
+
+```bash
+curl http://localhost:7777/dividends/aapl
+```
+
+#### Example response
+
+```json
+{
+  "symbol": "aapl",
+  "name": "Apple Inc.",
+  "payments": [
+    { "date": "2024-02-09", "amount": 0.24 },
+    { "date": "2024-05-10", "amount": 0.25 },
+    { "date": "2024-08-12", "amount": 0.25 },
+    { "date": "2024-11-08", "amount": 0.25 }
+  ],
+  "summary": {
+    "currentYield": 0.004,
+    "growth": 0.042,
+    "frequency": 4
+  }
+}
+```
+
+| Field          | Description                                          |
+|----------------|------------------------------------------------------|
+| `payments`     | Full dividend payment history (date + amount).       |
+| `currentYield` | Sum of dividends paid in the last 12 months / price. |
+| `growth`       | Year-over-year change in total dividends paid.       |
+| `frequency`    | Estimated number of payments per year.               |
+
+### `GET /analysis/{symbol}` — example response
 
 ```json
 {
@@ -242,12 +327,12 @@ The `conversion` parameter accepts a Yahoo Finance currency pair symbol:
 
 ## Error codes
 
-| Code | Reason                                       |
-|------|----------------------------------------------|
-| 400  | Invalid symbol format                        |
-| 404  | Unknown symbol or no history available        |
-| 422  | Insufficient conversion data for date range   |
-| 502  | Yahoo Finance backend error                   |
+| Code | Reason                                                    |
+|------|-----------------------------------------------------------|
+| 400  | Invalid symbol format or too many symbols (max 10)        |
+| 404  | Unknown symbol or no history available                    |
+| 422  | Insufficient conversion data for date range               |
+| 502  | Yahoo Finance backend error                               |
 
 ## Development
 

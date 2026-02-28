@@ -14,6 +14,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.model.BasicInfo
+import net.bobinski.stockanalyst.domain.model.DividendPayment
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -89,6 +90,40 @@ class BackendProviderTest {
 
         val exception = assertThrows<BackendDataException> {
             provider.getHistory("AAPL", StockDataProvider.Period._1y)
+        }
+
+        assertEquals(BackendDataException.Reason.BACKEND_ERROR, exception.reason)
+    }
+
+    @Test
+    fun `getDividends returns data on success`() = runTest {
+        val dividends = listOf(
+            DividendPayment(kotlinx.datetime.LocalDate(2024, 2, 9), 0.24),
+            DividendPayment(kotlinx.datetime.LocalDate(2024, 5, 10), 0.25)
+        )
+        val provider = providerWith(json.encodeToString(dividends), HttpStatusCode.OK)
+
+        val result = provider.getDividends("AAPL")
+
+        assertEquals(2, result.size)
+        assertEquals(0.24, result[0].amount)
+    }
+
+    @Test
+    fun `getDividends returns empty on 404`() = runTest {
+        val provider = providerWith("{}", HttpStatusCode.NotFound)
+
+        val result = provider.getDividends("INVALID")
+
+        assertTrue(result.isEmpty())
+    }
+
+    @Test
+    fun `getDividends throws on 500`() = runTest {
+        val provider = providerWith("{}", HttpStatusCode.InternalServerError)
+
+        val exception = assertThrows<BackendDataException> {
+            provider.getDividends("AAPL")
         }
 
         assertEquals(BackendDataException.Reason.BACKEND_ERROR, exception.reason)
