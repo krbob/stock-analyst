@@ -36,16 +36,18 @@ private fun HistoricalPrice.toBar(conversion: Double?): Bar? {
     if (setOf(open, close, low, high).any { it.isNaN() }) {
         return null
     }
+    val endTime = date.atStartOfDayIn(TimeZone.UTC).toJavaInstant()
     return BaseBar(
         /* timePeriod = */ Duration.ofDays(1),
-        /* endTime = */ date.atStartOfDayIn(TimeZone.UTC).toJavaInstant(),
+        /* beginTime = */ endTime.minus(Duration.ofDays(1)),
+        /* endTime = */ endTime,
         /* openPrice = */ DecimalNum.valueOf(open.applyConversion(conversion)),
         /* highPrice = */ DecimalNum.valueOf(high.applyConversion(conversion)),
         /* lowPrice = */ DecimalNum.valueOf(low.applyConversion(conversion)),
         /* closePrice = */ DecimalNum.valueOf(close.applyConversion(conversion)),
         /* volume = */ DecimalNum.valueOf(volume),
         /* amount = */ NaN.NaN,
-        /* trades = */ 0
+        /* trades = */ 0L
     )
 }
 
