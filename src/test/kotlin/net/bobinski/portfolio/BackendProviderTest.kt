@@ -29,7 +29,7 @@ class BackendProviderTest {
 
     @Test
     fun `getInfo returns BasicInfo on success`() = runTest {
-        val expected = BasicInfo("Apple Inc.", 30.0f, 45.0f, 6.5f, 1.5f, 3e9f)
+        val expected = BasicInfo("Apple Inc.", 30.0f, 45.0f, 6.5f, 1.5f, 3e9)
         val provider = providerWith(json.encodeToString(expected), HttpStatusCode.OK)
 
         val result = provider.getInfo("AAPL")
