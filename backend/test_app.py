@@ -91,16 +91,14 @@ class TestHistoryEndpoint:
         assert response.status_code == 200
         assert response.get_json() == []
 
-    def test_yfinance_error_returns_generic_500(self, client, mock_ticker):
+    def test_yfinance_error_returns_empty_list(self, client, mock_ticker):
         ticker = mock_ticker()
         ticker.history.side_effect = Exception("API secret details")
 
         response = client.get("/history/AAPL/1y")
 
-        assert response.status_code == 500
-        body = response.get_json()
-        assert body["error"] == "An internal error occurred"
-        assert "secret" not in str(body)
+        assert response.status_code == 200
+        assert response.get_json() == []
 
 
 class TestInfoEndpoint:
@@ -172,16 +170,14 @@ class TestInfoEndpoint:
 
         assert response.status_code == 404
 
-    def test_yfinance_error_returns_generic_500(self, client, mock_ticker):
+    def test_yfinance_error_returns_404(self, client, mock_ticker):
         ticker = mock_ticker()
         type(ticker).info = PropertyMock(side_effect=Exception("Internal details"))
 
         response = client.get("/info/AAPL")
 
-        assert response.status_code == 500
-        body = response.get_json()
-        assert body["error"] == "An internal error occurred"
-        assert "Internal details" not in str(body)
+        assert response.status_code == 404
+        assert "Internal details" not in str(response.get_json())
 
 
 class TestDividendsEndpoint:
