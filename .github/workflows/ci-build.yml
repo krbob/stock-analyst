@@ -65,27 +65,27 @@ jobs:
           done
 
           echo "🔍 Sending test requests..."
-          if ! curl --fail -X GET http://localhost:7777/analysis/aapl; then
+          if ! curl --fail -X GET http://localhost:8080/analysis/aapl; then
             echo "❌ analysis endpoint did not respond properly"
             exit 1
           fi
 
-          if ! curl --fail -X GET "http://localhost:7777/analysis/aapl?conversion=eur=x"; then
+          if ! curl --fail -X GET "http://localhost:8080/analysis/aapl?conversion=eur=x"; then
             echo "❌ analysis with conversion endpoint did not respond properly"
             exit 1
           fi
 
-          if ! curl --fail -X GET http://localhost:7777/price/aapl; then
+          if ! curl --fail -X GET http://localhost:8080/price/aapl; then
             echo "❌ price endpoint did not respond properly"
             exit 1
           fi
 
-          if ! curl --fail -X GET "http://localhost:7777/compare?symbols=AAPL,MSFT"; then
+          if ! curl --fail -X GET "http://localhost:8080/compare?symbols=AAPL,MSFT"; then
             echo "❌ compare endpoint did not respond properly"
             exit 1
           fi
 
-          if ! curl --fail -X GET http://localhost:7777/dividends/aapl; then
+          if ! curl --fail -X GET http://localhost:8080/dividends/aapl; then
             echo "❌ dividends endpoint did not respond properly"
             exit 1
           fi

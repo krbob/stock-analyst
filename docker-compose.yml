@@ -2,11 +2,11 @@ services:
   stock-analyst:
     image: ghcr.io/krbob/stock-analyst:main
     ports:
-      - "7777:7777"
+      - "8080:8080"
     depends_on:
       - stock-analyst-backend
     environment:
-      - BACKEND_URL=http://stock-analyst-backend:7776
+      - BACKEND_URL=http://stock-analyst-backend:8081
     restart: unless-stopped
 
   stock-analyst-backend:

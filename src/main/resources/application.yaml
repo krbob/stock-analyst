@@ -3,4 +3,4 @@ ktor:
         modules:
             - net.bobinski.stockanalyst.ApplicationKt.module
     deployment:
-        port: 7777
+        port: 8080

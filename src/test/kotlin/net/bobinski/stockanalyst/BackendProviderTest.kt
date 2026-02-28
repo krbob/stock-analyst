@@ -136,6 +136,6 @@ class BackendProviderTest {
         val client = HttpClient(engine) {
             install(ContentNegotiation) { json(json) }
         }
-        return BackendProvider(client, "http://localhost:7776")
+        return BackendProvider(client, "http://localhost:8081")
     }
 }

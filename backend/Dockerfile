@@ -20,6 +20,6 @@ USER stock-analyst
 
 COPY --from=builder /app/dist/app stock-analyst-backend
 
-EXPOSE 7776
+EXPOSE 8081
 
 CMD ["./stock-analyst-backend"]
