@@ -3,6 +3,7 @@ import time
 import traceback
 from dataclasses import asdict, dataclass
 
+import pandas as pd
 import yfinance as yf
 from flask import Flask, g, jsonify, request
 
@@ -78,8 +79,15 @@ class BasicInfo:
 
 def get_history(symbol, period):
     ticker = get_ticker(symbol)
-    history = ticker.history(period=period, auto_adjust=False)
-    dividends = ticker.dividends
+    try:
+        history = ticker.history(period=period, auto_adjust=False)
+    except Exception:
+        logger.warning("Failed to fetch history for %s (%s)", symbol, period)
+        return
+    try:
+        dividends = ticker.dividends
+    except Exception:
+        dividends = pd.Series(dtype=float)
     for index, row in history.iterrows():
         yield HistoricalPrice(
             date=index.strftime("%Y-%m-%d"),
@@ -97,13 +105,18 @@ def get_dividends(symbol):
     try:
         dividends = ticker.dividends
     except Exception:
+        logger.warning("Failed to fetch dividends for %s", symbol)
         return
     for date, amount in dividends.items():
         yield {"date": date.strftime("%Y-%m-%d"), "amount": float(amount)}
 
 
 def get_basic_info(symbol):
-    info = get_ticker(symbol).info
+    try:
+        info = get_ticker(symbol).info
+    except Exception:
+        logger.warning("Failed to fetch info for %s", symbol)
+        return None
     if not info:
         return None
     earnings = info.get("earningsDate")
