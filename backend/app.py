@@ -32,30 +32,21 @@ HISTORY_CACHE_SECONDS = {
 INFO_CACHE_SECONDS = 300
 DIVIDENDS_CACHE_SECONDS = 3600
 
-_ticker_cache = {}
-_TICKER_TTL = 300
-_ticker_lock = threading.Lock()
-
-_op_locks = {}
-_op_locks_lock = threading.Lock()
+_data_cache = {}
+_data_cache_lock = threading.Lock()
 
 
-def _symbol_lock(key):
-    with _op_locks_lock:
-        if key not in _op_locks:
-            _op_locks[key] = threading.Lock()
-        return _op_locks[key]
+def _cache_get(key):
+    with _data_cache_lock:
+        entry = _data_cache.get(key)
+        if entry and time.time() < entry[1]:
+            return entry[0]
+        return None
 
 
-def get_ticker(symbol):
-    now = time.time()
-    with _ticker_lock:
-        cached = _ticker_cache.get(symbol)
-        if cached and (now - cached[1]) < _TICKER_TTL:
-            return cached[0]
-        ticker = yf.Ticker(symbol)
-        _ticker_cache[symbol] = (ticker, now)
-        return ticker
+def _cache_set(key, value, ttl):
+    with _data_cache_lock:
+        _data_cache[key] = (value, time.time() + ttl)
 
 
 @dataclass
@@ -91,19 +82,23 @@ class BasicInfo:
 
 
 def get_history(symbol, period):
-    with _symbol_lock(f"history:{symbol}"):
-        ticker = get_ticker(symbol)
-        try:
-            history = ticker.history(period=period, auto_adjust=False)
-        except Exception:
-            logger.warning("Failed to fetch history for %s (%s)", symbol, period)
-            return
-        try:
-            dividends = ticker.dividends
-        except Exception:
-            dividends = pd.Series(dtype=float)
-    for index, row in history.iterrows():
-        yield HistoricalPrice(
+    cached = _cache_get(f"history:{symbol}:{period}")
+    if cached is not None:
+        return cached
+
+    ticker = yf.Ticker(symbol)
+    try:
+        history = ticker.history(period=period, auto_adjust=False)
+    except Exception:
+        logger.warning("Failed to fetch history for %s (%s)", symbol, period)
+        return []
+    try:
+        dividends = ticker.dividends
+    except Exception:
+        dividends = pd.Series(dtype=float)
+
+    result = [
+        HistoricalPrice(
             date=index.strftime("%Y-%m-%d"),
             open=row["Open"],
             close=row["Close"],
@@ -112,29 +107,47 @@ def get_history(symbol, period):
             volume=int(row["Volume"]),
             dividend=dividends.loc[index] if index in dividends.index else 0.0,
         )
+        for index, row in history.iterrows()
+    ]
+
+    if result:
+        ttl = HISTORY_CACHE_SECONDS.get(period, 60)
+        _cache_set(f"history:{symbol}:{period}", result, ttl)
+    return result
 
 
 def get_dividends(symbol):
-    with _symbol_lock(f"dividends:{symbol}"):
-        ticker = get_ticker(symbol)
-        try:
-            dividends = ticker.dividends
-        except Exception:
-            logger.warning("Failed to fetch dividends for %s", symbol)
-            return
-    for date, amount in dividends.items():
-        yield {"date": date.strftime("%Y-%m-%d"), "amount": float(amount)}
+    cached = _cache_get(f"dividends:{symbol}")
+    if cached is not None:
+        return cached
+
+    ticker = yf.Ticker(symbol)
+    try:
+        dividends = ticker.dividends
+    except Exception:
+        logger.warning("Failed to fetch dividends for %s", symbol)
+        return []
+
+    result = [{"date": date.strftime("%Y-%m-%d"), "amount": float(amount)} for date, amount in dividends.items()]
+
+    if result:
+        _cache_set(f"dividends:{symbol}", result, DIVIDENDS_CACHE_SECONDS)
+    return result
 
 
 def get_basic_info(symbol):
-    with _symbol_lock(f"info:{symbol}"):
-        try:
-            info = get_ticker(symbol).info
-        except Exception:
-            logger.warning("Failed to fetch info for %s", symbol)
-            return None
-        if not info:
-            return None
+    cached = _cache_get(f"info:{symbol}")
+    if cached is not None:
+        return cached
+
+    try:
+        info = yf.Ticker(symbol).info
+    except Exception:
+        logger.warning("Failed to fetch info for %s", symbol)
+        return None
+    if not info:
+        return None
+
     earnings = info.get("earningsDate")
     if isinstance(earnings, list) and earnings:
         earnings = earnings[0]
@@ -147,7 +160,7 @@ def get_basic_info(symbol):
         except (TypeError, ValueError, OSError):
             earnings_str = str(earnings) if earnings else None
 
-    return BasicInfo(
+    result = BasicInfo(
         name=info.get("longName") or info.get("shortName"),
         price=info.get("regularMarketPrice") or info.get("currentPrice"),
         pe_ratio=info.get("forwardPE"),
@@ -166,6 +179,9 @@ def get_basic_info(symbol):
         dividend_rate=info.get("dividendRate"),
         trailing_annual_dividend_rate=info.get("trailingAnnualDividendRate"),
     )
+
+    _cache_set(f"info:{symbol}", result, INFO_CACHE_SECONDS)
+    return result
 
 
 @app.before_request
@@ -210,7 +226,7 @@ def info_endpoint(symbol):
 
 @app.route("/dividends/<symbol>")
 def dividends_endpoint(symbol):
-    data = list(get_dividends(symbol))
+    data = get_dividends(symbol)
     response = jsonify(data)
     response.headers["Cache-Control"] = f"public, max-age={DIVIDENDS_CACHE_SECONDS}"
     return response
