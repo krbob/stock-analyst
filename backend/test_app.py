@@ -1,11 +1,10 @@
-import threading
 import time
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import pandas as pd
 import pytest
 
-from app import app, get_basic_info, get_ticker, _ticker_cache
+from app import app, _data_cache
 
 
 @pytest.fixture
@@ -16,10 +15,10 @@ def client():
 
 
 @pytest.fixture(autouse=True)
-def clear_ticker_cache():
-    _ticker_cache.clear()
+def clear_data_cache():
+    _data_cache.clear()
     yield
-    _ticker_cache.clear()
+    _data_cache.clear()
 
 
 @pytest.fixture
@@ -270,93 +269,63 @@ class TestCacheHeaders:
         assert response.headers["Cache-Control"] == "public, max-age=14400"
 
 
-class TestTickerCache:
-    def test_reuses_ticker_within_ttl(self, client, mock_ticker):
-        mock_ticker(
-            history_df=_sample_history(),
-            info={"longName": "Apple Inc."},
-        )
-
-        client.get("/history/AAPL/1y")
-        client.get("/info/AAPL")
-
-        assert "AAPL" in _ticker_cache
-
-    def test_different_symbols_get_different_tickers(self, client, mock_ticker):
-        mock_ticker(info={"longName": "Test"})
+class TestDataCache:
+    def test_info_serves_from_cache(self, client, mock_ticker):
+        mock_ticker(info={"longName": "Apple Inc."})
 
         client.get("/info/AAPL")
-        client.get("/info/MSFT")
-
-        assert "AAPL" in _ticker_cache
-        assert "MSFT" in _ticker_cache
-
-    def test_ticker_expired_after_ttl(self, client, mock_ticker):
-        mock_ticker(info={"longName": "Test"})
-
-        client.get("/info/AAPL")
-        assert "AAPL" in _ticker_cache
-
-        # Simulate TTL expiration by backdating the timestamp
-        ticker, _ts = _ticker_cache["AAPL"]
-        _ticker_cache["AAPL"] = (ticker, _ts - 600)
-
         client.get("/info/AAPL")
 
-        # Ticker should be refreshed (new timestamp)
-        _, new_ts = _ticker_cache["AAPL"]
-        assert new_ts > _ts - 600
+        assert "info:AAPL" in _data_cache
 
-
-class TestConcurrency:
-    def test_concurrent_get_ticker_creates_single_instance(self):
-        barrier = threading.Barrier(2)
-
+    def test_history_serves_from_cache(self, client):
         with patch("app.yf.Ticker") as mock_class:
-            mock_class.return_value = MagicMock()
+            instance = mock_class.return_value
+            instance.history.return_value = _sample_history()
+            type(instance).dividends = PropertyMock(return_value=pd.Series(dtype=float))
 
-            def call():
-                barrier.wait()
-                get_ticker("AAPL")
-
-            threads = [threading.Thread(target=call) for _ in range(2)]
-            for t in threads:
-                t.start()
-            for t in threads:
-                t.join()
+            client.get("/history/AAPL/1y")
+            client.get("/history/AAPL/1y")
 
             assert mock_class.call_count == 1
 
-    def test_concurrent_info_requests_are_serialized(self, mock_ticker):
-        max_concurrent = 0
-        concurrent = 0
-        lock = threading.Lock()
+    def test_dividends_serves_from_cache(self, client):
+        with patch("app.yf.Ticker") as mock_class:
+            instance = mock_class.return_value
+            index = pd.DatetimeIndex([pd.Timestamp("2024-01-15")])
+            type(instance).dividends = PropertyMock(return_value=pd.Series([0.24], index=index))
 
-        def info_side_effect():
-            nonlocal concurrent, max_concurrent
-            with lock:
-                concurrent += 1
-                max_concurrent = max(max_concurrent, concurrent)
-            time.sleep(0.05)
-            with lock:
-                concurrent -= 1
-            return {"longName": "Apple"}
+            client.get("/dividends/AAPL")
+            client.get("/dividends/AAPL")
 
-        ticker = mock_ticker()
-        type(ticker).info = PropertyMock(side_effect=info_side_effect)
+            assert mock_class.call_count == 1
 
-        barrier = threading.Barrier(2)
-        results = []
+    def test_does_not_cache_errors(self, client):
+        with patch("app.yf.Ticker") as mock_class:
+            bad = MagicMock()
+            good = MagicMock()
+            type(bad).info = PropertyMock(side_effect=Exception("network error"))
+            type(good).info = PropertyMock(return_value={"longName": "Apple Inc."})
+            mock_class.side_effect = [bad, good]
 
-        def call():
-            barrier.wait()
-            results.append(get_basic_info("AAPL"))
+            r1 = client.get("/info/AAPL")
+            r2 = client.get("/info/AAPL")
 
-        threads = [threading.Thread(target=call) for _ in range(2)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
+            assert r1.status_code == 404
+            assert r2.status_code == 200
+            assert r2.get_json()["name"] == "Apple Inc."
 
-        assert max_concurrent == 1
-        assert all(r is not None for r in results)
+    def test_cache_expires(self, client):
+        with patch("app.yf.Ticker") as mock_class:
+            instance = mock_class.return_value
+            type(instance).info = PropertyMock(return_value={"longName": "Apple Inc."})
+
+            client.get("/info/AAPL")
+            assert mock_class.call_count == 1
+
+            # Backdate the cache entry to simulate expiry
+            value, _expiry = _data_cache["info:AAPL"]
+            _data_cache["info:AAPL"] = (value, time.time() - 1)
+
+            client.get("/info/AAPL")
+            assert mock_class.call_count == 2
