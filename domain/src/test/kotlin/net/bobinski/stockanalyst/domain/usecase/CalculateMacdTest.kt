@@ -17,8 +17,8 @@ class CalculateMacdTest {
 
         val result = CalculateMacd.daily(data)
 
-        assertTrue(result.macd > 0, "MACD should be positive for rising prices, was ${result.macd}")
-        assertTrue(result.signal > 0, "Signal should be positive for rising prices")
+        assertTrue(result.macd!! > 0, "MACD should be positive for rising prices, was ${result.macd}")
+        assertTrue(result.signal!! > 0, "Signal should be positive for rising prices")
     }
 
     @Test
@@ -29,7 +29,7 @@ class CalculateMacdTest {
 
         val result = CalculateMacd.daily(data)
 
-        assertTrue(result.macd < 0, "MACD should be negative for falling prices, was ${result.macd}")
+        assertTrue(result.macd!! < 0, "MACD should be negative for falling prices, was ${result.macd}")
     }
 
     @Test
@@ -39,10 +39,10 @@ class CalculateMacdTest {
         }
 
         val result = CalculateMacd.daily(data)
-        val expected = result.macd - result.signal
+        val expected = result.macd!! - result.signal!!
 
         assertTrue(
-            kotlin.math.abs(result.histogram - expected) < 0.0001,
+            kotlin.math.abs(result.histogram!! - expected) < 0.0001,
             "Histogram should equal MACD - Signal"
         )
     }

@@ -18,8 +18,8 @@ class CalculateBollingerBandsTest {
 
         val result = CalculateBollingerBands.daily(data)
 
-        assertTrue(result.upper > result.middle, "Upper should be above middle")
-        assertTrue(result.middle > result.lower, "Middle should be above lower")
+        assertTrue(result.upper!! > result.middle!!, "Upper should be above middle")
+        assertTrue(result.middle > result.lower!!, "Middle should be above lower")
     }
 
     @Test
@@ -29,7 +29,7 @@ class CalculateBollingerBandsTest {
         }
 
         val result = CalculateBollingerBands.daily(data)
-        val width = result.upper - result.lower
+        val width = result.upper!! - result.lower!!
 
         assertTrue(width < 1.0, "Bands should be narrow for stable prices, width was $width")
     }

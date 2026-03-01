@@ -13,6 +13,7 @@ import net.bobinski.stockanalyst.domain.model.HistoricalPrice
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider.Period
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -68,17 +69,17 @@ class GetPriceUseCaseTest {
     }
 
     @Test
-    fun `sets NaN gains when data is lacking`() = runTest {
+    fun `sets null gains when data is lacking`() = runTest {
         coEvery { stockDataProvider.getInfo("LACK") } returns basicInfo("Lacking Stock")
         coEvery { stockDataProvider.getHistory("LACK", Period._1y) } returns listOf(singlePrice())
 
         val result = useCase("LACK")
 
-        assertTrue(result.gain.daily.isNaN())
-        assertTrue(result.gain.weekly.isNaN())
-        assertTrue(result.gain.monthly.isNaN())
-        assertTrue(result.gain.quarterly.isNaN())
-        assertTrue(result.gain.yearly.isNaN())
+        assertNull(result.gain.daily)
+        assertNull(result.gain.weekly)
+        assertNull(result.gain.monthly)
+        assertNull(result.gain.quarterly)
+        assertNull(result.gain.yearly)
     }
 
     @Test
