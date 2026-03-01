@@ -17,8 +17,8 @@ class CalculateMovingAveragesTest {
 
         val result = CalculateMovingAverages.daily(data)
 
-        assertTrue(result.sma50 > result.sma200, "SMA50 should be above SMA200 for rising prices")
-        assertTrue(result.ema50 > result.ema200, "EMA50 should be above EMA200 for rising prices")
+        assertTrue(result.sma50!! > result.sma200!!, "SMA50 should be above SMA200 for rising prices")
+        assertTrue(result.ema50!! > result.ema200!!, "EMA50 should be above EMA200 for rising prices")
     }
 
     @Test
@@ -31,7 +31,7 @@ class CalculateMovingAveragesTest {
         val result = CalculateMovingAverages.daily(data)
 
         assertTrue(
-            result.ema50 > result.sma50,
+            result.ema50!! > result.sma50!!,
             "EMA50 should react faster than SMA50 to recent price jump"
         )
     }

@@ -13,6 +13,8 @@ import net.bobinski.stockanalyst.domain.model.HistoricalPrice
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider.Period
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
@@ -91,16 +93,16 @@ class AnalyzeStockUseCaseTest {
 
         val result = useCase("AAPL")
 
-        assertTrue(!result.macd.macd.isNaN(), "MACD should not be NaN")
-        assertTrue(!result.bollingerBands.upper.isNaN(), "Bollinger upper should not be NaN")
-        assertTrue(!result.movingAverages.sma50.isNaN(), "SMA50 should not be NaN")
-        assertTrue(!result.atr.isNaN(), "ATR should not be NaN")
+        assertNotNull(result.macd.macd, "MACD should not be null")
+        assertNotNull(result.bollingerBands.upper, "Bollinger upper should not be null")
+        assertNotNull(result.movingAverages.sma50, "SMA50 should not be null")
+        assertNotNull(result.atr, "ATR should not be null")
         assertEquals("buy", result.recommendation)
         assertEquals("Technology", result.sector)
     }
 
     @Test
-    fun `sets NaN values when data is lacking`() = runTest {
+    fun `sets null values when data is lacking`() = runTest {
         coEvery { stockDataProvider.getInfo("LACK") } returns basicInfo("Lacking Stock")
         coEvery { stockDataProvider.getHistory("LACK", Period._5y) } returns listOf(singlePrice())
         coEvery { stockDataProvider.getHistory("LACK", Period._2y) } returns listOf(singlePrice())
@@ -109,14 +111,14 @@ class AnalyzeStockUseCaseTest {
 
         val result = useCase("LACK")
 
-        assertTrue(result.gain.daily.isNaN())
-        assertTrue(result.gain.weekly.isNaN())
-        assertTrue(result.rsi.daily.isNaN())
-        assertTrue(result.macd.macd.isNaN())
-        assertTrue(result.bollingerBands.upper.isNaN())
-        assertTrue(result.movingAverages.sma50.isNaN())
-        assertTrue(result.atr.isNaN())
-        assertTrue(result.dividendYield.isNaN())
+        assertNull(result.gain.daily)
+        assertNull(result.gain.weekly)
+        assertNull(result.rsi.daily)
+        assertNull(result.macd.macd)
+        assertNull(result.bollingerBands.upper)
+        assertNull(result.movingAverages.sma50)
+        assertNull(result.atr)
+        assertNull(result.dividendYield)
     }
 
     @Test

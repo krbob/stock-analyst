@@ -16,24 +16,26 @@ data class Price(
 
     @Serializable
     data class Gain(
-        val daily: Double,
-        val weekly: Double,
-        val monthly: Double,
-        val quarterly: Double,
-        val yearly: Double
+        val daily: Double?,
+        val weekly: Double?,
+        val monthly: Double?,
+        val quarterly: Double?,
+        val yearly: Double?
     )
 
     fun roundValues() = copy(
         lastPrice = lastPrice.round(2),
         gain = Gain(
-            daily = gain.daily.round(3),
-            weekly = gain.weekly.round(3),
-            monthly = gain.monthly.round(3),
-            quarterly = gain.quarterly.round(3),
-            yearly = gain.yearly.round(3)
+            daily = gain.daily.nanToNull()?.round(3),
+            weekly = gain.weekly.nanToNull()?.round(3),
+            monthly = gain.monthly.nanToNull()?.round(3),
+            quarterly = gain.quarterly.nanToNull()?.round(3),
+            yearly = gain.yearly.nanToNull()?.round(3)
         )
     )
 
     private fun Double.round(decimals: Int): Double =
         "%.${decimals}f".format(Locale.ROOT, this).toDouble()
+
+    private fun Double?.nanToNull(): Double? = if (this?.isNaN() == true) null else this
 }
