@@ -6,6 +6,7 @@ import net.bobinski.stockanalyst.domain.usecase.CalculateYield
 import net.bobinski.stockanalyst.domain.usecase.CompareStocksUseCase
 import net.bobinski.stockanalyst.domain.usecase.GetDividendHistoryUseCase
 import net.bobinski.stockanalyst.domain.usecase.GetPriceUseCase
+import net.bobinski.stockanalyst.domain.usecase.GetStockHistoryUseCase
 import org.koin.dsl.module
 
 val DomainModule = module {
@@ -33,4 +34,5 @@ val DomainModule = module {
             currentTimeProvider = get()
         )
     }
+    single { GetStockHistoryUseCase(stockDataProvider = get()) }
 }

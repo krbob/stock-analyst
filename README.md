@@ -142,6 +142,52 @@ curl http://localhost:8080/dividends/aapl
 | `growth`       | Year-over-year change in total dividends paid.       |
 | `frequency`    | Estimated number of payments per year.               |
 
+### `GET /history/{symbol}`
+
+Returns historical OHLCV price data for a stock symbol.
+
+| Parameter | Type  | Description                                         |
+|-----------|-------|-----------------------------------------------------|
+| `symbol`  | path  | Stock ticker (e.g., `AAPL`, `MSFT`, `GC=F`)        |
+| `period`  | query | Time range. Default: `1y`. Values: `1d`, `5d`, `1mo`, `3mo`, `6mo`, `1y`, `2y`, `5y`, `10y`, `ytd`, `max` |
+
+```bash
+curl http://localhost:8080/history/aapl
+curl http://localhost:8080/history/aapl?period=5y
+```
+
+#### Example response
+
+```json
+{
+  "symbol": "aapl",
+  "name": "Apple Inc.",
+  "period": "1y",
+  "prices": [
+    {
+      "date": "2025-03-03",
+      "open": 242.31,
+      "close": 242.41,
+      "low": 240.15,
+      "high": 243.50,
+      "volume": 45000000,
+      "dividend": 0.0
+    }
+  ]
+}
+```
+
+| Field      | Description                                          |
+|------------|------------------------------------------------------|
+| `period`   | The time range used for the query.                   |
+| `prices`   | Array of daily OHLCV data sorted by date ascending.  |
+| `open`     | Opening price for the trading day.                   |
+| `close`    | Closing price for the trading day.                   |
+| `high`     | Highest price during the trading day.                |
+| `low`      | Lowest price during the trading day.                 |
+| `volume`   | Number of shares traded.                             |
+| `dividend` | Dividend paid on that date (0 if none).              |
+
 ### `GET /analysis/{symbol}` — example response
 
 ```json
