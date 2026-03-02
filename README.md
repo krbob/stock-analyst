@@ -25,20 +25,23 @@ stock-analyst/
 └── backend/        Python/Flask data provider
 ```
 
-## Installation
+## Usage
 
-Requires Docker Compose.
+```yaml
+services:
+  stock-analyst:
+    image: ghcr.io/krbob/stock-analyst:main
+    ports:
+      - "8080:8080"
+    depends_on:
+      - stock-analyst-backend
+    environment:
+      - BACKEND_URL=http://stock-analyst-backend:8081
+    restart: unless-stopped
 
-```bash
-git clone https://github.com/krbob/stock-analyst.git
-cd stock-analyst
-docker compose up -d
-```
-
-Or build from source:
-
-```bash
-docker compose -f docker-compose-build.yml up --build -d
+  stock-analyst-backend:
+    image: ghcr.io/krbob/stock-analyst-backend:main
+    restart: unless-stopped
 ```
 
 ## API

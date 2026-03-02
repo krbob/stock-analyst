@@ -50,7 +50,7 @@ jobs:
       - name: Test containers
         run: |
           echo "🛠️ Building and running containers locally for testing"
-          docker compose -f docker-compose-build.yml up -d
+          docker compose up -d
 
           echo "⏳ Waiting for containers to start..."
           sleep 15
@@ -58,7 +58,7 @@ jobs:
           echo "📦 Checking container status:"
           docker ps -a
 
-          for container in $(docker compose -f docker-compose-build.yml ps -q); do
+          for container in $(docker compose ps -q); do
             status=$(docker inspect --format='{{.State.ExitCode}}' $container)
             if [ "$status" != "0" ]; then
               echo "❌ Container $container exited with code $status"
@@ -99,7 +99,7 @@ jobs:
           fi
       - name: Clean up test containers
         if: always()
-        run: docker compose -f docker-compose-build.yml down
+        run: docker compose down
 
   build:
     runs-on: ubuntu-latest
