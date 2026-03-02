@@ -95,6 +95,20 @@ class GetPriceUseCaseTest {
     }
 
     @Test
+    fun `trims history to conversion overlap when conversion starts later`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
+        coEvery { stockDataProvider.getInfo("eur=x") } returns basicInfo("EUR/USD")
+        coEvery { stockDataProvider.getHistory("AAPL", Period._1y) } returns priceHistory(200)
+        coEvery { stockDataProvider.getHistory("eur=x", Period._1y) } returns priceHistory(190)
+
+        val result = useCase("AAPL", "eur=x")
+
+        assertEquals("AAPL", result.symbol)
+        assertEquals("EUR/USD", result.conversionName)
+        assertTrue(result.lastPrice > 0)
+    }
+
+    @Test
     fun `throws when conversion symbol info has no name`() = runTest {
         coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
         coEvery { stockDataProvider.getInfo("invalid=x") } returns BasicInfo(

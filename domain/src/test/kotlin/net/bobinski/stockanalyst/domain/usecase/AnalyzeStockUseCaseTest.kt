@@ -151,6 +151,20 @@ class AnalyzeStockUseCaseTest {
     }
 
     @Test
+    fun `trims history to conversion overlap when conversion starts later`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
+        coEvery { stockDataProvider.getInfo("eur=x") } returns basicInfo("EUR/USD")
+        coEvery { stockDataProvider.getHistory("AAPL", Period._5y) } returns priceHistory(500)
+        coEvery { stockDataProvider.getHistory("eur=x", Period._5y) } returns priceHistory(490)
+
+        val result = useCase("AAPL", "eur=x")
+
+        assertEquals("AAPL", result.symbol)
+        assertEquals("EUR/USD", result.conversionName)
+        assertTrue(result.lastPrice > 0)
+    }
+
+    @Test
     fun `throws when all fallback periods return empty history`() = runTest {
         coEvery { stockDataProvider.getInfo("GHOST") } returns basicInfo("Ghost Stock")
         coEvery { stockDataProvider.getHistory("GHOST", any()) } returns emptyList()
