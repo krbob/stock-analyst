@@ -47,13 +47,12 @@ class AnalyzeStockUseCase(
 
             val conversionInfo = convInfoDeferred?.await()
             val conversionHistory = conversion?.let {
-                stockDataProvider.getHistory(it, period).also { convHistory ->
-                    val stockMinDate = history.minOf { p -> p.date }
-                    val convMinDate = convHistory.minOfOrNull { p -> p.date }
-                    if (convMinDate == null || convMinDate > stockMinDate) {
-                        throw BackendDataException.insufficientConversion(it)
-                    }
-                }
+                val convHistory = stockDataProvider.getHistory(it, period)
+                if (convHistory.isEmpty()) throw BackendDataException.insufficientConversion(it)
+                val convMinDate = convHistory.minOf { p -> p.date }
+                history = history.filter { p -> p.date >= convMinDate }
+                if (history.isEmpty()) throw BackendDataException.insufficientConversion(it)
+                convHistory
             }
             val conversionPrice = conversionInfo?.price
             val latestConvRate = conversionHistory?.latestPrice()
