@@ -1,6 +1,8 @@
 services:
   stock-analyst:
-    image: ghcr.io/krbob/stock-analyst:main
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
       - "8080:8080"
     depends_on:
@@ -10,5 +12,7 @@ services:
     restart: unless-stopped
 
   stock-analyst-backend:
-    image: ghcr.io/krbob/stock-analyst-backend:main
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     restart: unless-stopped
