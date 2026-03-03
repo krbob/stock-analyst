@@ -14,6 +14,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 VALID_PERIODS = {"1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"}
+VALID_INTERVALS = {"1d", "1wk", "1mo"}
 
 HISTORY_CACHE_SECONDS = {
     "1d": 120,
@@ -81,14 +82,14 @@ class BasicInfo:
     trailing_annual_dividend_rate: float
 
 
-def get_history(symbol, period):
-    cached = _cache_get(f"history:{symbol}:{period}")
+def get_history(symbol, period, interval="1d"):
+    cached = _cache_get(f"history:{symbol}:{period}:{interval}")
     if cached is not None:
         return cached
 
     ticker = yf.Ticker(symbol)
     try:
-        history = ticker.history(period=period, auto_adjust=False)
+        history = ticker.history(period=period, interval=interval, auto_adjust=False)
     except Exception:
         logger.warning("Failed to fetch history for %s (%s)", symbol, period)
         return []
@@ -112,7 +113,7 @@ def get_history(symbol, period):
 
     if result:
         ttl = HISTORY_CACHE_SECONDS.get(period, 60)
-        _cache_set(f"history:{symbol}:{period}", result, ttl)
+        _cache_set(f"history:{symbol}:{period}:{interval}", result, ttl)
     return result
 
 
@@ -208,7 +209,11 @@ def history_endpoint(symbol, period):
     if period not in VALID_PERIODS:
         return jsonify({"error": f"Invalid period: {period}"}), 400
 
-    response = jsonify([asdict(day) for day in get_history(symbol, period)])
+    interval = request.args.get("interval", "1d")
+    if interval not in VALID_INTERVALS:
+        return jsonify({"error": f"Invalid interval: {interval}. Valid values: {', '.join(sorted(VALID_INTERVALS))}"}), 400
+
+    response = jsonify([asdict(day) for day in get_history(symbol, period, interval)])
     max_age = HISTORY_CACHE_SECONDS.get(period, 60)
     response.headers["Cache-Control"] = f"public, max-age={max_age}"
     return response

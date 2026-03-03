@@ -5,6 +5,7 @@ import kotlinx.coroutines.coroutineScope
 import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.model.StockHistory
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider
+import net.bobinski.stockanalyst.domain.provider.StockDataProvider.Interval
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider.Period
 
 class GetStockHistoryUseCase(
@@ -13,8 +14,9 @@ class GetStockHistoryUseCase(
 
     suspend operator fun invoke(symbol: String, period: Period): StockHistory =
         coroutineScope {
+            val interval = intervalFor(period)
             val infoDeferred = async { stockDataProvider.getInfo(symbol) }
-            val historyDeferred = async { stockDataProvider.getHistory(symbol, period) }
+            val historyDeferred = async { stockDataProvider.getHistory(symbol, period, interval) }
 
             val info = infoDeferred.await()
             val name = info?.name ?: throw BackendDataException.unknownSymbol(symbol)
@@ -29,4 +31,10 @@ class GetStockHistoryUseCase(
                 prices = history.sortedBy { it.date }
             )
         }
+
+    private fun intervalFor(period: Period): Interval = when (period) {
+        Period._5y, Period._10y -> Interval.WEEKLY
+        Period.max -> Interval.MONTHLY
+        else -> Interval.DAILY
+    }
 }
