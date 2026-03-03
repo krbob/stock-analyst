@@ -8,6 +8,7 @@ import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.model.BasicInfo
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider
+import net.bobinski.stockanalyst.domain.provider.StockDataProvider.Interval
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider.Period
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -22,7 +23,7 @@ class GetStockHistoryUseCaseTest {
     @Test
     fun `returns stock history for valid symbol and period`() = runTest {
         coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
-        coEvery { stockDataProvider.getHistory("AAPL", Period._1y) } returns listOf(
+        coEvery { stockDataProvider.getHistory("AAPL", Period._1y, Interval.DAILY) } returns listOf(
             historicalPrice(LocalDate(2024, 1, 2), 185.0),
             historicalPrice(LocalDate(2024, 6, 15), 210.0)
         )
@@ -38,7 +39,7 @@ class GetStockHistoryUseCaseTest {
     @Test
     fun `returns prices sorted by date ascending`() = runTest {
         coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
-        coEvery { stockDataProvider.getHistory("AAPL", Period._1mo) } returns listOf(
+        coEvery { stockDataProvider.getHistory("AAPL", Period._1mo, Interval.DAILY) } returns listOf(
             historicalPrice(LocalDate(2024, 6, 15), 210.0),
             historicalPrice(LocalDate(2024, 6, 1), 200.0),
             historicalPrice(LocalDate(2024, 6, 10), 205.0)
@@ -60,7 +61,7 @@ class GetStockHistoryUseCaseTest {
             industry = null, earningsDate = null, dividendRate = null,
             trailingAnnualDividendRate = null
         )
-        coEvery { stockDataProvider.getHistory("INVALID", Period._1y) } returns emptyList()
+        coEvery { stockDataProvider.getHistory("INVALID", Period._1y, Interval.DAILY) } returns emptyList()
 
         val exception = assertThrows<BackendDataException> { useCase("INVALID", Period._1y) }
         assertTrue(exception.message!!.contains("Unknown symbol"))
@@ -69,7 +70,7 @@ class GetStockHistoryUseCaseTest {
     @Test
     fun `throws BackendDataException when history is empty`() = runTest {
         coEvery { stockDataProvider.getInfo("NODATA") } returns basicInfo("No Data Corp")
-        coEvery { stockDataProvider.getHistory("NODATA", Period._1y) } returns emptyList()
+        coEvery { stockDataProvider.getHistory("NODATA", Period._1y, Interval.DAILY) } returns emptyList()
 
         val exception = assertThrows<BackendDataException> { useCase("NODATA", Period._1y) }
         assertTrue(exception.message!!.contains("Missing history"))
@@ -78,7 +79,7 @@ class GetStockHistoryUseCaseTest {
     @Test
     fun `uses correct period value in response`() = runTest {
         coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
-        coEvery { stockDataProvider.getHistory("AAPL", Period._5d) } returns listOf(
+        coEvery { stockDataProvider.getHistory("AAPL", Period._5d, Interval.DAILY) } returns listOf(
             historicalPrice(LocalDate(2024, 6, 10), 205.0)
         )
 
@@ -90,10 +91,36 @@ class GetStockHistoryUseCaseTest {
     @Test
     fun `propagates BackendDataException from provider`() = runTest {
         coEvery { stockDataProvider.getInfo("FAIL") } returns basicInfo("Fail Corp")
-        coEvery { stockDataProvider.getHistory("FAIL", Period._1y) } throws
+        coEvery { stockDataProvider.getHistory("FAIL", Period._1y, Interval.DAILY) } throws
             BackendDataException.backendError("FAIL")
 
         assertThrows<BackendDataException> { useCase("FAIL", Period._1y) }
+    }
+
+    @Test
+    fun `uses weekly interval for 5y period`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
+        coEvery { stockDataProvider.getHistory("AAPL", Period._5y, Interval.WEEKLY) } returns listOf(
+            historicalPrice(LocalDate(2024, 6, 15), 210.0)
+        )
+
+        val result = useCase("AAPL", Period._5y)
+
+        assertEquals("5y", result.period)
+        assertEquals(1, result.prices.size)
+    }
+
+    @Test
+    fun `uses monthly interval for max period`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
+        coEvery { stockDataProvider.getHistory("AAPL", Period.max, Interval.MONTHLY) } returns listOf(
+            historicalPrice(LocalDate(2024, 6, 15), 210.0)
+        )
+
+        val result = useCase("AAPL", Period.max)
+
+        assertEquals("max", result.period)
+        assertEquals(1, result.prices.size)
     }
 
     private fun basicInfo(name: String) = BasicInfo(

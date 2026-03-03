@@ -5,7 +5,12 @@ import net.bobinski.stockanalyst.domain.model.DividendPayment
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
 
 interface StockDataProvider {
-    suspend fun getHistory(symbol: String, period: Period): Collection<HistoricalPrice>
+    suspend fun getHistory(
+        symbol: String,
+        period: Period,
+        interval: Interval = Interval.DAILY
+    ): Collection<HistoricalPrice>
+
     suspend fun getInfo(symbol: String): BasicInfo?
     suspend fun getDividends(symbol: String): List<DividendPayment>
 
@@ -21,5 +26,11 @@ interface StockDataProvider {
         _10y("10y"),
         ytd("ytd"),
         max("max")
+    }
+
+    enum class Interval(val value: String) {
+        DAILY("1d"),
+        WEEKLY("1wk"),
+        MONTHLY("1mo")
     }
 }
