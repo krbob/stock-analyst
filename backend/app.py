@@ -1,4 +1,5 @@
 import logging
+import math
 import threading
 import time
 import traceback
@@ -109,6 +110,7 @@ def get_history(symbol, period, interval="1d"):
             dividend=dividends.loc[index] if index in dividends.index else 0.0,
         )
         for index, row in history.iterrows()
+        if not (math.isnan(row["Close"]) or math.isnan(row["Open"]))
     ]
 
     if result:
