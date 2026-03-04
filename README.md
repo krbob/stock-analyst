@@ -168,6 +168,7 @@ curl http://localhost:8080/history/aapl?period=5y&interval=1d
   "symbol": "aapl",
   "name": "Apple Inc.",
   "period": "1y",
+  "interval": "1d",
   "prices": [
     {
       "date": "2025-03-03",
@@ -185,6 +186,7 @@ curl http://localhost:8080/history/aapl?period=5y&interval=1d
 | Field      | Description                                          |
 |------------|------------------------------------------------------|
 | `period`   | The time range used for the query.                   |
+| `interval` | The candle interval used (`1d`, `1wk`, or `1mo`).    |
 | `prices`   | Array of OHLCV data sorted by date ascending.        |
 | `open`     | Opening price for the trading day.                   |
 | `close`    | Closing price for the trading day.                   |
