@@ -44,6 +44,7 @@ class HistoryRouteTest {
         assertTrue(body.contains("\"symbol\":\"AAPL\""))
         assertTrue(body.contains("\"prices\""))
         assertTrue(body.contains("\"period\":\"1y\""))
+        assertTrue(body.contains("\"interval\":\"1d\""))
     }
 
     @Test
@@ -115,7 +116,7 @@ class HistoryRouteTest {
     @Test
     fun `passes custom interval to use case`() = testApplication {
         val useCase = mockk<GetStockHistoryUseCase>()
-        coEvery { useCase.invoke("AAPL", Period._5y, Interval.DAILY) } returns testHistory(period = "5y")
+        coEvery { useCase.invoke("AAPL", Period._5y, Interval.DAILY) } returns testHistory(period = "5y", interval = "1d")
         configureApp(useCase)
 
         client.get("/history/AAPL?period=5y&interval=1d")
@@ -174,10 +175,11 @@ class HistoryRouteTest {
         }
     }
 
-    private fun testHistory(period: String = "1y") = StockHistory(
+    private fun testHistory(period: String = "1y", interval: String = "1d") = StockHistory(
         symbol = "AAPL",
         name = "Apple Inc.",
         period = period,
+        interval = interval,
         prices = listOf(
             HistoricalPrice(
                 date = LocalDate(2024, 1, 2), open = 184.0, close = 185.0,

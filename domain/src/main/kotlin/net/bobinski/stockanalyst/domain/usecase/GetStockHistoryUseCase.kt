@@ -28,6 +28,7 @@ class GetStockHistoryUseCase(
                 symbol = symbol,
                 name = name,
                 period = period.value,
+                interval = interval.value,
                 prices = history.sortedBy { it.date }
             )
         }
