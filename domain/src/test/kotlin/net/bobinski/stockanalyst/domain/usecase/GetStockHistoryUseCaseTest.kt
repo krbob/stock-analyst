@@ -98,6 +98,19 @@ class GetStockHistoryUseCaseTest {
     }
 
     @Test
+    fun `uses daily interval when explicitly overridden for 5y period`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
+        coEvery { stockDataProvider.getHistory("AAPL", Period._5y, Interval.DAILY) } returns listOf(
+            historicalPrice(LocalDate(2024, 6, 15), 210.0)
+        )
+
+        val result = useCase("AAPL", Period._5y, Interval.DAILY)
+
+        assertEquals("5y", result.period)
+        assertEquals(1, result.prices.size)
+    }
+
+    @Test
     fun `uses weekly interval for 5y period`() = runTest {
         coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
         coEvery { stockDataProvider.getHistory("AAPL", Period._5y, Interval.WEEKLY) } returns listOf(

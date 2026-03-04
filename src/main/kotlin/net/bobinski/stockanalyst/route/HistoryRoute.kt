@@ -13,6 +13,7 @@ import org.koin.ktor.ext.inject
 private val SYMBOL_PATTERN = Regex("^[a-zA-Z0-9.\\-=^]{1,20}$")
 
 private val VALID_PERIODS = StockDataProvider.Period.entries.associateBy { it.value }
+private val VALID_INTERVALS = StockDataProvider.Interval.entries.associateBy { it.value }
 
 fun Route.historyRoute() {
     val getStockHistoryUseCase: GetStockHistoryUseCase by inject()
@@ -32,8 +33,17 @@ fun Route.historyRoute() {
                 "Invalid period: $periodParam. Valid values: ${VALID_PERIODS.keys.joinToString()}"
             )
 
+        val intervalParam = call.request.queryParameters["interval"]
+        val interval = if (intervalParam != null) {
+            VALID_INTERVALS[intervalParam]
+                ?: return@get call.respondError(
+                    HttpStatusCode.BadRequest,
+                    "Invalid interval: $intervalParam. Valid values: ${VALID_INTERVALS.keys.joinToString()}"
+                )
+        } else null
+
         val result = try {
-            getStockHistoryUseCase(stock, period)
+            getStockHistoryUseCase(stock, period, interval)
         } catch (e: BackendDataException) {
             val status = when (e.reason) {
                 Reason.NOT_FOUND -> HttpStatusCode.NotFound

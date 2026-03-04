@@ -19,6 +19,7 @@ import net.bobinski.stockanalyst.core.dependency.CoreModule
 import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
 import net.bobinski.stockanalyst.domain.model.StockHistory
+import net.bobinski.stockanalyst.domain.provider.StockDataProvider.Interval
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider.Period
 import net.bobinski.stockanalyst.domain.usecase.GetStockHistoryUseCase
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -109,6 +110,38 @@ class HistoryRouteTest {
         val response = client.get("/history/AAPL")
 
         assertEquals(HttpStatusCode.BadGateway, response.status)
+    }
+
+    @Test
+    fun `passes custom interval to use case`() = testApplication {
+        val useCase = mockk<GetStockHistoryUseCase>()
+        coEvery { useCase.invoke("AAPL", Period._5y, Interval.DAILY) } returns testHistory(period = "5y")
+        configureApp(useCase)
+
+        client.get("/history/AAPL?period=5y&interval=1d")
+
+        coVerify { useCase.invoke("AAPL", Period._5y, Interval.DAILY) }
+    }
+
+    @Test
+    fun `passes null interval when not specified`() = testApplication {
+        val useCase = mockk<GetStockHistoryUseCase>()
+        coEvery { useCase.invoke("AAPL", Period._1y, null) } returns testHistory()
+        configureApp(useCase)
+
+        client.get("/history/AAPL")
+
+        coVerify { useCase.invoke("AAPL", Period._1y, null) }
+    }
+
+    @Test
+    fun `responds with 400 for invalid interval`() = testApplication {
+        val useCase = mockk<GetStockHistoryUseCase>()
+        configureApp(useCase)
+
+        val response = client.get("/history/AAPL?interval=99z")
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
     }
 
     @Test
