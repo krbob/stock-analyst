@@ -149,14 +149,16 @@ curl http://localhost:8080/dividends/aapl
 
 Returns historical OHLCV price data for a stock symbol.
 
-| Parameter | Type  | Description                                         |
-|-----------|-------|-----------------------------------------------------|
-| `symbol`  | path  | Stock ticker (e.g., `AAPL`, `MSFT`, `GC=F`)        |
-| `period`  | query | Time range. Default: `1y`. Values: `1d`, `5d`, `1mo`, `3mo`, `6mo`, `1y`, `2y`, `5y`, `10y`, `ytd`, `max` |
+| Parameter  | Type  | Description                                         |
+|------------|-------|-----------------------------------------------------|
+| `symbol`   | path  | Stock ticker (e.g., `AAPL`, `MSFT`, `GC=F`)        |
+| `period`   | query | Time range. Default: `1y`. Values: `1d`, `5d`, `1mo`, `3mo`, `6mo`, `1y`, `2y`, `5y`, `10y`, `ytd`, `max` |
+| `interval` | query | Candle interval. Optional — defaults based on period (`5y`/`10y` → weekly, `max` → monthly, others → daily). Values: `1d`, `1wk`, `1mo` |
 
 ```bash
 curl http://localhost:8080/history/aapl
 curl http://localhost:8080/history/aapl?period=5y
+curl http://localhost:8080/history/aapl?period=5y&interval=1d
 ```
 
 #### Example response
@@ -183,7 +185,7 @@ curl http://localhost:8080/history/aapl?period=5y
 | Field      | Description                                          |
 |------------|------------------------------------------------------|
 | `period`   | The time range used for the query.                   |
-| `prices`   | Array of daily OHLCV data sorted by date ascending.  |
+| `prices`   | Array of OHLCV data sorted by date ascending.        |
 | `open`     | Opening price for the trading day.                   |
 | `close`    | Closing price for the trading day.                   |
 | `high`     | Highest price during the trading day.                |

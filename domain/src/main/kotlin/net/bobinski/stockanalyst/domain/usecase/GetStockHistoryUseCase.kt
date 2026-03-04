@@ -12,9 +12,9 @@ class GetStockHistoryUseCase(
     private val stockDataProvider: StockDataProvider
 ) {
 
-    suspend operator fun invoke(symbol: String, period: Period): StockHistory =
+    suspend operator fun invoke(symbol: String, period: Period, interval: Interval? = null): StockHistory =
         coroutineScope {
-            val interval = intervalFor(period)
+            val interval = interval ?: intervalFor(period)
             val infoDeferred = async { stockDataProvider.getInfo(symbol) }
             val historyDeferred = async { stockDataProvider.getHistory(symbol, period, interval) }
 
