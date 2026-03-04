@@ -65,6 +65,42 @@ class CalculateGainTest {
     }
 
     @Test
+    fun `half-yearly gain calculation`() {
+        val data = listOf(
+            price(LocalDate(2023, 12, 15), close = 100.0),
+            price(LocalDate(2024, 6, 15), close = 115.0)
+        )
+
+        val result = calculateGain.halfYearly(data, null)
+
+        assertEquals(0.15, result, 0.001)
+    }
+
+    @Test
+    fun `ytd gain calculation`() {
+        val data = listOf(
+            price(LocalDate(2024, 1, 1), close = 100.0),
+            price(LocalDate(2024, 6, 15), close = 108.0)
+        )
+
+        val result = calculateGain.ytd(data, null)
+
+        assertEquals(0.08, result, 0.001)
+    }
+
+    @Test
+    fun `five-year gain calculation`() {
+        val data = listOf(
+            price(LocalDate(2019, 6, 15), close = 50.0),
+            price(LocalDate(2024, 6, 15), close = 110.0)
+        )
+
+        val result = calculateGain.fiveYear(data, null)
+
+        assertEquals(1.2, result, 0.001)
+    }
+
+    @Test
     fun `gain returns NaN when old price is zero`() {
         val data = listOf(
             price(LocalDate(2024, 6, 14), close = 0.0),

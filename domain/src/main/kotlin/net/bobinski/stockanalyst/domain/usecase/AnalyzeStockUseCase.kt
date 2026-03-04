@@ -74,13 +74,19 @@ class AnalyzeStockUseCase(
                     weekly = Double.NaN,
                     monthly = Double.NaN,
                     quarterly = Double.NaN,
-                    yearly = Double.NaN
+                    halfYearly = Double.NaN,
+                    ytd = Double.NaN,
+                    yearly = Double.NaN,
+                    fiveYear = Double.NaN
                 ).takeIf { lacking } ?: Analysis.Gain(
                     daily = calculateGain.daily(history, conversionHistory),
                     weekly = calculateGain.weekly(history, conversionHistory),
                     monthly = calculateGain.monthly(history, conversionHistory),
                     quarterly = calculateGain.quarterly(history, conversionHistory),
-                    yearly = calculateGain.yearly(history, conversionHistory)
+                    halfYearly = calculateGain.halfYearly(history, conversionHistory),
+                    ytd = calculateGain.ytd(history, conversionHistory),
+                    yearly = calculateGain.yearly(history, conversionHistory),
+                    fiveYear = calculateGain.fiveYear(history, conversionHistory)
                 ),
                 rsi = Analysis.Rsi(daily = Double.NaN, weekly = Double.NaN, monthly = Double.NaN)
                     .takeIf { lacking }

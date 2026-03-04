@@ -86,7 +86,10 @@ curl http://localhost:8080/price/aapl
     "weekly": 0.031,
     "monthly": 0.089,
     "quarterly": 0.102,
-    "yearly": 0.283
+    "halfYearly": 0.185,
+    "ytd": 0.064,
+    "yearly": 0.283,
+    "fiveYear": 1.45
   }
 }
 ```
@@ -208,7 +211,10 @@ curl http://localhost:8080/history/aapl?period=5y&interval=1d
     "weekly": 0.031,
     "monthly": 0.089,
     "quarterly": 0.102,
-    "yearly": 0.283
+    "halfYearly": 0.185,
+    "ytd": 0.064,
+    "yearly": 0.283,
+    "fiveYear": 1.45
   },
   "rsi": {
     "daily": 55.23,
@@ -262,13 +268,16 @@ curl http://localhost:8080/history/aapl?period=5y&interval=1d
 
 Percentage price change over a given period. A value of `0.05` means a 5% increase.
 
-| Field       | Period      |
-|-------------|-------------|
-| `daily`     | 1 day       |
-| `weekly`    | 1 week      |
-| `monthly`   | 1 month     |
-| `quarterly` | 3 months    |
-| `yearly`    | 1 year      |
+| Field        | Period      |
+|--------------|-------------|
+| `daily`      | 1 day       |
+| `weekly`     | 1 week      |
+| `monthly`    | 1 month     |
+| `quarterly`  | 3 months    |
+| `halfYearly` | 6 months    |
+| `ytd`        | Year to date|
+| `yearly`     | 1 year      |
+| `fiveYear`   | 5 years     |
 
 ### RSI (Relative Strength Index)
 

@@ -110,7 +110,8 @@ class PriceRouteTest {
         lastPrice = 195.0,
         gain = Price.Gain(
             daily = 0.01, weekly = 0.02, monthly = 0.05,
-            quarterly = 0.1, yearly = 0.25
+            quarterly = 0.1, halfYearly = 0.15, ytd = 0.12,
+            yearly = 0.25, fiveYear = 0.8
         )
     )
 }
