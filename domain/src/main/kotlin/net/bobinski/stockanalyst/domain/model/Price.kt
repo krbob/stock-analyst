@@ -20,7 +20,10 @@ data class Price(
         val weekly: Double?,
         val monthly: Double?,
         val quarterly: Double?,
-        val yearly: Double?
+        val halfYearly: Double?,
+        val ytd: Double?,
+        val yearly: Double?,
+        val fiveYear: Double?
     )
 
     fun roundValues() = copy(
@@ -30,7 +33,10 @@ data class Price(
             weekly = gain.weekly.nanToNull()?.round(3),
             monthly = gain.monthly.nanToNull()?.round(3),
             quarterly = gain.quarterly.nanToNull()?.round(3),
-            yearly = gain.yearly.nanToNull()?.round(3)
+            halfYearly = gain.halfYearly.nanToNull()?.round(3),
+            ytd = gain.ytd.nanToNull()?.round(3),
+            yearly = gain.yearly.nanToNull()?.round(3),
+            fiveYear = gain.fiveYear.nanToNull()?.round(3)
         )
     )
 

@@ -146,7 +146,7 @@ class CompareRouteTest {
         name = "Test",
         date = LocalDate(2024, 6, 15),
         lastPrice = 195.0,
-        gain = Analysis.Gain(0.01, 0.02, 0.05, 0.1, 0.25),
+        gain = Analysis.Gain(0.01, 0.02, 0.05, 0.1, 0.15, 0.12, 0.25, 0.8),
         rsi = Analysis.Rsi(55.0, 60.0, 65.0),
         macd = Analysis.Macd(1.5, 1.2, 0.3),
         bollingerBands = Analysis.BollingerBands(200.0, 195.0, 190.0),

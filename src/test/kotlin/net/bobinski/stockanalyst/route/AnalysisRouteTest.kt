@@ -139,7 +139,8 @@ class AnalysisRouteTest {
         lastPrice = 195.0,
         gain = Analysis.Gain(
             daily = 0.01, weekly = 0.02, monthly = 0.05,
-            quarterly = 0.1, yearly = 0.25
+            quarterly = 0.1, halfYearly = 0.15, ytd = 0.12,
+            yearly = 0.25, fiveYear = 0.8
         ),
         rsi = Analysis.Rsi(daily = 55.0, weekly = 60.0, monthly = 65.0),
         macd = Analysis.Macd(macd = 1.5, signal = 1.2, histogram = 0.3),

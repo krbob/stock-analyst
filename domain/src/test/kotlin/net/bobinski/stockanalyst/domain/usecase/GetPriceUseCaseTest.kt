@@ -79,7 +79,10 @@ class GetPriceUseCaseTest {
         assertNull(result.gain.weekly)
         assertNull(result.gain.monthly)
         assertNull(result.gain.quarterly)
+        assertNull(result.gain.halfYearly)
+        assertNull(result.gain.ytd)
         assertNull(result.gain.yearly)
+        assertNull(result.gain.fiveYear)
     }
 
     @Test
