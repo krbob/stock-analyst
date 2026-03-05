@@ -7,6 +7,7 @@ import net.bobinski.stockanalyst.domain.usecase.CompareStocksUseCase
 import net.bobinski.stockanalyst.domain.usecase.GetDividendHistoryUseCase
 import net.bobinski.stockanalyst.domain.usecase.GetPriceUseCase
 import net.bobinski.stockanalyst.domain.usecase.GetStockHistoryUseCase
+import net.bobinski.stockanalyst.domain.usecase.SearchTickerUseCase
 import org.koin.dsl.module
 
 val DomainModule = module {
@@ -35,4 +36,5 @@ val DomainModule = module {
         )
     }
     single { GetStockHistoryUseCase(stockDataProvider = get()) }
+    single { SearchTickerUseCase(stockDataProvider = get()) }
 }

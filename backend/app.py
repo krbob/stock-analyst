@@ -33,6 +33,9 @@ HISTORY_CACHE_SECONDS = {
 
 INFO_CACHE_SECONDS = 300
 DIVIDENDS_CACHE_SECONDS = 3600
+SEARCH_CACHE_SECONDS = 300
+
+SEARCH_QUOTE_TYPES = {"EQUITY", "ETF", "INDEX"}
 
 _data_cache = {}
 _data_cache_lock = threading.Lock()
@@ -60,6 +63,14 @@ class HistoricalPrice:
     high: float
     volume: int
     dividend: float
+
+
+@dataclass
+class SearchResult:
+    symbol: str
+    name: str
+    exchange: str
+    quoteType: str
 
 
 @dataclass
@@ -187,6 +198,32 @@ def get_basic_info(symbol):
     return result
 
 
+def search_tickers(query):
+    cached = _cache_get(f"search:{query}")
+    if cached is not None:
+        return cached
+
+    try:
+        results = yf.Search(query, max_results=20).quotes
+    except Exception:
+        logger.warning("Failed to search for %s", query)
+        return []
+
+    filtered = [
+        SearchResult(
+            symbol=q["symbol"],
+            name=q.get("shortname") or q.get("longname") or q["symbol"],
+            exchange=q.get("exchange", ""),
+            quoteType=q.get("quoteType", ""),
+        )
+        for q in results
+        if q.get("quoteType") in SEARCH_QUOTE_TYPES
+    ]
+
+    _cache_set(f"search:{query}", filtered, SEARCH_CACHE_SECONDS)
+    return filtered
+
+
 @app.before_request
 def start_timer():
     g.start_time = time.time()
@@ -236,6 +273,14 @@ def dividends_endpoint(symbol):
     data = get_dividends(symbol)
     response = jsonify(data)
     response.headers["Cache-Control"] = f"public, max-age={DIVIDENDS_CACHE_SECONDS}"
+    return response
+
+
+@app.route("/search/<query>")
+def search_endpoint(query):
+    data = search_tickers(query)
+    response = jsonify([asdict(r) for r in data])
+    response.headers["Cache-Control"] = f"public, max-age={SEARCH_CACHE_SECONDS}"
     return response
 
 

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, PropertyMock, patch
 import pandas as pd
 import pytest
 
-from app import app, _data_cache
+from app import app, _data_cache, SEARCH_CACHE_SECONDS
 
 
 @pytest.fixture
@@ -329,3 +329,42 @@ class TestDataCache:
 
             client.get("/info/AAPL")
             assert mock_class.call_count == 2
+
+
+class TestSearchEndpoint:
+    def test_returns_filtered_results(self, client):
+        mock_quotes = [
+            {"symbol": "AAPL", "shortname": "Apple Inc.", "exchange": "NMS", "quoteType": "EQUITY"},
+            {"symbol": "AAPL240621C00200000", "shortname": "AAPL Call", "exchange": "OPR", "quoteType": "OPTION"},
+            {"symbol": "SPY", "shortname": "SPDR S&P 500", "exchange": "PCX", "quoteType": "ETF"},
+            {"symbol": "^GSPC", "shortname": "S&P 500", "exchange": "SNP", "quoteType": "INDEX"},
+            {"symbol": "EURUSD=X", "shortname": "EUR/USD", "exchange": "CCY", "quoteType": "CURRENCY"},
+        ]
+        with patch("app.yf.Search") as mock_search:
+            mock_search.return_value.quotes = mock_quotes
+
+            response = client.get("/search/apple")
+
+            assert response.status_code == 200
+            data = response.get_json()
+            assert len(data) == 3
+            symbols = [r["symbol"] for r in data]
+            assert "AAPL" in symbols
+            assert "SPY" in symbols
+            assert "^GSPC" in symbols
+            assert "AAPL240621C00200000" not in symbols
+
+    def test_returns_empty_on_error(self, client):
+        with patch("app.yf.Search", side_effect=Exception("API error")):
+            response = client.get("/search/xyz")
+
+            assert response.status_code == 200
+            assert response.get_json() == []
+
+    def test_cache_header_set(self, client):
+        with patch("app.yf.Search") as mock_search:
+            mock_search.return_value.quotes = []
+
+            response = client.get("/search/test")
+
+            assert response.headers["Cache-Control"] == f"public, max-age={SEARCH_CACHE_SECONDS}"
