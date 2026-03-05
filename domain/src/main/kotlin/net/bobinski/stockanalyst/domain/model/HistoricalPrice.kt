@@ -64,20 +64,27 @@ private fun HistoricalPrice.toBar(conversion: Double?): Bar? {
 fun Collection<HistoricalPrice>.daily() = sortedByDescending { it.date }
 
 fun Collection<HistoricalPrice>.weekly(): List<HistoricalPrice> =
-    daily().intervalBy { it.date.weekNumber }
+    aggregateBy { "${it.date.year}-${it.date.weekNumber}" }
 
 fun Collection<HistoricalPrice>.monthly(): List<HistoricalPrice> =
-    daily().intervalBy { it.date.month.number }
+    aggregateBy { "${it.date.year}-${it.date.month.number}" }
 
-private fun List<HistoricalPrice>.intervalBy(keySelector: (HistoricalPrice) -> Int): List<HistoricalPrice> {
-    if (isEmpty()) return emptyList()
-    val result = mutableListOf(first())
-    for (i in 1 until size) {
-        if (keySelector(this[i]) != keySelector(result.last())) {
-            result.add(this[i])
+private fun Collection<HistoricalPrice>.aggregateBy(keySelector: (HistoricalPrice) -> String): List<HistoricalPrice> {
+    return sortedBy { it.date }
+        .groupBy(keySelector)
+        .values
+        .map { days ->
+            HistoricalPrice(
+                date = days.last().date,
+                open = days.first().open,
+                close = days.last().close,
+                high = days.maxOf { it.high },
+                low = days.minOf { it.low },
+                volume = days.sumOf { it.volume },
+                dividend = days.sumOf { it.dividend }
+            )
         }
-    }
-    return result
+        .sortedByDescending { it.date }
 }
 
 val LocalDate.weekNumber: Int
