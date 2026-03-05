@@ -97,6 +97,11 @@ jobs:
             echo "❌ history endpoint did not respond properly"
             exit 1
           fi
+
+          if ! curl --fail -X GET "http://localhost:8080/history/aapl?period=1y&indicators=sma50,rsi,macd"; then
+            echo "❌ history with indicators endpoint did not respond properly"
+            exit 1
+          fi
       - name: Clean up test containers
         if: always()
         run: docker compose down

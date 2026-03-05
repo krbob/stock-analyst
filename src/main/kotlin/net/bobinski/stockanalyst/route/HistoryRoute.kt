@@ -42,8 +42,15 @@ fun Route.historyRoute() {
                 )
         } else null
 
+        val indicators = call.request.queryParameters["indicators"]
+            ?.split(",")
+            ?.map { it.trim().lowercase() }
+            ?.filter { it.isNotEmpty() }
+            ?.toSet()
+            ?: emptySet()
+
         val result = try {
-            getStockHistoryUseCase(stock, period, interval)
+            getStockHistoryUseCase(stock, period, interval, indicators)
         } catch (e: BackendDataException) {
             val status = when (e.reason) {
                 Reason.NOT_FOUND -> HttpStatusCode.NotFound

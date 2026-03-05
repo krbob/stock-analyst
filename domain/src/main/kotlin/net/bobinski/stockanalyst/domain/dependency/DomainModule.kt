@@ -35,6 +35,6 @@ val DomainModule = module {
             currentTimeProvider = get()
         )
     }
-    single { GetStockHistoryUseCase(stockDataProvider = get()) }
+    single { GetStockHistoryUseCase(stockDataProvider = get(), currentTimeProvider = get()) }
     single { SearchTickerUseCase(stockDataProvider = get()) }
 }
