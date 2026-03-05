@@ -7,6 +7,7 @@ import net.bobinski.stockanalyst.route.compareRoute
 import net.bobinski.stockanalyst.route.dividendsRoute
 import net.bobinski.stockanalyst.route.historyRoute
 import net.bobinski.stockanalyst.route.priceRoute
+import net.bobinski.stockanalyst.route.searchRoute
 
 fun Application.configureRouting() {
     routing {
@@ -15,5 +16,6 @@ fun Application.configureRouting() {
         compareRoute()
         dividendsRoute()
         historyRoute()
+        searchRoute()
     }
 }

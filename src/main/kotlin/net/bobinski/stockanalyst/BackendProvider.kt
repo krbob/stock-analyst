@@ -3,6 +3,7 @@ package net.bobinski.stockanalyst
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
+import io.ktor.http.encodeURLPath
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
@@ -10,6 +11,7 @@ import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.model.BasicInfo
 import net.bobinski.stockanalyst.domain.model.DividendPayment
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
+import net.bobinski.stockanalyst.domain.model.SearchResult
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider
 import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
@@ -82,6 +84,20 @@ internal class BackendProvider(
         } catch (e: Exception) {
             logger.error("Failed to deserialize dividends for {}", symbol, e)
             throw BackendDataException.backendError(symbol)
+        }
+    }
+
+    override suspend fun search(query: String): List<SearchResult> = coalesce("search:$query") {
+        val response = client.get("$backendUrl/search/${query.encodeURLPath()}")
+        if (!response.status.isSuccess()) {
+            logger.warn("Backend returned {} for search query: {}", response.status, query)
+            return@coalesce emptyList()
+        }
+        try {
+            response.body()
+        } catch (e: Exception) {
+            logger.error("Failed to deserialize search results for {}", query, e)
+            emptyList()
         }
     }
 

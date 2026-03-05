@@ -148,6 +148,30 @@ curl http://localhost:8080/dividends/aapl
 | `growth`       | Year-over-year change in total dividends paid.       |
 | `frequency`    | Estimated number of payments per year.               |
 
+### `GET /search/{query}`
+
+Searches for stocks, ETFs and indices by name or ticker.
+
+| Parameter | Type | Description                                      |
+|-----------|------|--------------------------------------------------|
+| `query`   | path | Search term (e.g., `apple`, `AAPL`, `s&p`). Max 50 chars. |
+
+```bash
+curl http://localhost:8080/search/apple
+```
+
+#### Example response
+
+```json
+[
+  { "symbol": "AAPL", "name": "Apple Inc.", "exchange": "NMS", "quoteType": "EQUITY" },
+  { "symbol": "APLE", "name": "Apple Hospitality REIT, Inc.", "exchange": "NYQ", "quoteType": "EQUITY" },
+  { "symbol": "APC.DE", "name": "Apple Inc.", "exchange": "GER", "quoteType": "EQUITY" }
+]
+```
+
+Results are filtered to equities, ETFs and indices. Returns an empty array when no matches are found.
+
 ### `GET /history/{symbol}`
 
 Returns historical OHLCV price data for a stock symbol.
