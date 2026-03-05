@@ -146,6 +146,28 @@ class HistoryRouteTest {
     }
 
     @Test
+    fun `passes indicators to use case`() = testApplication {
+        val useCase = mockk<GetStockHistoryUseCase>()
+        coEvery { useCase.invoke("AAPL", Period._1y, null, setOf("sma50", "rsi")) } returns testHistory()
+        configureApp(useCase)
+
+        client.get("/history/AAPL?indicators=sma50,rsi")
+
+        coVerify { useCase.invoke("AAPL", Period._1y, null, setOf("sma50", "rsi")) }
+    }
+
+    @Test
+    fun `passes empty indicators when not specified`() = testApplication {
+        val useCase = mockk<GetStockHistoryUseCase>()
+        coEvery { useCase.invoke("AAPL", Period._1y, null, emptySet()) } returns testHistory()
+        configureApp(useCase)
+
+        client.get("/history/AAPL")
+
+        coVerify { useCase.invoke("AAPL", Period._1y, null, emptySet()) }
+    }
+
+    @Test
     fun `responds with 500 when unexpected exception is thrown`() = testApplication {
         val useCase = mockk<GetStockHistoryUseCase>()
         coEvery { useCase.invoke("FAIL", Period._1y) } throws

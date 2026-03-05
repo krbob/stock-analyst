@@ -4,6 +4,7 @@ import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.LocalDate
+import net.bobinski.stockanalyst.core.time.MutableCurrentTimeProvider
 import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.model.BasicInfo
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
@@ -18,7 +19,8 @@ import org.junit.jupiter.api.assertThrows
 class GetStockHistoryUseCaseTest {
 
     private val stockDataProvider = mockk<StockDataProvider>()
-    private val useCase = GetStockHistoryUseCase(stockDataProvider = stockDataProvider)
+    private val timeProvider = MutableCurrentTimeProvider(LocalDate(2024, 6, 15))
+    private val useCase = GetStockHistoryUseCase(stockDataProvider = stockDataProvider, currentTimeProvider = timeProvider)
 
     @Test
     fun `returns stock history for valid symbol and period`() = runTest {

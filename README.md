@@ -181,11 +181,15 @@ Returns historical OHLCV price data for a stock symbol.
 | `symbol`   | path  | Stock ticker (e.g., `AAPL`, `MSFT`, `GC=F`)        |
 | `period`   | query | Time range. Default: `1y`. Values: `1d`, `5d`, `1mo`, `3mo`, `6mo`, `1y`, `2y`, `5y`, `10y`, `ytd`, `max` |
 | `interval` | query | Candle interval. Optional — defaults based on period (`5y`/`10y` → weekly, `max` → monthly, others → daily). Values: `1d`, `1wk`, `1mo` |
+| `indicators` | query | Comma-separated technical indicators to include. Optional. Values: `sma50`, `sma200`, `ema50`, `ema200`, `bb`, `rsi`, `macd` |
+
+When `indicators` is provided, the backend automatically fetches extra historical data for indicator warmup (e.g., 200 extra bars for SMA200) and trims the result to the requested period.
 
 ```bash
 curl http://localhost:8080/history/aapl
 curl http://localhost:8080/history/aapl?period=5y
 curl http://localhost:8080/history/aapl?period=5y&interval=1d
+curl "http://localhost:8080/history/aapl?period=1y&indicators=sma50,sma200,rsi,macd"
 ```
 
 #### Example response
@@ -206,7 +210,14 @@ curl http://localhost:8080/history/aapl?period=5y&interval=1d
       "volume": 45000000,
       "dividend": 0.0
     }
-  ]
+  ],
+  "indicators": {
+    "sma50": [{ "date": "2025-03-03", "value": 240.5 }],
+    "sma200": [{ "date": "2025-03-03", "value": 220.3 }],
+    "bb": [{ "date": "2025-03-03", "upper": 251.4, "middle": 244.8, "lower": 238.1 }],
+    "rsi": [{ "date": "2025-03-03", "value": 55.2 }],
+    "macd": [{ "date": "2025-03-03", "macd": 1.54, "signal": 1.21, "histogram": 0.33 }]
+  }
 }
 ```
 
@@ -221,6 +232,7 @@ curl http://localhost:8080/history/aapl?period=5y&interval=1d
 | `low`      | Lowest price during the trading day.                 |
 | `volume`   | Number of shares traded.                             |
 | `dividend` | Dividend paid on that date (0 if none).              |
+| `indicators` | Object with requested indicator series. Omitted when `indicators` param is absent. |
 
 ### `GET /analysis/{symbol}` — example response
 
