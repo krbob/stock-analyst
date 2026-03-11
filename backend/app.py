@@ -1,3 +1,4 @@
+import calendar
 import logging
 import math
 import threading
@@ -130,7 +131,10 @@ def get_history(symbol, period, interval="1d"):
             dividend=dividends.loc[index] if index in dividends.index else 0.0,
         )
         if intraday:
-            price.timestamp = int(index.timestamp())
+            # Shift to exchange-local time for chart display:
+            # strip timezone to get naive local wall-clock, then treat as UTC
+            naive_local = index.replace(tzinfo=None)
+            price.timestamp = int(calendar.timegm(naive_local.timetuple()))
         result.append(price)
 
     if result:
