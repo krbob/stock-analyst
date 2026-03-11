@@ -4,7 +4,6 @@ import net.bobinski.stockanalyst.domain.usecase.AnalyzeStockUseCase
 import net.bobinski.stockanalyst.domain.usecase.CalculateGain
 import net.bobinski.stockanalyst.domain.usecase.CalculateYield
 import net.bobinski.stockanalyst.domain.usecase.CompareStocksUseCase
-import net.bobinski.stockanalyst.domain.usecase.GetDividendHistoryUseCase
 import net.bobinski.stockanalyst.domain.usecase.GetPriceUseCase
 import net.bobinski.stockanalyst.domain.usecase.GetStockHistoryUseCase
 import net.bobinski.stockanalyst.domain.usecase.SearchTickerUseCase
@@ -29,12 +28,6 @@ val DomainModule = module {
         )
     }
     single { CompareStocksUseCase(analyzeStockUseCase = get()) }
-    single {
-        GetDividendHistoryUseCase(
-            stockDataProvider = get(),
-            currentTimeProvider = get()
-        )
-    }
     single { GetStockHistoryUseCase(stockDataProvider = get(), currentTimeProvider = get()) }
     single { SearchTickerUseCase(stockDataProvider = get()) }
 }

@@ -1,7 +1,6 @@
 package net.bobinski.stockanalyst.domain.provider
 
 import net.bobinski.stockanalyst.domain.model.BasicInfo
-import net.bobinski.stockanalyst.domain.model.DividendPayment
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
 import net.bobinski.stockanalyst.domain.model.SearchResult
 
@@ -13,7 +12,6 @@ interface StockDataProvider {
     ): Collection<HistoricalPrice>
 
     suspend fun getInfo(symbol: String): BasicInfo?
-    suspend fun getDividends(symbol: String): List<DividendPayment>
     suspend fun search(query: String): List<SearchResult>
 
     fun resolveConversionSymbol(from: String, to: String): String

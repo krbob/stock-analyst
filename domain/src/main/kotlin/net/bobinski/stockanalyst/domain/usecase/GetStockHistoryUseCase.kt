@@ -7,6 +7,7 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.minus
 import net.bobinski.stockanalyst.core.time.CurrentTimeProvider
 import net.bobinski.stockanalyst.domain.error.BackendDataException
+import net.bobinski.stockanalyst.domain.model.HistoricalPrice
 import net.bobinski.stockanalyst.domain.model.StockHistory
 import net.bobinski.stockanalyst.domain.model.convertPrices
 import net.bobinski.stockanalyst.domain.model.trimTo
@@ -25,7 +26,8 @@ class GetStockHistoryUseCase(
         period: Period,
         interval: Interval? = null,
         indicators: Set<String> = emptySet(),
-        currency: String? = null
+        currency: String? = null,
+        dividends: Boolean = false
     ): StockHistory =
         coroutineScope {
             val interval = interval ?: intervalFor(period)
@@ -35,6 +37,11 @@ class GetStockHistoryUseCase(
 
             val infoDeferred = async { stockDataProvider.getInfo(symbol) }
             val historyDeferred = async { stockDataProvider.getHistory(symbol, fetchPeriod, interval) }
+            // yfinance doesn't include dividends in weekly/monthly candles — fetch daily in parallel
+            val needsDividendFill = dividends && (interval == Interval.WEEKLY || interval == Interval.MONTHLY)
+            val dailyDividendsDeferred = if (needsDividendFill) {
+                async { stockDataProvider.getHistory(symbol, fetchPeriod, Interval.DAILY) }
+            } else null
 
             val info = infoDeferred.await()
             val name = info?.name ?: throw BackendDataException.unknownSymbol(symbol)
@@ -62,7 +69,12 @@ class GetStockHistoryUseCase(
                 if (history.isEmpty()) throw BackendDataException.insufficientConversion(conversionSymbol!!)
             }
 
-            val sortedPrices = history.sortedBy { it.sortKey }
+            val pricesWithDividends: Collection<HistoricalPrice> = if (dailyDividendsDeferred != null) {
+                val dailyPrices = dailyDividendsDeferred.await()
+                injectDividends(history, dailyPrices)
+            } else history
+
+            val sortedPrices = pricesWithDividends.sortedBy { it.sortKey }
 
             val needsTrim = fetchPeriod != period
             val cutoff = if (needsTrim) periodStartDate(period) else null
@@ -148,6 +160,27 @@ class GetStockHistoryUseCase(
         )
 
         return candidates.firstOrNull { it.second >= neededDays }?.first ?: Period.max
+    }
+
+    /**
+     * yfinance returns dividend=0 for weekly/monthly candles.
+     * Inject dividends from daily data by summing daily dividends that fall within each bar's date range.
+     */
+    private fun injectDividends(
+        bars: Collection<HistoricalPrice>,
+        dailyPrices: Collection<HistoricalPrice>
+    ): List<HistoricalPrice> {
+        val dailyDividends = dailyPrices.filter { it.dividend > 0 }
+        if (dailyDividends.isEmpty()) return bars.toList()
+
+        val sorted = bars.sortedBy { it.date }
+        return sorted.mapIndexed { index, bar ->
+            val startDate = if (index > 0) sorted[index - 1].date else LocalDate(1900, 1, 1)
+            val divSum = dailyDividends
+                .filter { it.date > startDate && it.date <= bar.date }
+                .sumOf { it.dividend }
+            if (divSum > 0) bar.copy(dividend = divSum) else bar
+        }
     }
 
     private fun periodStartDate(period: Period): LocalDate {

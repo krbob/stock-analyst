@@ -55,8 +55,10 @@ fun Route.historyRoute() {
             return@get call.respondError(HttpStatusCode.BadRequest, "Invalid currency code: $currency")
         }
 
+        val dividends = call.request.queryParameters["dividends"]?.toBooleanStrictOrNull() ?: false
+
         val result = try {
-            getStockHistoryUseCase(stock, period, interval, indicators, currency)
+            getStockHistoryUseCase(stock, period, interval, indicators, currency, dividends)
         } catch (e: BackendDataException) {
             val status = when (e.reason) {
                 Reason.NOT_FOUND -> HttpStatusCode.NotFound

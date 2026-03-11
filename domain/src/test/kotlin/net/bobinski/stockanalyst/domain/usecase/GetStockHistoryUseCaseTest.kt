@@ -267,6 +267,25 @@ class GetStockHistoryUseCaseTest {
         assertThrows<BackendDataException> { useCase("AAPL", Period._1y, currency = "XYZ") }
     }
 
+    @Test
+    fun `injects daily dividends into weekly bars`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
+        coEvery { stockDataProvider.getHistory("AAPL", Period._5y, Interval.WEEKLY) } returns listOf(
+            historicalPrice(LocalDate(2024, 6, 7), 200.0),
+            historicalPrice(LocalDate(2024, 6, 14), 210.0)
+        )
+        coEvery { stockDataProvider.getHistory("AAPL", Period._5y, Interval.DAILY) } returns listOf(
+            historicalPrice(LocalDate(2024, 6, 3), 198.0),
+            historicalPrice(LocalDate(2024, 6, 10), 205.0, dividend = 0.25),
+            historicalPrice(LocalDate(2024, 6, 14), 210.0)
+        )
+
+        val result = useCase("AAPL", Period._5y, dividends = true)
+
+        assertEquals(0.0, result.prices[0].dividend) // week ending 6/7 — no dividend
+        assertEquals(0.25, result.prices[1].dividend, 0.001) // week ending 6/14 — includes 6/10 dividend
+    }
+
     private fun basicInfo(name: String, currency: String? = null) = BasicInfo(
         name = name, price = 150.0, peRatio = 25.0f, pbRatio = 10.0f, eps = 5.0f, roe = 0.3f,
         marketCap = 1_000_000.0, recommendation = "buy", analystCount = 30,
@@ -275,10 +294,10 @@ class GetStockHistoryUseCaseTest {
         dividendRate = 1.0f, trailingAnnualDividendRate = 0.96f, currency = currency
     )
 
-    private fun historicalPrice(date: LocalDate, close: Double) = HistoricalPrice(
+    private fun historicalPrice(date: LocalDate, close: Double, dividend: Double = 0.0) = HistoricalPrice(
         date = date, open = close - 1, close = close,
         low = close - 2, high = close + 1, volume = 1_000_000L,
-        dividend = 0.0
+        dividend = dividend
     )
 
     private fun intradayPrice(date: LocalDate, close: Double, timestamp: Long) = HistoricalPrice(

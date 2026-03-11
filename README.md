@@ -110,45 +110,6 @@ curl "http://localhost:8080/compare?symbols=AAPL,MSFT,GOOG"
 
 Each element in the response array has the same schema as the `/analysis/{symbol}` response.
 
-### `GET /dividends/{symbol}`
-
-Returns dividend payment history and summary statistics.
-
-| Parameter | Type | Description                                  |
-|-----------|------|----------------------------------------------|
-| `symbol`  | path | Stock ticker (e.g., `AAPL`, `JNJ`, `KO`)    |
-
-```bash
-curl http://localhost:8080/dividends/aapl
-```
-
-#### Example response
-
-```json
-{
-  "symbol": "aapl",
-  "name": "Apple Inc.",
-  "payments": [
-    { "date": "2024-02-09", "amount": 0.24 },
-    { "date": "2024-05-10", "amount": 0.25 },
-    { "date": "2024-08-12", "amount": 0.25 },
-    { "date": "2024-11-08", "amount": 0.25 }
-  ],
-  "summary": {
-    "currentYield": 0.004,
-    "growth": 0.042,
-    "frequency": 4
-  }
-}
-```
-
-| Field          | Description                                          |
-|----------------|------------------------------------------------------|
-| `payments`     | Full dividend payment history (date + amount).       |
-| `currentYield` | Sum of dividends paid in the last 12 months / price. |
-| `growth`       | Year-over-year change in total dividends paid.       |
-| `frequency`    | Estimated number of payments per year.               |
-
 ### `GET /search/{query}`
 
 Searches for stocks, ETFs and indices by name or ticker.
@@ -184,6 +145,7 @@ Returns historical OHLCV price data for a stock symbol.
 | `interval` | query | Candle interval. Optional — defaults based on period (`5y`/`10y` → weekly, `max` → monthly, others → daily). Values: `1m`, `5m`, `15m`, `30m`, `1h`, `1d`, `1wk`, `1mo` |
 | `indicators` | query | Comma-separated technical indicators to include. Optional. Values: `sma50`, `sma200`, `ema50`, `ema200`, `bb`, `rsi`, `macd` |
 | `currency` | query | Target currency (ISO 4217, e.g. `EUR`, `PLN`). Converts OHLCV prices and indicator values using historical exchange rates. Optional — omit for native currency. |
+| `dividends` | query | Set to `true` to include dividend data in weekly/monthly candles. For daily candles, dividends are always present. Optional — defaults to `false`. |
 
 When `indicators` is provided, the backend automatically fetches extra historical data for indicator warmup (e.g., 200 extra bars for SMA200) and trims the result to the requested period.
 
