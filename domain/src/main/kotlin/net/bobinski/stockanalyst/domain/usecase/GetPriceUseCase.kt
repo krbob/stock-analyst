@@ -43,6 +43,7 @@ class GetPriceUseCase(
             Price(
                 symbol = symbol,
                 name = name,
+                currency = info.currency,
                 conversionName = conversionInfo?.name,
                 date = currentTimeProvider.localDate(),
                 lastPrice = (info.price ?: CalculateLastPrice(history, null))

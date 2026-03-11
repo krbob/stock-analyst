@@ -82,6 +82,7 @@ class SearchResult:
 class BasicInfo:
     name: str
     price: float
+    currency: str
     pe_ratio: float
     pb_ratio: float
     eps: float
@@ -190,6 +191,7 @@ def get_basic_info(symbol):
     result = BasicInfo(
         name=info.get("longName") or info.get("shortName"),
         price=info.get("regularMarketPrice") or info.get("currentPrice"),
+        currency=info.get("currency"),
         pe_ratio=info.get("forwardPE"),
         pb_ratio=info.get("priceToBook"),
         eps=info.get("trailingEps"),

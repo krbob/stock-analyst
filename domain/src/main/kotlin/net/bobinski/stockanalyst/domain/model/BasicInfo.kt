@@ -30,5 +30,6 @@ data class BasicInfo(
     @SerialName("dividend_rate")
     val dividendRate: Float?,
     @SerialName("trailing_annual_dividend_rate")
-    val trailingAnnualDividendRate: Float?
+    val trailingAnnualDividendRate: Float?,
+    val currency: String? = null
 )

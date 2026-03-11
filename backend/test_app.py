@@ -1,4 +1,6 @@
+import calendar
 import time
+from datetime import datetime
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import pandas as pd
@@ -119,6 +121,21 @@ class TestHistoryEndpoint:
         assert "timestamp" in data[0]
         assert isinstance(data[0]["timestamp"], int)
 
+    def test_intraday_timestamp_uses_exchange_local_time(self, client, mock_ticker):
+        ts = pd.Timestamp("2024-06-15 09:30:00", tz="America/New_York")
+        index = pd.DatetimeIndex([ts])
+        df = pd.DataFrame(
+            {"Open": [100.0], "Close": [101.0], "Low": [99.0], "High": [102.0], "Volume": [1000]},
+            index=index,
+        )
+        mock_ticker(history_df=df)
+
+        response = client.get("/history/AAPL/1d?interval=5m")
+
+        data = response.get_json()
+        expected = calendar.timegm(datetime(2024, 6, 15, 9, 30).timetuple())
+        assert data[0]["timestamp"] == expected
+
     def test_daily_excludes_timestamp(self, client, mock_ticker):
         mock_ticker(history_df=_sample_history())
 
@@ -148,6 +165,7 @@ class TestInfoEndpoint:
         mock_ticker(info={
             "longName": "Apple Inc.",
             "regularMarketPrice": 195.0,
+            "currency": "USD",
             "forwardPE": 30.0,
             "priceToBook": 45.0,
             "trailingEps": 6.5,
@@ -170,6 +188,7 @@ class TestInfoEndpoint:
         data = response.get_json()
         assert data["name"] == "Apple Inc."
         assert data["price"] == 195.0
+        assert data["currency"] == "USD"
         assert data["pe_ratio"] == 30.0
         assert data["market_cap"] == 3_000_000_000
         assert data["recommendation"] == "buy"
@@ -199,6 +218,7 @@ class TestInfoEndpoint:
         data = response.get_json()
         assert data["name"] == "Test Corp"
         assert data["price"] is None
+        assert data["currency"] is None
         assert data["pe_ratio"] is None
         assert data["eps"] is None
         assert data["recommendation"] is None

@@ -79,6 +79,7 @@ curl http://localhost:8080/price/aapl
 {
   "symbol": "aapl",
   "name": "Apple Inc.",
+  "currency": "USD",
   "date": "2026-02-28",
   "lastPrice": 242.41,
   "gain": {
@@ -244,6 +245,7 @@ curl "http://localhost:8080/history/aapl?period=1d&interval=5m"
 {
   "symbol": "aapl",
   "name": "Apple Inc.",
+  "currency": "USD",
   "date": "2026-02-28",
   "lastPrice": 242.41,
   "gain": {
@@ -303,6 +305,7 @@ curl "http://localhost:8080/history/aapl?period=1d&interval=5m"
 | Field       | Description                              |
 |-------------|------------------------------------------|
 | `lastPrice` | Current market price (refreshed every 5 min) |
+| `currency`  | ISO 4217 currency code (e.g., `USD`, `EUR`, `GBP`) |
 
 ### Gain
 

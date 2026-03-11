@@ -8,6 +8,7 @@ import java.util.Locale
 data class Analysis(
     val symbol: String,
     val name: String,
+    val currency: String? = null,
     val conversionName: String? = null,
     val date: LocalDate,
     val lastPrice: Double,
