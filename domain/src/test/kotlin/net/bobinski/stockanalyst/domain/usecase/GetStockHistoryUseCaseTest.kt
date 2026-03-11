@@ -171,12 +171,108 @@ class GetStockHistoryUseCaseTest {
         assertEquals(1718451600L, result.prices[2].timestamp)
     }
 
-    private fun basicInfo(name: String) = BasicInfo(
+    @Test
+    fun `converts prices when currency is specified`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.", currency = "USD")
+        coEvery { stockDataProvider.getHistory("AAPL", Period._1y, Interval.DAILY) } returns listOf(
+            historicalPrice(LocalDate(2024, 1, 2), 100.0),
+            historicalPrice(LocalDate(2024, 6, 15), 200.0)
+        )
+        coEvery { stockDataProvider.resolveConversionSymbol("USD", "EUR") } returns "EUR=X"
+        coEvery { stockDataProvider.getHistory("EUR=X", Period._1y) } returns listOf(
+            historicalPrice(LocalDate(2024, 1, 1), 0.9),
+            historicalPrice(LocalDate(2024, 6, 14), 0.95)
+        )
+
+        val result = useCase("AAPL", Period._1y, currency = "EUR")
+
+        assertEquals("EUR", result.currency)
+        assertEquals(90.0, result.prices[0].close, 0.01) // 100 * 0.9
+        assertEquals(190.0, result.prices[1].close, 0.01) // 200 * 0.95
+    }
+
+    @Test
+    fun `skips conversion when currency matches native`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.", currency = "USD")
+        coEvery { stockDataProvider.getHistory("AAPL", Period._1y, Interval.DAILY) } returns listOf(
+            historicalPrice(LocalDate(2024, 6, 15), 200.0)
+        )
+
+        val result = useCase("AAPL", Period._1y, currency = "USD")
+
+        assertEquals("USD", result.currency)
+        assertEquals(200.0, result.prices[0].close)
+    }
+
+    @Test
+    fun `returns native currency when no currency specified`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.", currency = "USD")
+        coEvery { stockDataProvider.getHistory("AAPL", Period._1y, Interval.DAILY) } returns listOf(
+            historicalPrice(LocalDate(2024, 6, 15), 200.0)
+        )
+
+        val result = useCase("AAPL", Period._1y)
+
+        assertEquals("USD", result.currency)
+        assertEquals(200.0, result.prices[0].close)
+    }
+
+    @Test
+    fun `trims history to conversion overlap when conversion starts later`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.", currency = "USD")
+        coEvery { stockDataProvider.getHistory("AAPL", Period._1y, Interval.DAILY) } returns listOf(
+            historicalPrice(LocalDate(2023, 6, 15), 150.0),
+            historicalPrice(LocalDate(2024, 1, 2), 100.0),
+            historicalPrice(LocalDate(2024, 6, 15), 200.0)
+        )
+        coEvery { stockDataProvider.resolveConversionSymbol("USD", "EUR") } returns "EUR=X"
+        coEvery { stockDataProvider.getHistory("EUR=X", Period._1y) } returns listOf(
+            historicalPrice(LocalDate(2024, 1, 1), 0.9),
+            historicalPrice(LocalDate(2024, 6, 14), 0.95)
+        )
+
+        val result = useCase("AAPL", Period._1y, currency = "EUR")
+
+        // Price from 2023-06-15 should be excluded (before conversion start)
+        assertEquals(2, result.prices.size)
+        assertEquals(LocalDate(2024, 1, 2), result.prices[0].date)
+    }
+
+    @Test
+    fun `throws when no overlap between stock and conversion history`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.", currency = "USD")
+        coEvery { stockDataProvider.getHistory("AAPL", Period._1y, Interval.DAILY) } returns listOf(
+            historicalPrice(LocalDate(2023, 1, 2), 100.0)
+        )
+        coEvery { stockDataProvider.resolveConversionSymbol("USD", "EUR") } returns "EUR=X"
+        coEvery { stockDataProvider.getHistory("EUR=X", Period._1y) } returns listOf(
+            historicalPrice(LocalDate(2024, 1, 1), 0.9)
+        )
+
+        val exception = assertThrows<BackendDataException> {
+            useCase("AAPL", Period._1y, currency = "EUR")
+        }
+        assertEquals(BackendDataException.Reason.INSUFFICIENT_DATA, exception.reason)
+    }
+
+    @Test
+    fun `throws when conversion history is empty`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.", currency = "USD")
+        coEvery { stockDataProvider.getHistory("AAPL", Period._1y, Interval.DAILY) } returns listOf(
+            historicalPrice(LocalDate(2024, 6, 15), 200.0)
+        )
+        coEvery { stockDataProvider.resolveConversionSymbol("USD", "XYZ") } returns "XYZ=X"
+        coEvery { stockDataProvider.getHistory("XYZ=X", Period._1y) } returns emptyList()
+
+        assertThrows<BackendDataException> { useCase("AAPL", Period._1y, currency = "XYZ") }
+    }
+
+    private fun basicInfo(name: String, currency: String? = null) = BasicInfo(
         name = name, price = 150.0, peRatio = 25.0f, pbRatio = 10.0f, eps = 5.0f, roe = 0.3f,
         marketCap = 1_000_000.0, recommendation = "buy", analystCount = 30,
         fiftyTwoWeekHigh = 200.0f, fiftyTwoWeekLow = 120.0f, beta = 1.2f,
         sector = "Technology", industry = "Consumer Electronics", earningsDate = "2024-07-25",
-        dividendRate = 1.0f, trailingAnnualDividendRate = 0.96f
+        dividendRate = 1.0f, trailingAnnualDividendRate = 0.96f, currency = currency
     )
 
     private fun historicalPrice(date: LocalDate, close: Double) = HistoricalPrice(

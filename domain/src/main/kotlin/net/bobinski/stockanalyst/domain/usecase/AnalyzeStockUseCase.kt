@@ -103,12 +103,12 @@ class AnalyzeStockUseCase(
                         weekly = CalculateRsi.weekly(history),
                         monthly = CalculateRsi.monthly(history)
                     ),
-                macd = nanMacd.takeIf { lacking } ?: CalculateMacd.daily(history),
+                macd = nanMacd.takeIf { lacking } ?: CalculateMacd.daily(history, conversionHistory),
                 bollingerBands = nanBollinger.takeIf { lacking }
-                    ?: CalculateBollingerBands.daily(history),
+                    ?: CalculateBollingerBands.daily(history, conversionHistory),
                 movingAverages = nanMa.takeIf { lacking }
-                    ?: CalculateMovingAverages.daily(history),
-                atr = Double.NaN.takeIf { lacking } ?: CalculateAtr.daily(history),
+                    ?: CalculateMovingAverages.daily(history, conversionHistory),
+                atr = Double.NaN.takeIf { lacking } ?: CalculateAtr.daily(history, conversionHistory),
                 dividendYield = Double.NaN.takeIf { lacking }
                     ?: calculateYield.yearly(history, conversionHistory),
                 dividendGrowth = calculateDividendGrowth(
@@ -121,8 +121,8 @@ class AnalyzeStockUseCase(
                 marketCap = info.marketCap?.let { convRate?.times(it) ?: it },
                 recommendation = info.recommendation,
                 analystCount = info.analystCount,
-                fiftyTwoWeekHigh = info.fiftyTwoWeekHigh,
-                fiftyTwoWeekLow = info.fiftyTwoWeekLow,
+                fiftyTwoWeekHigh = info.fiftyTwoWeekHigh?.let { convRate?.times(it)?.toFloat() ?: it },
+                fiftyTwoWeekLow = info.fiftyTwoWeekLow?.let { convRate?.times(it)?.toFloat() ?: it },
                 beta = info.beta,
                 sector = info.sector,
                 industry = info.industry,

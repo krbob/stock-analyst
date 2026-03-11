@@ -24,13 +24,14 @@ object CalculateIndicatorSeries {
     fun compute(
         data: Collection<HistoricalPrice>,
         requested: Set<String>,
-        barDuration: Duration = Duration.ofDays(1)
+        barDuration: Duration = Duration.ofDays(1),
+        conversion: Collection<HistoricalPrice>? = null
     ): Indicators {
         val keys = requested.intersect(VALID_KEYS)
         if (keys.isEmpty()) return Indicators()
 
         val sorted = data.sortedBy { it.sortKey }
-        val bars = sorted.toBarSeries(null, barDuration)
+        val bars = sorted.toBarSeries(conversion, barDuration)
         val close = ClosePriceIndicator(bars)
         val barTimes = sorted.mapNotNull { day ->
             if (setOf(day.open, day.close, day.low, day.high).any { it.isNaN() }) null

@@ -183,6 +183,7 @@ Returns historical OHLCV price data for a stock symbol.
 | `period`   | query | Time range. Default: `1y`. Values: `1d`, `5d`, `1mo`, `3mo`, `6mo`, `1y`, `2y`, `5y`, `10y`, `ytd`, `max` |
 | `interval` | query | Candle interval. Optional — defaults based on period (`5y`/`10y` → weekly, `max` → monthly, others → daily). Values: `1m`, `5m`, `15m`, `30m`, `1h`, `1d`, `1wk`, `1mo` |
 | `indicators` | query | Comma-separated technical indicators to include. Optional. Values: `sma50`, `sma200`, `ema50`, `ema200`, `bb`, `rsi`, `macd` |
+| `currency` | query | Target currency (ISO 4217, e.g. `EUR`, `PLN`). Converts OHLCV prices and indicator values using historical exchange rates. Optional — omit for native currency. |
 
 When `indicators` is provided, the backend automatically fetches extra historical data for indicator warmup (e.g., 200 extra bars for SMA200) and trims the result to the requested period.
 
@@ -192,6 +193,7 @@ curl http://localhost:8080/history/aapl?period=5y
 curl http://localhost:8080/history/aapl?period=5y&interval=1d
 curl "http://localhost:8080/history/aapl?period=1y&indicators=sma50,sma200,rsi,macd"
 curl "http://localhost:8080/history/aapl?period=1d&interval=5m"
+curl "http://localhost:8080/history/aapl?period=1y&currency=EUR"
 ```
 
 #### Example response
@@ -200,6 +202,7 @@ curl "http://localhost:8080/history/aapl?period=1d&interval=5m"
 {
   "symbol": "aapl",
   "name": "Apple Inc.",
+  "currency": "USD",
   "period": "1y",
   "interval": "1d",
   "prices": [
@@ -235,6 +238,7 @@ curl "http://localhost:8080/history/aapl?period=1d&interval=5m"
 | `volume`   | Number of shares traded.                             |
 | `dividend` | Dividend paid on that date (0 if none).              |
 | `timestamp`| Epoch seconds (UTC). Present only for intraday intervals. |
+| `currency`   | Currency of the prices (native or converted). Present when known. |
 | `indicators` | Object with requested indicator series. Omitted when `indicators` param is absent. |
 
 **Intraday intervals** (`1m`, `5m`, `15m`, `30m`, `1h`) return bars with a `timestamp` field (epoch seconds). Data availability depends on the period — yfinance limits: `1m` up to 7 days, `5m`/`15m`/`30m` up to 60 days, `1h` up to 730 days. Intraday responses are cached for 30 seconds.
@@ -413,14 +417,20 @@ Adding `?currency=PLN` converts monetary values to the target currency. The API 
 ```bash
 curl http://localhost:8080/price/aapl?currency=PLN
 curl http://localhost:8080/analysis/vow3.de?currency=USD
+curl "http://localhost:8080/history/aapl?period=1y&currency=EUR"
 ```
 
-Converted fields:
-- `lastPrice`, `eps`, `marketCap` — at the current exchange rate
+Converted fields (`/price` and `/analysis`):
+- `lastPrice`, `eps`, `marketCap`, `fiftyTwoWeekHigh`, `fiftyTwoWeekLow` — at the current exchange rate
 - `gain` — at historical exchange rates for the respective dates
 - `dividendYield` — at historical exchange rates on dividend payment dates
+- `macd`, `bollingerBands`, `movingAverages`, `atr` — at historical exchange rates
 
-Not converted (dimensionless): `rsi`, `macd`, `bollingerBands`, `movingAverages`, `atr`, `peRatio`, `pbRatio`, `roe`, `beta`.
+Converted fields (`/history`):
+- OHLCV prices and dividends — at historical exchange rates for each date
+- All indicator values (when `indicators` param is used) — at historical exchange rates
+
+Not converted (dimensionless): `rsi`, `peRatio`, `pbRatio`, `roe`, `beta`.
 
 The `currency` field in the response reflects the target currency when conversion is active, or the stock's native currency otherwise.
 

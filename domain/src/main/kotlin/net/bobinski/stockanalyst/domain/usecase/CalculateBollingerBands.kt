@@ -7,8 +7,8 @@ import org.ta4j.core.indicators.bollinger.BollingerBandFacade
 
 object CalculateBollingerBands {
 
-    fun daily(data: Collection<HistoricalPrice>): Analysis.BollingerBands {
-        val bars = data.toBarSeries(null)
+    fun daily(data: Collection<HistoricalPrice>, conversion: Collection<HistoricalPrice>? = null): Analysis.BollingerBands {
+        val bars = data.toBarSeries(conversion)
         val facade = BollingerBandFacade(bars, 20, 2.0)
         val idx = bars.endIndex
         return Analysis.BollingerBands(

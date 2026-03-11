@@ -9,8 +9,8 @@ import org.ta4j.core.indicators.helpers.ClosePriceIndicator
 
 object CalculateMacd {
 
-    fun daily(data: Collection<HistoricalPrice>): Analysis.Macd {
-        val bars = data.toBarSeries(null)
+    fun daily(data: Collection<HistoricalPrice>, conversion: Collection<HistoricalPrice>? = null): Analysis.Macd {
+        val bars = data.toBarSeries(conversion)
         val close = ClosePriceIndicator(bars)
         val macd = MACDIndicator(close, 12, 26)
         val signal = EMAIndicator(macd, 9)

@@ -107,6 +107,11 @@ jobs:
             echo "❌ history intraday endpoint did not respond properly"
             exit 1
           fi
+
+          if ! curl --fail -X GET "http://localhost:8080/history/aapl?currency=EUR"; then
+            echo "❌ history with currency conversion did not respond properly"
+            exit 1
+          fi
       - name: Clean up test containers
         if: always()
         run: docker compose down

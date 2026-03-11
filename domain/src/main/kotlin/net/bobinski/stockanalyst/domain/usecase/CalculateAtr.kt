@@ -6,8 +6,8 @@ import org.ta4j.core.indicators.ATRIndicator
 
 object CalculateAtr {
 
-    fun daily(data: Collection<HistoricalPrice>, period: Int = 14): Double {
-        val bars = data.toBarSeries(null)
+    fun daily(data: Collection<HistoricalPrice>, conversion: Collection<HistoricalPrice>? = null, period: Int = 14): Double {
+        val bars = data.toBarSeries(conversion)
         return ATRIndicator(bars, period).getValue(bars.endIndex).doubleValue()
     }
 }

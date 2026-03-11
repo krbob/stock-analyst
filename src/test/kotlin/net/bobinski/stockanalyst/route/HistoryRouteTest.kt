@@ -190,6 +190,27 @@ class HistoryRouteTest {
         assertEquals(HttpStatusCode.InternalServerError, response.status)
     }
 
+    @Test
+    fun `passes currency to use case`() = testApplication {
+        val useCase = mockk<GetStockHistoryUseCase>()
+        coEvery { useCase.invoke("AAPL", Period._1y, null, emptySet(), "EUR") } returns testHistory()
+        configureApp(useCase)
+
+        client.get("/history/AAPL?currency=EUR")
+
+        coVerify { useCase.invoke("AAPL", Period._1y, null, emptySet(), "EUR") }
+    }
+
+    @Test
+    fun `responds with 400 for invalid currency code`() = testApplication {
+        val useCase = mockk<GetStockHistoryUseCase>()
+        configureApp(useCase)
+
+        val response = client.get("/history/AAPL?currency=INVALID")
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
     private fun ApplicationTestBuilder.configureApp(useCase: GetStockHistoryUseCase) {
         application {
             configureKoin(useCase)

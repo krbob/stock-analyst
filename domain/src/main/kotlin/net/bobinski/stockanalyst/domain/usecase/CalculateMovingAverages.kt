@@ -9,8 +9,8 @@ import org.ta4j.core.indicators.helpers.ClosePriceIndicator
 
 object CalculateMovingAverages {
 
-    fun daily(data: Collection<HistoricalPrice>): Analysis.MovingAverages {
-        val bars = data.toBarSeries(null)
+    fun daily(data: Collection<HistoricalPrice>, conversion: Collection<HistoricalPrice>? = null): Analysis.MovingAverages {
+        val bars = data.toBarSeries(conversion)
         val close = ClosePriceIndicator(bars)
         val idx = bars.endIndex
         return Analysis.MovingAverages(

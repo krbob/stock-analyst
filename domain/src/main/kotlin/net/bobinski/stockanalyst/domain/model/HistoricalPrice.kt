@@ -71,6 +71,24 @@ private fun HistoricalPrice.toBar(conversion: Double?, barDuration: Duration): B
     )
 }
 
+fun List<HistoricalPrice>.convertPrices(
+    conversion: Collection<HistoricalPrice>
+): List<HistoricalPrice> {
+    val lookup = conversion.associateTo(TreeMap<LocalDate, Double>()) { it.date to it.close }
+    return map { price ->
+        val rate = lookup.floorEntry(price.date)?.value
+        if (rate != null && rate.isFinite()) {
+            price.copy(
+                open = price.open * rate,
+                close = price.close * rate,
+                low = price.low * rate,
+                high = price.high * rate,
+                dividend = price.dividend * rate
+            )
+        } else price
+    }
+}
+
 fun Collection<HistoricalPrice>.daily() = sortedByDescending { it.date }
 
 fun Collection<HistoricalPrice>.weekly(): List<HistoricalPrice> =

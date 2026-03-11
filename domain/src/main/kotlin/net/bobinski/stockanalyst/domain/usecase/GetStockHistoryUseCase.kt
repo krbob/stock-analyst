@@ -8,6 +8,7 @@ import kotlinx.datetime.minus
 import net.bobinski.stockanalyst.core.time.CurrentTimeProvider
 import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.model.StockHistory
+import net.bobinski.stockanalyst.domain.model.convertPrices
 import net.bobinski.stockanalyst.domain.model.trimTo
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider.Interval
@@ -23,7 +24,8 @@ class GetStockHistoryUseCase(
         symbol: String,
         period: Period,
         interval: Interval? = null,
-        indicators: Set<String> = emptySet()
+        indicators: Set<String> = emptySet(),
+        currency: String? = null
     ): StockHistory =
         coroutineScope {
             val interval = interval ?: intervalFor(period)
@@ -37,8 +39,28 @@ class GetStockHistoryUseCase(
             val info = infoDeferred.await()
             val name = info?.name ?: throw BackendDataException.unknownSymbol(symbol)
 
-            val history = historyDeferred.await()
+            val nativeCurrency = info.currency?.uppercase()
+            val targetCurrency = currency?.uppercase()
+            val needsConversion = targetCurrency != null && nativeCurrency != null
+                && targetCurrency != nativeCurrency
+            val conversionSymbol = if (needsConversion) {
+                stockDataProvider.resolveConversionSymbol(nativeCurrency, targetCurrency)
+            } else null
+
+            val conversionHistory = conversionSymbol?.let {
+                val convHistory = stockDataProvider.getHistory(it, fetchPeriod)
+                if (convHistory.isEmpty()) throw BackendDataException.insufficientConversion(it)
+                convHistory
+            }
+
+            var history = historyDeferred.await()
             if (history.isEmpty()) throw BackendDataException.missingHistory(symbol)
+
+            if (conversionHistory != null) {
+                val convMinDate = conversionHistory.minOf { it.date }
+                history = history.filter { it.date >= convMinDate }
+                if (history.isEmpty()) throw BackendDataException.insufficientConversion(conversionSymbol!!)
+            }
 
             val sortedPrices = history.sortedBy { it.sortKey }
 
@@ -46,7 +68,7 @@ class GetStockHistoryUseCase(
             val cutoff = if (needsTrim) periodStartDate(period) else null
 
             val computed = if (indicators.isNotEmpty()) {
-                val raw = CalculateIndicatorSeries.compute(sortedPrices, indicators, barDuration)
+                val raw = CalculateIndicatorSeries.compute(sortedPrices, indicators, barDuration, conversionHistory)
                 if (cutoff != null) raw.trimTo(cutoff) else raw
             } else null
 
@@ -54,13 +76,18 @@ class GetStockHistoryUseCase(
                 sortedPrices.filter { it.date >= cutoff }
             } else sortedPrices
 
+            val finalPrices = if (conversionHistory != null) {
+                displayPrices.convertPrices(conversionHistory)
+            } else displayPrices
+
             StockHistory(
                 symbol = symbol,
                 name = name,
                 period = period.value,
                 interval = interval.value,
-                prices = displayPrices,
-                indicators = computed
+                prices = finalPrices,
+                indicators = computed,
+                currency = targetCurrency ?: nativeCurrency
             )
         }
 

@@ -11,6 +11,7 @@ import net.bobinski.stockanalyst.domain.usecase.GetStockHistoryUseCase
 import org.koin.ktor.ext.inject
 
 private val SYMBOL_PATTERN = Regex("^[a-zA-Z0-9.\\-=^]{1,20}$")
+private val CURRENCY_PATTERN = Regex("^[A-Za-z]{3}$")
 
 private val VALID_PERIODS = StockDataProvider.Period.entries.associateBy { it.value }
 private val VALID_INTERVALS = StockDataProvider.Interval.entries.associateBy { it.value }
@@ -49,8 +50,13 @@ fun Route.historyRoute() {
             ?.toSet()
             ?: emptySet()
 
+        val currency = call.request.queryParameters["currency"]
+        if (currency != null && !CURRENCY_PATTERN.matches(currency)) {
+            return@get call.respondError(HttpStatusCode.BadRequest, "Invalid currency code: $currency")
+        }
+
         val result = try {
-            getStockHistoryUseCase(stock, period, interval, indicators)
+            getStockHistoryUseCase(stock, period, interval, indicators, currency)
         } catch (e: BackendDataException) {
             val status = when (e.reason) {
                 Reason.NOT_FOUND -> HttpStatusCode.NotFound

@@ -9,5 +9,6 @@ data class StockHistory(
     val period: String,
     val interval: String,
     val prices: List<HistoricalPrice>,
-    val indicators: Indicators? = null
+    val indicators: Indicators? = null,
+    val currency: String? = null
 )
