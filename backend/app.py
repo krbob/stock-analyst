@@ -15,7 +15,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 VALID_PERIODS = {"1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"}
-VALID_INTERVALS = {"1d", "1wk", "1mo"}
+VALID_INTERVALS = {"1m", "5m", "15m", "30m", "1h", "1d", "1wk", "1mo"}
+INTRADAY_INTERVALS = {"1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h"}
 
 HISTORY_CACHE_SECONDS = {
     "1d": 120,
@@ -30,6 +31,8 @@ HISTORY_CACHE_SECONDS = {
     "ytd": 3600,
     "max": 86400,
 }
+
+INTRADAY_CACHE_SECONDS = 30
 
 INFO_CACHE_SECONDS = 300
 DIVIDENDS_CACHE_SECONDS = 3600
@@ -63,6 +66,7 @@ class HistoricalPrice:
     high: float
     volume: int
     dividend: float
+    timestamp: int = None
 
 
 @dataclass
@@ -110,8 +114,13 @@ def get_history(symbol, period, interval="1d"):
     except Exception:
         dividends = pd.Series(dtype=float)
 
-    result = [
-        HistoricalPrice(
+    intraday = interval in INTRADAY_INTERVALS
+
+    result = []
+    for index, row in history.iterrows():
+        if math.isnan(row["Close"]) or math.isnan(row["Open"]):
+            continue
+        price = HistoricalPrice(
             date=index.strftime("%Y-%m-%d"),
             open=row["Open"],
             close=row["Close"],
@@ -120,12 +129,12 @@ def get_history(symbol, period, interval="1d"):
             volume=int(row["Volume"]),
             dividend=dividends.loc[index] if index in dividends.index else 0.0,
         )
-        for index, row in history.iterrows()
-        if not (math.isnan(row["Close"]) or math.isnan(row["Open"]))
-    ]
+        if intraday:
+            price.timestamp = int(index.timestamp())
+        result.append(price)
 
     if result:
-        ttl = HISTORY_CACHE_SECONDS.get(period, 60)
+        ttl = INTRADAY_CACHE_SECONDS if intraday else HISTORY_CACHE_SECONDS.get(period, 60)
         _cache_set(f"history:{symbol}:{period}:{interval}", result, ttl)
     return result
 
@@ -243,6 +252,11 @@ def handle_exception(e):
     return jsonify({"error": "An internal error occurred"}), 500
 
 
+def _serialize_price(price):
+    d = asdict(price)
+    return {k: v for k, v in d.items() if v is not None}
+
+
 @app.route("/history/<symbol>/<period>")
 def history_endpoint(symbol, period):
     if period not in VALID_PERIODS:
@@ -252,8 +266,10 @@ def history_endpoint(symbol, period):
     if interval not in VALID_INTERVALS:
         return jsonify({"error": f"Invalid interval: {interval}. Valid values: {', '.join(sorted(VALID_INTERVALS))}"}), 400
 
-    response = jsonify([asdict(day) for day in get_history(symbol, period, interval)])
-    max_age = HISTORY_CACHE_SECONDS.get(period, 60)
+    result = get_history(symbol, period, interval)
+    response = jsonify([_serialize_price(p) for p in result])
+    intraday = interval in INTRADAY_INTERVALS
+    max_age = INTRADAY_CACHE_SECONDS if intraday else HISTORY_CACHE_SECONDS.get(period, 60)
     response.headers["Cache-Control"] = f"public, max-age={max_age}"
     return response
 

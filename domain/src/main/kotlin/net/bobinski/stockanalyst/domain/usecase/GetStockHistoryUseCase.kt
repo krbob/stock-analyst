@@ -12,6 +12,7 @@ import net.bobinski.stockanalyst.domain.model.trimTo
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider.Interval
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider.Period
+import java.time.Duration
 
 class GetStockHistoryUseCase(
     private val stockDataProvider: StockDataProvider,
@@ -28,6 +29,7 @@ class GetStockHistoryUseCase(
             val interval = interval ?: intervalFor(period)
             val warmup = warmupBars(indicators)
             val fetchPeriod = if (warmup > 0) extendedPeriod(period, interval, warmup) else period
+            val barDuration = barDuration(interval)
 
             val infoDeferred = async { stockDataProvider.getInfo(symbol) }
             val historyDeferred = async { stockDataProvider.getHistory(symbol, fetchPeriod, interval) }
@@ -38,13 +40,13 @@ class GetStockHistoryUseCase(
             val history = historyDeferred.await()
             if (history.isEmpty()) throw BackendDataException.missingHistory(symbol)
 
-            val sortedPrices = history.sortedBy { it.date }
+            val sortedPrices = history.sortedBy { it.sortKey }
 
             val needsTrim = fetchPeriod != period
             val cutoff = if (needsTrim) periodStartDate(period) else null
 
             val computed = if (indicators.isNotEmpty()) {
-                val raw = CalculateIndicatorSeries.compute(sortedPrices, indicators)
+                val raw = CalculateIndicatorSeries.compute(sortedPrices, indicators, barDuration)
                 if (cutoff != null) raw.trimTo(cutoff) else raw
             } else null
 
@@ -68,6 +70,13 @@ class GetStockHistoryUseCase(
         else -> Interval.DAILY
     }
 
+    private fun barDuration(interval: Interval): Duration = when {
+        interval.isIntraday -> Duration.ofMinutes(interval.durationMinutes.toLong())
+        interval == Interval.WEEKLY -> Duration.ofDays(7)
+        interval == Interval.MONTHLY -> Duration.ofDays(30)
+        else -> Duration.ofDays(1)
+    }
+
     private fun warmupBars(indicators: Set<String>): Int {
         var max = 0
         if ("sma200" in indicators || "ema200" in indicators) max = maxOf(max, 200)
@@ -81,10 +90,17 @@ class GetStockHistoryUseCase(
     private fun extendedPeriod(period: Period, interval: Interval, warmupBars: Int): Period {
         if (period == Period.max) return period
 
-        val extraDays = when (interval) {
-            Interval.DAILY -> (warmupBars * 1.5).toInt()
-            Interval.WEEKLY -> warmupBars * 7
-            Interval.MONTHLY -> warmupBars * 31
+        val extraDays = when {
+            interval.isIntraday -> {
+                // ~78 bars per trading day for 5m, ~390 for 1m; use 2x safety margin
+                val barsPerDay = (6.5 * 60 / interval.durationMinutes).toInt().coerceAtLeast(1)
+                val tradingDays = (warmupBars / barsPerDay) + 1
+                (tradingDays * 2).coerceAtLeast(2) // calendar days with weekends
+            }
+            interval == Interval.DAILY -> (warmupBars * 1.5).toInt()
+            interval == Interval.WEEKLY -> warmupBars * 7
+            interval == Interval.MONTHLY -> warmupBars * 31
+            else -> (warmupBars * 1.5).toInt()
         }
 
         val periodDays = mapOf(
@@ -98,6 +114,7 @@ class GetStockHistoryUseCase(
         val neededDays = originalDays + extraDays
 
         val candidates = listOf(
+            Period._5d to 5, Period._1mo to 30,
             Period._3mo to 90, Period._6mo to 180, Period._1y to 365,
             Period._2y to 730, Period._5y to 1825, Period._10y to 3650,
             Period.max to Int.MAX_VALUE

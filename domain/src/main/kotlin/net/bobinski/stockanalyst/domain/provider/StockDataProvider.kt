@@ -31,8 +31,25 @@ interface StockDataProvider {
     }
 
     enum class Interval(val value: String) {
+        _1m("1m"),
+        _5m("5m"),
+        _15m("15m"),
+        _30m("30m"),
+        _1h("1h"),
         DAILY("1d"),
         WEEKLY("1wk"),
-        MONTHLY("1mo")
+        MONTHLY("1mo");
+
+        val isIntraday: Boolean get() = ordinal <= _1h.ordinal
+
+        val durationMinutes: Int
+            get() = when (this) {
+                _1m -> 1
+                _5m -> 5
+                _15m -> 15
+                _30m -> 30
+                _1h -> 60
+                else -> error("Not an intraday interval: $this")
+            }
     }
 }

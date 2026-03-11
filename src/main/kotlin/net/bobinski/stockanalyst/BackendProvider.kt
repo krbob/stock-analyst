@@ -49,9 +49,7 @@ internal class BackendProvider(
         interval: StockDataProvider.Interval
     ): Collection<HistoricalPrice> = coalesce("history:$symbol:${period.value}:${interval.value}") {
         val response = client.get("$backendUrl/history/$symbol/${period.value}") {
-            if (interval != StockDataProvider.Interval.DAILY) {
-                url.parameters.append("interval", interval.value)
-            }
+            url.parameters.append("interval", interval.value)
         }
         if (response.status.value >= 500) {
             logger.error("Backend returned {} for history of {} ({})", response.status, symbol, period.value)

@@ -180,7 +180,7 @@ Returns historical OHLCV price data for a stock symbol.
 |------------|-------|-----------------------------------------------------|
 | `symbol`   | path  | Stock ticker (e.g., `AAPL`, `MSFT`, `GC=F`)        |
 | `period`   | query | Time range. Default: `1y`. Values: `1d`, `5d`, `1mo`, `3mo`, `6mo`, `1y`, `2y`, `5y`, `10y`, `ytd`, `max` |
-| `interval` | query | Candle interval. Optional — defaults based on period (`5y`/`10y` → weekly, `max` → monthly, others → daily). Values: `1d`, `1wk`, `1mo` |
+| `interval` | query | Candle interval. Optional — defaults based on period (`5y`/`10y` → weekly, `max` → monthly, others → daily). Values: `1m`, `5m`, `15m`, `30m`, `1h`, `1d`, `1wk`, `1mo` |
 | `indicators` | query | Comma-separated technical indicators to include. Optional. Values: `sma50`, `sma200`, `ema50`, `ema200`, `bb`, `rsi`, `macd` |
 
 When `indicators` is provided, the backend automatically fetches extra historical data for indicator warmup (e.g., 200 extra bars for SMA200) and trims the result to the requested period.
@@ -190,6 +190,7 @@ curl http://localhost:8080/history/aapl
 curl http://localhost:8080/history/aapl?period=5y
 curl http://localhost:8080/history/aapl?period=5y&interval=1d
 curl "http://localhost:8080/history/aapl?period=1y&indicators=sma50,sma200,rsi,macd"
+curl "http://localhost:8080/history/aapl?period=1d&interval=5m"
 ```
 
 #### Example response
@@ -224,15 +225,18 @@ curl "http://localhost:8080/history/aapl?period=1y&indicators=sma50,sma200,rsi,m
 | Field      | Description                                          |
 |------------|------------------------------------------------------|
 | `period`   | The time range used for the query.                   |
-| `interval` | The candle interval used (`1d`, `1wk`, or `1mo`).    |
-| `prices`   | Array of OHLCV data sorted by date ascending.        |
-| `open`     | Opening price for the trading day.                   |
-| `close`    | Closing price for the trading day.                   |
-| `high`     | Highest price during the trading day.                |
-| `low`      | Lowest price during the trading day.                 |
+| `interval` | The candle interval used (e.g., `1d`, `5m`, `1wk`). |
+| `prices`   | Array of OHLCV data sorted by time ascending.        |
+| `open`     | Opening price for the bar.                           |
+| `close`    | Closing price for the bar.                           |
+| `high`     | Highest price during the bar.                        |
+| `low`      | Lowest price during the bar.                         |
 | `volume`   | Number of shares traded.                             |
 | `dividend` | Dividend paid on that date (0 if none).              |
+| `timestamp`| Epoch seconds (UTC). Present only for intraday intervals. |
 | `indicators` | Object with requested indicator series. Omitted when `indicators` param is absent. |
+
+**Intraday intervals** (`1m`, `5m`, `15m`, `30m`, `1h`) return bars with a `timestamp` field (epoch seconds). Data availability depends on the period — yfinance limits: `1m` up to 7 days, `5m`/`15m`/`30m` up to 60 days, `1h` up to 730 days. Intraday responses are cached for 30 seconds.
 
 ### `GET /analysis/{symbol}` — example response
 

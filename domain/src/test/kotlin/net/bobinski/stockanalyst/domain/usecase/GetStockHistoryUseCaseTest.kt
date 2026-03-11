@@ -138,6 +138,39 @@ class GetStockHistoryUseCaseTest {
         assertEquals(1, result.prices.size)
     }
 
+    @Test
+    fun `uses intraday interval when specified`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
+        coEvery { stockDataProvider.getHistory("AAPL", Period._1d, Interval._5m) } returns listOf(
+            intradayPrice(LocalDate(2024, 6, 15), 210.0, 1718451000L),
+            intradayPrice(LocalDate(2024, 6, 15), 211.0, 1718451300L)
+        )
+
+        val result = useCase("AAPL", Period._1d, Interval._5m)
+
+        assertEquals("1d", result.period)
+        assertEquals("5m", result.interval)
+        assertEquals(2, result.prices.size)
+        assertEquals(1718451000L, result.prices[0].timestamp)
+        assertEquals(1718451300L, result.prices[1].timestamp)
+    }
+
+    @Test
+    fun `sorts intraday prices by timestamp`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
+        coEvery { stockDataProvider.getHistory("AAPL", Period._1d, Interval._5m) } returns listOf(
+            intradayPrice(LocalDate(2024, 6, 15), 212.0, 1718451600L),
+            intradayPrice(LocalDate(2024, 6, 15), 210.0, 1718451000L),
+            intradayPrice(LocalDate(2024, 6, 15), 211.0, 1718451300L)
+        )
+
+        val result = useCase("AAPL", Period._1d, Interval._5m)
+
+        assertEquals(1718451000L, result.prices[0].timestamp)
+        assertEquals(1718451300L, result.prices[1].timestamp)
+        assertEquals(1718451600L, result.prices[2].timestamp)
+    }
+
     private fun basicInfo(name: String) = BasicInfo(
         name = name, price = 150.0, peRatio = 25.0f, pbRatio = 10.0f, eps = 5.0f, roe = 0.3f,
         marketCap = 1_000_000.0, recommendation = "buy", analystCount = 30,
@@ -150,5 +183,11 @@ class GetStockHistoryUseCaseTest {
         date = date, open = close - 1, close = close,
         low = close - 2, high = close + 1, volume = 1_000_000L,
         dividend = 0.0
+    )
+
+    private fun intradayPrice(date: LocalDate, close: Double, timestamp: Long) = HistoricalPrice(
+        date = date, open = close - 1, close = close,
+        low = close - 2, high = close + 1, volume = 1_000_000L,
+        dividend = 0.0, timestamp = timestamp
     )
 }

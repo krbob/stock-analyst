@@ -168,6 +168,17 @@ class HistoryRouteTest {
     }
 
     @Test
+    fun `passes intraday interval to use case`() = testApplication {
+        val useCase = mockk<GetStockHistoryUseCase>()
+        coEvery { useCase.invoke("AAPL", Period._1d, Interval._5m) } returns testHistory(period = "1d", interval = "5m")
+        configureApp(useCase)
+
+        client.get("/history/AAPL?period=1d&interval=5m")
+
+        coVerify { useCase.invoke("AAPL", Period._1d, Interval._5m) }
+    }
+
+    @Test
     fun `responds with 500 when unexpected exception is thrown`() = testApplication {
         val useCase = mockk<GetStockHistoryUseCase>()
         coEvery { useCase.invoke("FAIL", Period._1y) } throws

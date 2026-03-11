@@ -6,7 +6,8 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class SingleValue(
     val date: LocalDate,
-    val value: Double
+    val value: Double,
+    val timestamp: Long? = null
 )
 
 @Serializable
@@ -14,7 +15,8 @@ data class BollingerValue(
     val date: LocalDate,
     val upper: Double,
     val middle: Double,
-    val lower: Double
+    val lower: Double,
+    val timestamp: Long? = null
 )
 
 @Serializable
@@ -22,7 +24,8 @@ data class MacdValue(
     val date: LocalDate,
     val macd: Double,
     val signal: Double,
-    val histogram: Double
+    val histogram: Double,
+    val timestamp: Long? = null
 )
 
 @Serializable

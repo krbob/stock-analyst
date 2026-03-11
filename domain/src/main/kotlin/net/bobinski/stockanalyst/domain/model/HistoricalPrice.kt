@@ -25,13 +25,19 @@ data class HistoricalPrice(
     val low: Double,
     val high: Double,
     val volume: Long,
-    val dividend: Double
-)
+    val dividend: Double,
+    val timestamp: Long? = null
+) {
+    val sortKey: Long get() = timestamp ?: date.atStartOfDayIn(TimeZone.UTC).epochSeconds
+}
 
-fun Collection<HistoricalPrice>.toBarSeries(conversion: Collection<HistoricalPrice>?): BarSeries {
+fun Collection<HistoricalPrice>.toBarSeries(
+    conversion: Collection<HistoricalPrice>?,
+    barDuration: Duration = Duration.ofDays(1)
+): BarSeries {
     val conversionLookup = conversion?.toSortedLookup()
-    return BaseBarSeriesBuilder().withBars(sortedBy { it.date }.mapNotNull { day ->
-        day.toBar(conversionLookup?.priceFor(day.date))
+    return BaseBarSeriesBuilder().withBars(sortedBy { it.sortKey }.mapNotNull { day ->
+        day.toBar(conversionLookup?.priceFor(day.date), barDuration)
     }).build()
 }
 
@@ -41,15 +47,19 @@ private fun Collection<HistoricalPrice>.toSortedLookup(): TreeMap<LocalDate, Dou
 private fun TreeMap<LocalDate, Double>.priceFor(date: LocalDate): Double =
     floorEntry(date)?.value ?: Double.NaN
 
-private fun HistoricalPrice.toBar(conversion: Double?): Bar? {
+private fun HistoricalPrice.toBar(conversion: Double?, barDuration: Duration): Bar? {
     if (setOf(open, close, low, high).any { it.isNaN() }) {
         return null
     }
     if (conversion != null && !conversion.isFinite()) return null
-    val endTime = date.atStartOfDayIn(TimeZone.UTC).toJavaInstant()
+    val endTime = if (timestamp != null) {
+        java.time.Instant.ofEpochSecond(timestamp)
+    } else {
+        date.atStartOfDayIn(TimeZone.UTC).toJavaInstant()
+    }
     return BaseBar(
-        /* timePeriod = */ Duration.ofDays(1),
-        /* beginTime = */ endTime.minus(Duration.ofDays(1)),
+        /* timePeriod = */ barDuration,
+        /* beginTime = */ endTime.minus(barDuration),
         /* endTime = */ endTime,
         /* openPrice = */ DecimalNum.valueOf(open.applyConversion(conversion)),
         /* highPrice = */ DecimalNum.valueOf(high.applyConversion(conversion)),

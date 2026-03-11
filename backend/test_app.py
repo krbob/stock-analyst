@@ -101,6 +101,47 @@ class TestHistoryEndpoint:
         assert response.status_code == 200
         assert response.get_json() == []
 
+    def test_intraday_includes_timestamp(self, client, mock_ticker):
+        ts = pd.Timestamp("2024-06-15 09:30:00", tz="America/New_York")
+        index = pd.DatetimeIndex([ts])
+        df = pd.DataFrame(
+            {"Open": [100.0], "Close": [101.0], "Low": [99.0], "High": [102.0], "Volume": [1000]},
+            index=index,
+        )
+        mock_ticker(history_df=df)
+
+        response = client.get("/history/AAPL/1d?interval=5m")
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data) == 1
+        assert data[0]["date"] == "2024-06-15"
+        assert "timestamp" in data[0]
+        assert isinstance(data[0]["timestamp"], int)
+
+    def test_daily_excludes_timestamp(self, client, mock_ticker):
+        mock_ticker(history_df=_sample_history())
+
+        response = client.get("/history/AAPL/1y")
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert "timestamp" not in data[0]
+
+    def test_intraday_interval_accepted(self, client, mock_ticker):
+        mock_ticker(history_df=_sample_history())
+
+        for interval in ["1m", "5m", "15m", "30m", "1h"]:
+            response = client.get(f"/history/AAPL/1d?interval={interval}")
+            assert response.status_code == 200, f"interval {interval} should be valid"
+
+    def test_intraday_cache_is_short(self, client, mock_ticker):
+        mock_ticker(history_df=_sample_history())
+
+        response = client.get("/history/AAPL/1d?interval=5m")
+
+        assert response.headers["Cache-Control"] == "public, max-age=30"
+
 
 class TestInfoEndpoint:
     def test_returns_basic_info(self, client, mock_ticker):
