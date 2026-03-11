@@ -11,10 +11,10 @@ class CompareStocksUseCase(
 
     suspend operator fun invoke(
         symbols: List<String>,
-        conversion: String? = null
+        currency: String? = null
     ): List<Analysis> = coroutineScope {
         symbols.map { symbol ->
-            async { analyzeStockUseCase(symbol, conversion) }
+            async { analyzeStockUseCase(symbol, currency) }
         }.awaitAll()
     }
 }

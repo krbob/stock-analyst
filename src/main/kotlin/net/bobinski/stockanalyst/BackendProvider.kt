@@ -99,6 +99,10 @@ internal class BackendProvider(
         }
     }
 
+    override fun resolveConversionSymbol(from: String, to: String): String =
+        if (from.equals("USD", ignoreCase = true)) "${to.uppercase()}=X"
+        else "${from.uppercase()}${to.uppercase()}=X"
+
     override suspend fun getInfo(symbol: String): BasicInfo? = coalesce("info:$symbol") {
         val response = client.get("$backendUrl/info/$symbol")
         if (response.status.value >= 500) {

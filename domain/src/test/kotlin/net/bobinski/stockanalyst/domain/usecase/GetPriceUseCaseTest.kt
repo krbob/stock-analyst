@@ -1,6 +1,7 @@
 package net.bobinski.stockanalyst.domain.usecase
 
 import io.mockk.coEvery
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.DateTimeUnit
@@ -38,6 +39,7 @@ class GetPriceUseCaseTest {
 
         assertEquals("AAPL", result.symbol)
         assertEquals("Apple Inc.", result.name)
+        assertEquals("USD", result.currency)
         assertEquals(LocalDate(2024, 6, 15), result.date)
         assertTrue(result.lastPrice > 0)
     }
@@ -86,48 +88,42 @@ class GetPriceUseCaseTest {
     }
 
     @Test
-    fun `supports conversion parameter`() = runTest {
+    fun `converts to target currency`() = runTest {
         coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
-        coEvery { stockDataProvider.getInfo("eur=x") } returns basicInfo("EUR/USD")
+        every { stockDataProvider.resolveConversionSymbol("USD", "EUR") } returns "EUR=X"
+        coEvery { stockDataProvider.getInfo("EUR=X") } returns basicInfo("EUR/USD")
         coEvery { stockDataProvider.getHistory("AAPL", Period._1y) } returns priceHistory(200)
-        coEvery { stockDataProvider.getHistory("eur=x", Period._1y) } returns priceHistory(200)
+        coEvery { stockDataProvider.getHistory("EUR=X", Period._1y) } returns priceHistory(200)
 
-        val result = useCase("AAPL", "eur=x")
+        val result = useCase("AAPL", "EUR")
 
-        assertEquals("EUR/USD", result.conversionName)
+        assertEquals("EUR", result.currency)
     }
 
     @Test
     fun `trims history to conversion overlap when conversion starts later`() = runTest {
         coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
-        coEvery { stockDataProvider.getInfo("eur=x") } returns basicInfo("EUR/USD")
+        every { stockDataProvider.resolveConversionSymbol("USD", "PLN") } returns "PLN=X"
+        coEvery { stockDataProvider.getInfo("PLN=X") } returns basicInfo("USD/PLN")
         coEvery { stockDataProvider.getHistory("AAPL", Period._1y) } returns priceHistory(200)
-        coEvery { stockDataProvider.getHistory("eur=x", Period._1y) } returns priceHistory(190)
+        coEvery { stockDataProvider.getHistory("PLN=X", Period._1y) } returns priceHistory(190)
 
-        val result = useCase("AAPL", "eur=x")
+        val result = useCase("AAPL", "PLN")
 
         assertEquals("AAPL", result.symbol)
-        assertEquals("EUR/USD", result.conversionName)
+        assertEquals("PLN", result.currency)
         assertTrue(result.lastPrice > 0)
     }
 
     @Test
-    fun `throws when conversion symbol info has no name`() = runTest {
+    fun `skips conversion when target matches native currency`() = runTest {
         coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
-        coEvery { stockDataProvider.getInfo("invalid=x") } returns BasicInfo(
-            name = null, price = null, peRatio = null, pbRatio = null, eps = null, roe = null,
-            marketCap = null, recommendation = null, analystCount = null,
-            fiftyTwoWeekHigh = null, fiftyTwoWeekLow = null, beta = null, sector = null,
-            industry = null, earningsDate = null, dividendRate = null,
-            trailingAnnualDividendRate = null
-        )
         coEvery { stockDataProvider.getHistory("AAPL", Period._1y) } returns priceHistory(200)
-        coEvery { stockDataProvider.getHistory("invalid=x", Period._1y) } returns priceHistory(200)
 
-        val result = useCase("AAPL", "invalid=x")
+        val result = useCase("AAPL", "USD")
 
+        assertEquals("USD", result.currency)
         assertEquals("AAPL", result.symbol)
-        assertTrue(result.conversionName == null)
     }
 
     private fun basicInfo(name: String) = BasicInfo(
@@ -135,7 +131,7 @@ class GetPriceUseCaseTest {
         marketCap = 1_000_000.0, recommendation = "buy", analystCount = 30,
         fiftyTwoWeekHigh = 200.0f, fiftyTwoWeekLow = 120.0f, beta = 1.2f,
         sector = "Technology", industry = "Consumer Electronics", earningsDate = "2024-07-25",
-        dividendRate = 1.0f, trailingAnnualDividendRate = 0.96f
+        dividendRate = 1.0f, trailingAnnualDividendRate = 0.96f, currency = "USD"
     )
 
     private fun priceHistory(days: Int): List<HistoricalPrice> = (0 until days).map { i ->

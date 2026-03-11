@@ -16,6 +16,8 @@ interface StockDataProvider {
     suspend fun getDividends(symbol: String): List<DividendPayment>
     suspend fun search(query: String): List<SearchResult>
 
+    fun resolveConversionSymbol(from: String, to: String): String
+
     enum class Period(val value: String) {
         _1d("1d"),
         _5d("5d"),

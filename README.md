@@ -53,11 +53,11 @@ Returns full analysis for a stock symbol.
 | Parameter    | Type   | Description                                   |
 |--------------|--------|-----------------------------------------------|
 | `symbol`     | path   | Stock ticker (e.g., `AAPL`, `MSFT`, `GC=F`)  |
-| `conversion` | query  | Optional currency pair (e.g., `eur=x`)        |
+| `currency`   | query  | Optional target currency ISO code (e.g., `EUR`, `PLN`) |
 
 ```bash
 curl http://localhost:8080/analysis/aapl
-curl http://localhost:8080/analysis/aapl?conversion=eur=x
+curl http://localhost:8080/analysis/aapl?currency=EUR
 ```
 
 ### `GET /price/{symbol}`
@@ -67,7 +67,7 @@ Returns lightweight price and gain data. Faster than `/analysis` — no technica
 | Parameter    | Type   | Description                                   |
 |--------------|--------|-----------------------------------------------|
 | `symbol`     | path   | Stock ticker (e.g., `AAPL`, `MSFT`, `GC=F`)  |
-| `conversion` | query  | Optional currency pair (e.g., `eur=x`)        |
+| `currency`   | query  | Optional target currency ISO code (e.g., `EUR`, `PLN`) |
 
 ```bash
 curl http://localhost:8080/price/aapl
@@ -408,7 +408,12 @@ A measure of price volatility (14-day). Does not indicate direction, only the sc
 
 ## Currency conversion
 
-Adding `?conversion=eur=x` converts monetary values using the exchange rate from Yahoo Finance.
+Adding `?currency=PLN` converts monetary values to the target currency. The API uses the stock's native currency (from the `currency` response field) to automatically resolve the correct exchange rate.
+
+```bash
+curl http://localhost:8080/price/aapl?currency=PLN
+curl http://localhost:8080/analysis/vow3.de?currency=USD
+```
 
 Converted fields:
 - `lastPrice`, `eps`, `marketCap` — at the current exchange rate
@@ -417,18 +422,7 @@ Converted fields:
 
 Not converted (dimensionless): `rsi`, `macd`, `bollingerBands`, `movingAverages`, `atr`, `peRatio`, `pbRatio`, `roe`, `beta`.
 
-The `conversionName` field (e.g., `"EUR/USD"`) appears in the response when conversion is active.
-
-### Currency symbols
-
-The `conversion` parameter accepts a Yahoo Finance currency pair symbol:
-
-| Example       | Currency pair |
-|---------------|---------------|
-| `eur=x`       | EUR/USD       |
-| `gbp=x`       | GBP/USD       |
-| `eurpln=x`    | EUR/PLN       |
-| `usdpln=x`    | USD/PLN       |
+The `currency` field in the response reflects the target currency when conversion is active, or the stock's native currency otherwise.
 
 ## Error codes
 

@@ -6,7 +6,6 @@ import net.bobinski.stockanalyst.core.time.CurrentTimeProvider
 import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.model.Price
 import net.bobinski.stockanalyst.domain.model.applyConversion
-import net.bobinski.stockanalyst.domain.model.latestPrice
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider.Period
 
@@ -16,20 +15,29 @@ class GetPriceUseCase(
     private val calculateGain: CalculateGain
 ) {
 
-    suspend operator fun invoke(symbol: String, conversion: String? = null): Price =
+    suspend operator fun invoke(symbol: String, currency: String? = null): Price =
         coroutineScope {
             val infoDeferred = async { stockDataProvider.getInfo(symbol) }
             val historyDeferred = async { stockDataProvider.getHistory(symbol, Period._1y) }
-            val convInfoDeferred = conversion?.let { async { stockDataProvider.getInfo(it) } }
 
             val info = infoDeferred.await()
             val name = info?.name ?: throw BackendDataException.unknownSymbol(symbol)
+
+            val nativeCurrency = info.currency?.uppercase()
+            val targetCurrency = currency?.uppercase()
+            val needsConversion = targetCurrency != null && nativeCurrency != null
+                && targetCurrency != nativeCurrency
+            val conversionSymbol = if (needsConversion) {
+                stockDataProvider.resolveConversionSymbol(nativeCurrency!!, targetCurrency!!)
+            } else null
+
+            val convInfoDeferred = conversionSymbol?.let { async { stockDataProvider.getInfo(it) } }
 
             var history = historyDeferred.await()
             if (history.isEmpty()) throw BackendDataException.missingHistory(symbol)
 
             val conversionInfo = convInfoDeferred?.await()
-            val conversionHistory = conversion?.let {
+            val conversionHistory = conversionSymbol?.let {
                 val convHistory = stockDataProvider.getHistory(it, Period._1y)
                 if (convHistory.isEmpty()) throw BackendDataException.insufficientConversion(it)
                 val convMinDate = convHistory.minOf { p -> p.date }
@@ -43,8 +51,7 @@ class GetPriceUseCase(
             Price(
                 symbol = symbol,
                 name = name,
-                currency = info.currency,
-                conversionName = conversionInfo?.name,
+                currency = targetCurrency ?: nativeCurrency,
                 date = currentTimeProvider.localDate(),
                 lastPrice = (info.price ?: CalculateLastPrice(history, null))
                     .applyConversion(conversionInfo?.price),

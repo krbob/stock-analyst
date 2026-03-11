@@ -75,14 +75,14 @@ class PriceRouteTest {
     }
 
     @Test
-    fun `passes conversion parameter to use case`() = testApplication {
+    fun `passes currency parameter to use case`() = testApplication {
         val useCase = mockk<GetPriceUseCase>()
-        coEvery { useCase.invoke("AAPL", "eur=x") } returns testPrice()
+        coEvery { useCase.invoke("AAPL", "EUR") } returns testPrice()
         configureApp(useCase)
 
-        client.get("/price/AAPL?conversion=eur=x")
+        client.get("/price/AAPL?currency=EUR")
 
-        coVerify { useCase.invoke("AAPL", "eur=x") }
+        coVerify { useCase.invoke("AAPL", "EUR") }
     }
 
     private fun ApplicationTestBuilder.configureApp(useCase: GetPriceUseCase) {

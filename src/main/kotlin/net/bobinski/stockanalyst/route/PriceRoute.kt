@@ -10,6 +10,7 @@ import net.bobinski.stockanalyst.domain.usecase.GetPriceUseCase
 import org.koin.ktor.ext.inject
 
 private val SYMBOL_PATTERN = Regex("^[a-zA-Z0-9.\\-=^]{1,20}$")
+private val CURRENCY_PATTERN = Regex("^[A-Za-z]{3}$")
 
 fun Route.priceRoute() {
     val getPriceUseCase: GetPriceUseCase by inject()
@@ -22,13 +23,13 @@ fun Route.priceRoute() {
             return@get call.respondError(HttpStatusCode.BadRequest, "Invalid symbol: $stock")
         }
 
-        val conversion = call.request.queryParameters["conversion"]
-        if (conversion != null && !SYMBOL_PATTERN.matches(conversion)) {
-            return@get call.respondError(HttpStatusCode.BadRequest, "Invalid conversion symbol: $conversion")
+        val currency = call.request.queryParameters["currency"]
+        if (currency != null && !CURRENCY_PATTERN.matches(currency)) {
+            return@get call.respondError(HttpStatusCode.BadRequest, "Invalid currency code: $currency")
         }
 
         val result = try {
-            getPriceUseCase(stock, conversion)
+            getPriceUseCase(stock, currency)
         } catch (e: BackendDataException) {
             val status = when (e.reason) {
                 Reason.NOT_FOUND -> HttpStatusCode.NotFound

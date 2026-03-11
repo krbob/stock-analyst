@@ -185,6 +185,24 @@ class BackendProviderTest {
         results.forEach { assertEquals(expected, it) }
     }
 
+    @Test
+    fun `resolveConversionSymbol uses shorthand for USD base`() {
+        val provider = providerWith("{}", HttpStatusCode.OK)
+
+        assertEquals("PLN=X", provider.resolveConversionSymbol("USD", "PLN"))
+        assertEquals("EUR=X", provider.resolveConversionSymbol("USD", "EUR"))
+        assertEquals("GBP=X", provider.resolveConversionSymbol("usd", "gbp"))
+    }
+
+    @Test
+    fun `resolveConversionSymbol uses full pair for non-USD base`() {
+        val provider = providerWith("{}", HttpStatusCode.OK)
+
+        assertEquals("EURPLN=X", provider.resolveConversionSymbol("EUR", "PLN"))
+        assertEquals("GBPUSD=X", provider.resolveConversionSymbol("GBP", "USD"))
+        assertEquals("EURUSD=X", provider.resolveConversionSymbol("eur", "usd"))
+    }
+
     private fun providerWith(responseBody: String, status: HttpStatusCode): BackendProvider {
         val engine = MockEngine { _ ->
             respond(responseBody, status, jsonHeaders)

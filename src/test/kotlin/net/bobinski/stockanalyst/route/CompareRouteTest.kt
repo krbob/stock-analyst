@@ -90,14 +90,14 @@ class CompareRouteTest {
     }
 
     @Test
-    fun `passes conversion parameter to use case`() = testApplication {
+    fun `passes currency parameter to use case`() = testApplication {
         val useCase = mockk<CompareStocksUseCase>()
-        coEvery { useCase.invoke(listOf("AAPL"), "eur=x") } returns listOf(testAnalysis("AAPL"))
+        coEvery { useCase.invoke(listOf("AAPL"), "EUR") } returns listOf(testAnalysis("AAPL"))
         configureApp(useCase)
 
-        client.get("/compare?symbols=AAPL&conversion=eur=x")
+        client.get("/compare?symbols=AAPL&currency=EUR")
 
-        coVerify { useCase.invoke(listOf("AAPL"), "eur=x") }
+        coVerify { useCase.invoke(listOf("AAPL"), "EUR") }
     }
 
     @Test
@@ -114,11 +114,11 @@ class CompareRouteTest {
     @Test
     fun `responds with 422 for insufficient conversion data`() = testApplication {
         val useCase = mockk<CompareStocksUseCase>()
-        coEvery { useCase.invoke(listOf("AAPL"), "eur=x") } throws
-            BackendDataException.insufficientConversion("eur=x")
+        coEvery { useCase.invoke(listOf("AAPL"), "EUR") } throws
+            BackendDataException.insufficientConversion("EUR=X")
         configureApp(useCase)
 
-        val response = client.get("/compare?symbols=AAPL&conversion=eur=x")
+        val response = client.get("/compare?symbols=AAPL&currency=EUR")
 
         assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
     }

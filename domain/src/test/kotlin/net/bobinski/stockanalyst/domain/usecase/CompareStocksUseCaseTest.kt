@@ -38,12 +38,12 @@ class CompareStocksUseCaseTest {
     }
 
     @Test
-    fun `passes conversion to underlying use case`() = runTest {
-        coEvery { analyzeStockUseCase("AAPL", "eur=x") } returns testAnalysis("AAPL")
+    fun `passes currency to underlying use case`() = runTest {
+        coEvery { analyzeStockUseCase("AAPL", "EUR") } returns testAnalysis("AAPL")
 
-        useCase(listOf("AAPL"), "eur=x")
+        useCase(listOf("AAPL"), "EUR")
 
-        coVerify { analyzeStockUseCase("AAPL", "eur=x") }
+        coVerify { analyzeStockUseCase("AAPL", "EUR") }
     }
 
     private fun testAnalysis(symbol: String) = Analysis(

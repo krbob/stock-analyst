@@ -70,11 +70,11 @@ class AnalysisRouteTest {
     @Test
     fun `responds with 422 when conversion data is insufficient`() = testApplication {
         val useCase = mockk<AnalyzeStockUseCase>()
-        coEvery { useCase.invoke("AAPL", "eur=x") } throws
-            BackendDataException.insufficientConversion("eur=x")
+        coEvery { useCase.invoke("AAPL", "EUR") } throws
+            BackendDataException.insufficientConversion("EUR=X")
         configureApp(useCase)
 
-        val response = client.get("/analysis/AAPL?conversion=eur=x")
+        val response = client.get("/analysis/AAPL?currency=EUR")
 
         assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
         assertTrue(response.bodyAsText().contains("Not enough conversion history"))
@@ -104,14 +104,14 @@ class AnalysisRouteTest {
     }
 
     @Test
-    fun `passes conversion parameter to use case`() = testApplication {
+    fun `passes currency parameter to use case`() = testApplication {
         val useCase = mockk<AnalyzeStockUseCase>()
-        coEvery { useCase.invoke("AAPL", "eur=x") } returns testAnalysis()
+        coEvery { useCase.invoke("AAPL", "EUR") } returns testAnalysis()
         configureApp(useCase)
 
-        client.get("/analysis/AAPL?conversion=eur=x")
+        client.get("/analysis/AAPL?currency=EUR")
 
-        coVerify { useCase.invoke("AAPL", "eur=x") }
+        coVerify { useCase.invoke("AAPL", "EUR") }
     }
 
     private fun ApplicationTestBuilder.configureApp(useCase: AnalyzeStockUseCase) {
