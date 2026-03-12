@@ -42,7 +42,7 @@ jobs:
           python-version: '3.14'
 
       - name: Run backend tests
-        working-directory: backend
+        working-directory: backend-yfinance
         run: |
           pip install -r requirements-dev.txt
           pytest test_app.py
@@ -140,7 +140,7 @@ jobs:
         id: meta-backend
         uses: docker/metadata-action@v6
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-backend
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-backend-yfinance
 
       - name: Extract metadata (tags, labels) for Docker
         id: meta
@@ -152,7 +152,7 @@ jobs:
         id: push-backend
         uses: docker/build-push-action@v7
         with:
-          context: ./backend
+          context: ./backend-yfinance
           push: true
           tags: ${{ steps.meta-backend.outputs.tags }}
           labels: ${{ steps.meta-backend.outputs.labels }}

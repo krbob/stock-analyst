@@ -22,7 +22,7 @@ stock-analyst/
 ├── core/           Shared utilities (serialization, DI, time provider)
 ├── domain/         Business logic, models, use cases
 ├── src/            Ktor application (routes, HTTP client, config)
-└── backend/        Python/Flask data provider
+└── backend-yfinance/  Python/Flask data provider (Yahoo Finance)
 ```
 
 ## Usage
@@ -34,13 +34,13 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      - stock-analyst-backend
+      - stock-analyst-backend-yfinance
     environment:
-      - BACKEND_URL=http://stock-analyst-backend:8081
+      - BACKEND_URL=http://stock-analyst-backend-yfinance:8081
     restart: unless-stopped
 
-  stock-analyst-backend:
-    image: ghcr.io/krbob/stock-analyst-backend:main
+  stock-analyst-backend-yfinance:
+    image: ghcr.io/krbob/stock-analyst-backend-yfinance:main
     restart: unless-stopped
 ```
 
@@ -419,8 +419,8 @@ The `currency` field in the response reflects the target currency when conversio
 ./gradlew test
 
 # Python
-pip install -r backend/requirements-dev.txt
-pytest backend/test_app.py
+pip install -r backend-yfinance/requirements-dev.txt
+pytest backend-yfinance/test_app.py
 ```
 
 ## Tech stack

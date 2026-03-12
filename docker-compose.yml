@@ -6,13 +6,13 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      - stock-analyst-backend
+      - stock-analyst-backend-yfinance
     environment:
-      - BACKEND_URL=http://stock-analyst-backend:8081
+      - BACKEND_URL=http://stock-analyst-backend-yfinance:8081
     restart: unless-stopped
 
-  stock-analyst-backend:
+  stock-analyst-backend-yfinance:
     build:
-      context: ./backend
+      context: ./backend-yfinance
       dockerfile: Dockerfile
     restart: unless-stopped

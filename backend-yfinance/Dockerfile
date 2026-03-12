@@ -20,8 +20,8 @@ RUN useradd -m stock-analyst \
 
 USER stock-analyst
 
-COPY --from=builder /app/dist/app stock-analyst-backend
+COPY --from=builder /app/dist/app stock-analyst-backend-yfinance
 
 EXPOSE 8081
 
-CMD ["./stock-analyst-backend"]
+CMD ["./stock-analyst-backend-yfinance"]
