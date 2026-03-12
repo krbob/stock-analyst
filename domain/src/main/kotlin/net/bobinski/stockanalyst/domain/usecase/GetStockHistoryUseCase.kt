@@ -48,9 +48,8 @@ class GetStockHistoryUseCase(
 
             val nativeCurrency = info.currency?.uppercase()
             val targetCurrency = currency?.uppercase()
-            val needsConversion = targetCurrency != null && nativeCurrency != null
-                && targetCurrency != nativeCurrency
-            val conversionSymbol = if (needsConversion) {
+            val conversionSymbol = if (targetCurrency != null && nativeCurrency != null
+                && targetCurrency != nativeCurrency) {
                 stockDataProvider.resolveConversionSymbol(nativeCurrency, targetCurrency)
             } else null
 
@@ -66,7 +65,7 @@ class GetStockHistoryUseCase(
             if (conversionHistory != null) {
                 val convMinDate = conversionHistory.minOf { it.date }
                 history = history.filter { it.date >= convMinDate }
-                if (history.isEmpty()) throw BackendDataException.insufficientConversion(conversionSymbol!!)
+                if (history.isEmpty()) throw BackendDataException.insufficientConversion(conversionSymbol)
             }
 
             val pricesWithDividends: Collection<HistoricalPrice> = if (dailyDividendsDeferred != null) {

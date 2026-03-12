@@ -25,10 +25,9 @@ class GetPriceUseCase(
 
             val nativeCurrency = info.currency?.uppercase()
             val targetCurrency = currency?.uppercase()
-            val needsConversion = targetCurrency != null && nativeCurrency != null
-                && targetCurrency != nativeCurrency
-            val conversionSymbol = if (needsConversion) {
-                stockDataProvider.resolveConversionSymbol(nativeCurrency!!, targetCurrency!!)
+            val conversionSymbol = if (targetCurrency != null && nativeCurrency != null
+                && targetCurrency != nativeCurrency) {
+                stockDataProvider.resolveConversionSymbol(nativeCurrency, targetCurrency)
             } else null
 
             val convInfoDeferred = conversionSymbol?.let { async { stockDataProvider.getInfo(it) } }

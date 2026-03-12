@@ -15,8 +15,8 @@ class CalculateIndicatorSeriesTest {
 
         val result = CalculateIndicatorSeries.compute(data, setOf("sma50"))
 
-        assertNotNull(result.sma50)
-        assertEquals(51, result.sma50!!.size, "SMA50 series should have 100 - 50 + 1 = 51 points")
+        val sma50 = checkNotNull(result.sma50)
+        assertEquals(51, sma50.size, "SMA50 series should have 100 - 50 + 1 = 51 points")
     }
 
     @Test
@@ -25,8 +25,8 @@ class CalculateIndicatorSeriesTest {
 
         val result = CalculateIndicatorSeries.compute(data, setOf("sma200"))
 
-        assertNotNull(result.sma200)
-        assertEquals(101, result.sma200!!.size, "SMA200 series should have 300 - 200 + 1 = 101 points")
+        val sma200 = checkNotNull(result.sma200)
+        assertEquals(101, sma200.size, "SMA200 series should have 300 - 200 + 1 = 101 points")
     }
 
     @Test
@@ -35,8 +35,8 @@ class CalculateIndicatorSeriesTest {
 
         val result = CalculateIndicatorSeries.compute(data, setOf("sma50", "sma200"))
 
-        val lastSma50 = result.sma50!!.last().value
-        val lastSma200 = result.sma200!!.last().value
+        val lastSma50 = checkNotNull(result.sma50).last().value
+        val lastSma200 = checkNotNull(result.sma200).last().value
         assertTrue(lastSma50 > lastSma200, "SMA50 should be above SMA200 for rising prices")
     }
 
@@ -49,8 +49,8 @@ class CalculateIndicatorSeriesTest {
 
         val result = CalculateIndicatorSeries.compute(data, setOf("sma50", "ema50"))
 
-        val lastSma50 = result.sma50!!.last().value
-        val lastEma50 = result.ema50!!.last().value
+        val lastSma50 = checkNotNull(result.sma50).last().value
+        val lastEma50 = checkNotNull(result.ema50).last().value
         assertTrue(lastEma50 > lastSma50, "EMA50 should react faster than SMA50 to price jump")
     }
 
@@ -60,9 +60,9 @@ class CalculateIndicatorSeriesTest {
 
         val result = CalculateIndicatorSeries.compute(data, setOf("rsi"))
 
-        assertNotNull(result.rsi)
-        assertTrue(result.rsi!!.isNotEmpty())
-        result.rsi!!.forEach { point ->
+        val rsi = checkNotNull(result.rsi)
+        assertTrue(rsi.isNotEmpty())
+        rsi.forEach { point ->
             assertTrue(point.value in 0.0..100.0, "RSI should be in [0,100], was ${point.value}")
         }
     }
@@ -73,7 +73,7 @@ class CalculateIndicatorSeriesTest {
 
         val result = CalculateIndicatorSeries.compute(data, setOf("rsi"))
 
-        val lastRsi = result.rsi!!.last().value
+        val lastRsi = checkNotNull(result.rsi).last().value
         assertTrue(lastRsi > 70.0, "RSI for rising prices should be > 70, was $lastRsi")
     }
 
@@ -86,9 +86,9 @@ class CalculateIndicatorSeriesTest {
 
         val result = CalculateIndicatorSeries.compute(data, setOf("bb"))
 
-        assertNotNull(result.bb)
-        assertTrue(result.bb!!.isNotEmpty())
-        result.bb!!.forEach { point ->
+        val bb = checkNotNull(result.bb)
+        assertTrue(bb.isNotEmpty())
+        bb.forEach { point ->
             assertTrue(point.upper > point.middle, "Upper ${point.upper} should be > middle ${point.middle}")
             assertTrue(point.middle > point.lower, "Middle ${point.middle} should be > lower ${point.lower}")
         }
@@ -100,9 +100,9 @@ class CalculateIndicatorSeriesTest {
 
         val result = CalculateIndicatorSeries.compute(data, setOf("macd"))
 
-        assertNotNull(result.macd)
-        assertTrue(result.macd!!.isNotEmpty())
-        result.macd!!.forEach { point ->
+        val macd = checkNotNull(result.macd)
+        assertTrue(macd.isNotEmpty())
+        macd.forEach { point ->
             assertEquals(
                 point.macd - point.signal, point.histogram, 1e-10,
                 "Histogram should equal MACD - Signal"
@@ -157,13 +157,13 @@ class CalculateIndicatorSeriesTest {
 
         val result = CalculateIndicatorSeries.compute(data, setOf("sma50", "rsi", "macd"))
 
-        result.sma50!!.zipWithNext { a, b ->
+        checkNotNull(result.sma50).zipWithNext { a, b ->
             assertTrue(a.date < b.date, "SMA50 dates should be ascending")
         }
-        result.rsi!!.zipWithNext { a, b ->
+        checkNotNull(result.rsi).zipWithNext { a, b ->
             assertTrue(a.date < b.date, "RSI dates should be ascending")
         }
-        result.macd!!.zipWithNext { a, b ->
+        checkNotNull(result.macd).zipWithNext { a, b ->
             assertTrue(a.date < b.date, "MACD dates should be ascending")
         }
     }
