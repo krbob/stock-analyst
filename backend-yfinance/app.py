@@ -36,7 +36,6 @@ HISTORY_CACHE_SECONDS = {
 INTRADAY_CACHE_SECONDS = 30
 
 INFO_CACHE_SECONDS = 300
-DIVIDENDS_CACHE_SECONDS = 3600
 SEARCH_CACHE_SECONDS = 300
 
 SEARCH_QUOTE_TYPES = {"EQUITY", "ETF", "INDEX"}
@@ -141,25 +140,6 @@ def get_history(symbol, period, interval="1d"):
     if result:
         ttl = INTRADAY_CACHE_SECONDS if intraday else HISTORY_CACHE_SECONDS.get(period, 60)
         _cache_set(f"history:{symbol}:{period}:{interval}", result, ttl)
-    return result
-
-
-def get_dividends(symbol):
-    cached = _cache_get(f"dividends:{symbol}")
-    if cached is not None:
-        return cached
-
-    ticker = yf.Ticker(symbol)
-    try:
-        dividends = ticker.dividends
-    except Exception:
-        logger.warning("Failed to fetch dividends for %s", symbol)
-        return []
-
-    result = [{"date": date.strftime("%Y-%m-%d"), "amount": float(amount)} for date, amount in dividends.items()]
-
-    if result:
-        _cache_set(f"dividends:{symbol}", result, DIVIDENDS_CACHE_SECONDS)
     return result
 
 
@@ -287,14 +267,6 @@ def info_endpoint(symbol):
         return jsonify({"error": f"Symbol not found: {symbol}"}), 404
     response = jsonify(asdict(result))
     response.headers["Cache-Control"] = f"public, max-age={INFO_CACHE_SECONDS}"
-    return response
-
-
-@app.route("/dividends/<symbol>")
-def dividends_endpoint(symbol):
-    data = get_dividends(symbol)
-    response = jsonify(data)
-    response.headers["Cache-Control"] = f"public, max-age={DIVIDENDS_CACHE_SECONDS}"
     return response
 
 

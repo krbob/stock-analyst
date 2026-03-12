@@ -287,11 +287,12 @@ class GetStockHistoryUseCaseTest {
     }
 
     private fun basicInfo(name: String, currency: String? = null) = BasicInfo(
-        name = name, price = 150.0, peRatio = 25.0f, pbRatio = 10.0f, eps = 5.0f, roe = 0.3f,
+        name = name, price = 150.0, peRatio = 25.0, pbRatio = 10.0, eps = 5.0, roe = 0.3,
         marketCap = 1_000_000.0, recommendation = "buy", analystCount = 30,
-        fiftyTwoWeekHigh = 200.0f, fiftyTwoWeekLow = 120.0f, beta = 1.2f,
-        sector = "Technology", industry = "Consumer Electronics", earningsDate = "2024-07-25",
-        dividendRate = 1.0f, trailingAnnualDividendRate = 0.96f, currency = currency
+        fiftyTwoWeekHigh = 200.0, fiftyTwoWeekLow = 120.0, beta = 1.2,
+        sector = "Technology", industry = "Consumer Electronics",
+        earningsDate = LocalDate(2024, 7, 25),
+        dividendRate = 1.0, trailingAnnualDividendRate = 0.96, currency = currency
     )
 
     private fun historicalPrice(date: LocalDate, close: Double, dividend: Double = 0.0) = HistoricalPrice(

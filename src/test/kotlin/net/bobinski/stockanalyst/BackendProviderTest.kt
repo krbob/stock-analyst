@@ -32,11 +32,7 @@ class BackendProviderTest {
 
     @Test
     fun `getInfo returns BasicInfo on success`() = runTest {
-        val expected = BasicInfo(
-            "Apple Inc.", 195.0, 30.0f, 45.0f, 6.5f, 1.5f, 3e9,
-            "buy", 40, 210.0f, 150.0f, 1.2f, "Technology", "Consumer Electronics",
-            "2024-07-25", 1.0f, 0.96f
-        )
+        val expected = basicInfo()
         val provider = providerWith(json.encodeToString(expected), HttpStatusCode.OK)
 
         val result = provider.getInfo("AAPL")
@@ -118,11 +114,7 @@ class BackendProviderTest {
     @Test
     fun `concurrent getInfo calls for same symbol coalesce into single request`() = runTest {
         var requestCount = 0
-        val expected = BasicInfo(
-            "Apple Inc.", 195.0, 30.0f, 45.0f, 6.5f, 1.5f, 3e9,
-            "buy", 40, 210.0f, 150.0f, 1.2f, "Technology", "Consumer Electronics",
-            "2024-07-25", 1.0f, 0.96f
-        )
+        val expected = basicInfo()
         val engine = MockEngine { _ ->
             requestCount++
             delay(100)
@@ -158,6 +150,12 @@ class BackendProviderTest {
         assertEquals("GBPUSD=X", provider.resolveConversionSymbol("GBP", "USD"))
         assertEquals("EURUSD=X", provider.resolveConversionSymbol("eur", "usd"))
     }
+
+    private fun basicInfo() = BasicInfo(
+        "Apple Inc.", 195.0, 30.0, 45.0, 6.5, 1.5, 3e9,
+        "buy", 40, 210.0, 150.0, 1.2, "Technology", "Consumer Electronics",
+        kotlinx.datetime.LocalDate(2024, 7, 25), 1.0, 0.96
+    )
 
     private fun providerWith(responseBody: String, status: HttpStatusCode): BackendProvider {
         val engine = MockEngine { _ ->

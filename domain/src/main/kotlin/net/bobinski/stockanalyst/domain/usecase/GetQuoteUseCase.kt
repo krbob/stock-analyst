@@ -2,22 +2,27 @@ package net.bobinski.stockanalyst.domain.usecase
 
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.minus
 import net.bobinski.stockanalyst.core.time.CurrentTimeProvider
 import net.bobinski.stockanalyst.domain.error.BackendDataException
-import net.bobinski.stockanalyst.domain.model.Analysis
+import net.bobinski.stockanalyst.domain.model.HistoricalPrice
+import net.bobinski.stockanalyst.domain.model.Quote
 import net.bobinski.stockanalyst.domain.model.applyConversion
 import net.bobinski.stockanalyst.domain.model.latestPrice
+import net.bobinski.stockanalyst.domain.model.priceFor
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider.Period
 
-class AnalyzeStockUseCase(
+class GetQuoteUseCase(
     private val stockDataProvider: StockDataProvider,
     private val currentTimeProvider: CurrentTimeProvider,
     private val calculateGain: CalculateGain,
     private val calculateYield: CalculateYield
 ) {
 
-    suspend operator fun invoke(symbol: String, currency: String? = null): Analysis =
+    suspend operator fun invoke(symbol: String, currency: String? = null): Quote =
         coroutineScope {
             val infoDeferred = async { stockDataProvider.getInfo(symbol) }
             val historyDeferred = async { stockDataProvider.getHistory(symbol, Period._5y) }
@@ -65,18 +70,14 @@ class AnalyzeStockUseCase(
             val latestConvRate = conversionHistory?.latestPrice()
             val convRate = conversionPrice ?: latestConvRate
 
-            val nanMacd = Analysis.Macd(Double.NaN, Double.NaN, Double.NaN)
-            val nanBollinger = Analysis.BollingerBands(Double.NaN, Double.NaN, Double.NaN)
-            val nanMa = Analysis.MovingAverages(Double.NaN, Double.NaN, Double.NaN, Double.NaN)
-
-            Analysis(
+            Quote(
                 symbol = symbol,
                 name = name,
                 currency = targetCurrency ?: nativeCurrency,
                 date = currentTimeProvider.localDate(),
                 lastPrice = (info.price ?: CalculateLastPrice(history, null))
                     .applyConversion(conversionPrice),
-                gain = Analysis.Gain(
+                gain = Quote.Gain(
                     daily = Double.NaN,
                     weekly = Double.NaN,
                     monthly = Double.NaN,
@@ -85,7 +86,7 @@ class AnalyzeStockUseCase(
                     ytd = Double.NaN,
                     yearly = Double.NaN,
                     fiveYear = Double.NaN
-                ).takeIf { lacking } ?: Analysis.Gain(
+                ).takeIf { lacking } ?: Quote.Gain(
                     daily = calculateGain.daily(history, conversionHistory),
                     weekly = calculateGain.weekly(history, conversionHistory),
                     monthly = calculateGain.monthly(history, conversionHistory),
@@ -95,33 +96,19 @@ class AnalyzeStockUseCase(
                     yearly = calculateGain.yearly(history, conversionHistory),
                     fiveYear = calculateGain.fiveYear(history, conversionHistory)
                 ),
-                rsi = Analysis.Rsi(daily = Double.NaN, weekly = Double.NaN, monthly = Double.NaN)
-                    .takeIf { lacking }
-                    ?: Analysis.Rsi(
-                        daily = CalculateRsi.daily(history),
-                        weekly = CalculateRsi.weekly(history),
-                        monthly = CalculateRsi.monthly(history)
-                    ),
-                macd = nanMacd.takeIf { lacking } ?: CalculateMacd.daily(history, conversionHistory),
-                bollingerBands = nanBollinger.takeIf { lacking }
-                    ?: CalculateBollingerBands.daily(history, conversionHistory),
-                movingAverages = nanMa.takeIf { lacking }
-                    ?: CalculateMovingAverages.daily(history, conversionHistory),
-                atr = Double.NaN.takeIf { lacking } ?: CalculateAtr.daily(history, conversionHistory),
                 dividendYield = Double.NaN.takeIf { lacking }
                     ?: calculateYield.yearly(history, conversionHistory),
-                dividendGrowth = calculateDividendGrowth(
-                    info.dividendRate, info.trailingAnnualDividendRate
-                ),
+                dividendGrowth = if (lacking) null
+                    else calculateDividendGrowth(history, conversionHistory),
                 peRatio = info.peRatio,
                 pbRatio = info.pbRatio,
-                eps = info.eps?.let { convRate?.times(it)?.toFloat() ?: it },
+                eps = info.eps?.let { convRate?.times(it) ?: it },
                 roe = info.roe,
                 marketCap = info.marketCap?.let { convRate?.times(it) ?: it },
                 recommendation = info.recommendation,
                 analystCount = info.analystCount,
-                fiftyTwoWeekHigh = info.fiftyTwoWeekHigh?.let { convRate?.times(it)?.toFloat() ?: it },
-                fiftyTwoWeekLow = info.fiftyTwoWeekLow?.let { convRate?.times(it)?.toFloat() ?: it },
+                fiftyTwoWeekHigh = info.fiftyTwoWeekHigh?.let { convRate?.times(it) ?: it },
+                fiftyTwoWeekLow = info.fiftyTwoWeekLow?.let { convRate?.times(it) ?: it },
                 beta = info.beta,
                 sector = info.sector,
                 industry = info.industry,
@@ -130,10 +117,22 @@ class AnalyzeStockUseCase(
         }
 
     private fun calculateDividendGrowth(
-        dividendRate: Float?,
-        trailingRate: Float?
+        history: Collection<HistoricalPrice>,
+        conversionHistory: Collection<HistoricalPrice>?
     ): Double? {
-        if (dividendRate == null || trailingRate == null || trailingRate == 0f) return null
-        return (dividendRate / trailingRate - 1).toDouble()
+        val today = currentTimeProvider.localDate()
+        val oneYearAgo = today.minus(1, DateTimeUnit.YEAR)
+        val twoYearsAgo = today.minus(2, DateTimeUnit.YEAR)
+
+        fun dividendSum(from: LocalDate, to: LocalDate): Double =
+            history.filter { it.date > from && it.date <= to }.sumOf { hp ->
+                hp.dividend.applyConversion(conversionHistory?.priceFor(hp.date))
+            }
+
+        val recent = dividendSum(oneYearAgo, today)
+        val previous = dividendSum(twoYearsAgo, oneYearAgo)
+
+        if (previous == 0.0) return null
+        return recent / previous - 1
     }
 }

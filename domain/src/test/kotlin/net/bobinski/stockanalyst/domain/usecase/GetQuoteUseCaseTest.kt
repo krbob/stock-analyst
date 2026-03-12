@@ -20,13 +20,13 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 
-class AnalyzeStockUseCaseTest {
+class GetQuoteUseCaseTest {
 
     private val timeProvider = MutableCurrentTimeProvider(LocalDate(2024, 6, 15))
     private val stockDataProvider = mockk<StockDataProvider>()
     private val calculateGain = CalculateGain(timeProvider)
     private val calculateYield = CalculateYield(timeProvider)
-    private val useCase = AnalyzeStockUseCase(
+    private val useCase = GetQuoteUseCase(
         stockDataProvider = stockDataProvider,
         currentTimeProvider = timeProvider,
         calculateGain = calculateGain,
@@ -34,7 +34,7 @@ class AnalyzeStockUseCaseTest {
     )
 
     @Test
-    fun `returns analysis for valid symbol`() = runTest {
+    fun `returns quote for valid symbol`() = runTest {
         coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
         coEvery { stockDataProvider.getHistory("AAPL", Period._5y) } returns priceHistory(500)
 
@@ -45,6 +45,9 @@ class AnalyzeStockUseCaseTest {
         assertEquals("USD", result.currency)
         assertEquals(LocalDate(2024, 6, 15), result.date)
         assertTrue(result.lastPrice > 0)
+        assertEquals(25.0, result.peRatio)
+        assertEquals("buy", result.recommendation)
+        assertEquals("Technology", result.sector)
     }
 
     @Test
@@ -89,22 +92,7 @@ class AnalyzeStockUseCaseTest {
     }
 
     @Test
-    fun `includes technical indicators for valid symbol`() = runTest {
-        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
-        coEvery { stockDataProvider.getHistory("AAPL", Period._5y) } returns priceHistory(500)
-
-        val result = useCase("AAPL")
-
-        assertNotNull(result.macd.macd, "MACD should not be null")
-        assertNotNull(result.bollingerBands.upper, "Bollinger upper should not be null")
-        assertNotNull(result.movingAverages.sma50, "SMA50 should not be null")
-        assertNotNull(result.atr, "ATR should not be null")
-        assertEquals("buy", result.recommendation)
-        assertEquals("Technology", result.sector)
-    }
-
-    @Test
-    fun `sets null values when data is lacking`() = runTest {
+    fun `sets null gains when data is lacking`() = runTest {
         coEvery { stockDataProvider.getInfo("LACK") } returns basicInfo("Lacking Stock")
         coEvery { stockDataProvider.getHistory("LACK", Period._5y) } returns listOf(singlePrice())
         coEvery { stockDataProvider.getHistory("LACK", Period._2y) } returns listOf(singlePrice())
@@ -115,11 +103,6 @@ class AnalyzeStockUseCaseTest {
 
         assertNull(result.gain.daily)
         assertNull(result.gain.weekly)
-        assertNull(result.rsi.daily)
-        assertNull(result.macd.macd)
-        assertNull(result.bollingerBands.upper)
-        assertNull(result.movingAverages.sma50)
-        assertNull(result.atr)
         assertNull(result.dividendYield)
     }
 
@@ -140,7 +123,7 @@ class AnalyzeStockUseCaseTest {
     @Test
     fun `converts eps and marketCap when currency is provided`() = runTest {
         coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.").copy(
-            eps = 6.0f
+            eps = 6.0
         )
         every { stockDataProvider.resolveConversionSymbol("USD", "PLN") } returns "PLN=X"
         coEvery { stockDataProvider.getInfo("PLN=X") } returns basicInfo("USD/PLN")
@@ -149,43 +132,49 @@ class AnalyzeStockUseCaseTest {
 
         val result = useCase("AAPL", "PLN")
 
-        assertTrue(result.eps!! != 6.0f, "EPS should be converted")
+        assertTrue(result.eps!! != 6.0, "EPS should be converted")
         assertTrue(result.marketCap!! != 1_000_000.0, "Market cap should be converted")
-        assertEquals(25.0f, result.peRatio, "PE ratio should not be converted")
+        assertEquals(25.0, result.peRatio, "PE ratio should not be converted")
     }
 
     @Test
-    fun `trims history to conversion overlap when conversion starts later`() = runTest {
-        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
-        every { stockDataProvider.resolveConversionSymbol("USD", "EUR") } returns "EUR=X"
-        coEvery { stockDataProvider.getInfo("EUR=X") } returns basicInfo("EUR/USD")
-        coEvery { stockDataProvider.getHistory("AAPL", Period._5y) } returns priceHistory(500)
-        coEvery { stockDataProvider.getHistory("EUR=X", Period._5y) } returns priceHistory(490)
+    fun `calculates dividend growth from history`() = runTest {
+        val today = LocalDate(2024, 6, 15)
+        val history = (0 until 730).map { i ->
+            val date = today.minus(i, DateTimeUnit.DAY)
+            val dividend = when {
+                i in 80..82 -> 0.25   // recent year dividend
+                i in 170..172 -> 0.25
+                i in 260..262 -> 0.25
+                i in 350..352 -> 0.25 // total recent = 1.0
+                i in 445..447 -> 0.20 // previous year dividend
+                i in 535..537 -> 0.20
+                i in 625..627 -> 0.20
+                i in 715..717 -> 0.20 // total previous = 0.8
+                else -> 0.0
+            }
+            HistoricalPrice(
+                date = date, open = 100.0, close = 100.0,
+                low = 99.0, high = 101.0, volume = 1000L,
+                dividend = dividend
+            )
+        }
+        coEvery { stockDataProvider.getInfo("DIV") } returns basicInfo("Dividend Stock")
+        coEvery { stockDataProvider.getHistory("DIV", Period._5y) } returns history
 
-        val result = useCase("AAPL", "EUR")
+        val result = useCase("DIV")
 
-        assertEquals("AAPL", result.symbol)
-        assertEquals("EUR", result.currency)
-        assertTrue(result.lastPrice > 0)
-    }
-
-    @Test
-    fun `throws when all fallback periods return empty history`() = runTest {
-        coEvery { stockDataProvider.getInfo("GHOST") } returns basicInfo("Ghost Stock")
-        coEvery { stockDataProvider.getHistory("GHOST", any()) } returns emptyList()
-
-        val exception = assertThrows<BackendDataException> { useCase("GHOST") }
-
-        assertTrue(exception.message!!.contains("Missing history"))
-        assertEquals(BackendDataException.Reason.NOT_FOUND, exception.reason)
+        assertNotNull(result.dividendGrowth)
+        assertTrue(result.dividendGrowth!! > 0.0, "Dividend growth should be positive when recent > previous")
     }
 
     private fun basicInfo(name: String) = BasicInfo(
-        name = name, price = 150.0, peRatio = 25.0f, pbRatio = 10.0f, eps = 5.0f, roe = 0.3f,
+        name = name, price = 150.0, peRatio = 25.0, pbRatio = 10.0, eps = 5.0, roe = 0.3,
         marketCap = 1_000_000.0, recommendation = "buy", analystCount = 30,
-        fiftyTwoWeekHigh = 200.0f, fiftyTwoWeekLow = 120.0f, beta = 1.2f,
-        sector = "Technology", industry = "Consumer Electronics", earningsDate = "2024-07-25",
-        dividendRate = 1.0f, trailingAnnualDividendRate = 0.96f, currency = "USD"
+        fiftyTwoWeekHigh = 200.0, fiftyTwoWeekLow = 120.0, beta = 1.2,
+        sector = "Technology", industry = "Consumer Electronics",
+        earningsDate = LocalDate(2024, 7, 25),
+        dividendRate = 1.0, trailingAnnualDividendRate = 0.96, currency = "USD"
     )
 
     private fun priceHistory(days: Int): List<HistoricalPrice> = (0 until days).map { i ->

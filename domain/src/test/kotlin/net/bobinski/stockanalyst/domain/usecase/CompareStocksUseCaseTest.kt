@@ -6,71 +6,76 @@ import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.LocalDate
 import net.bobinski.stockanalyst.domain.error.BackendDataException
-import net.bobinski.stockanalyst.domain.model.Analysis
+import net.bobinski.stockanalyst.domain.model.Quote
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.assertThrows
 
 class CompareStocksUseCaseTest {
 
-    private val analyzeStockUseCase = mockk<AnalyzeStockUseCase>()
-    private val useCase = CompareStocksUseCase(analyzeStockUseCase)
+    private val getQuoteUseCase = mockk<GetQuoteUseCase>()
+    private val useCase = CompareStocksUseCase(getQuoteUseCase)
 
     @Test
-    fun `returns analyses for all symbols`() = runTest {
-        coEvery { analyzeStockUseCase("AAPL", null) } returns testAnalysis("AAPL")
-        coEvery { analyzeStockUseCase("MSFT", null) } returns testAnalysis("MSFT")
+    fun `returns results for all symbols`() = runTest {
+        coEvery { getQuoteUseCase("AAPL", null) } returns testQuote("AAPL")
+        coEvery { getQuoteUseCase("MSFT", null) } returns testQuote("MSFT")
 
         val result = useCase(listOf("AAPL", "MSFT"))
 
         assertEquals(2, result.size)
         assertEquals("AAPL", result[0].symbol)
+        assertNotNull(result[0].data)
+        assertNull(result[0].error)
         assertEquals("MSFT", result[1].symbol)
+        assertNotNull(result[1].data)
     }
 
     @Test
-    fun `throws when any symbol fails`() = runTest {
-        coEvery { analyzeStockUseCase("AAPL", null) } returns testAnalysis("AAPL")
-        coEvery { analyzeStockUseCase("INVALID", null) } throws
+    fun `returns partial results when one symbol fails`() = runTest {
+        coEvery { getQuoteUseCase("AAPL", null) } returns testQuote("AAPL")
+        coEvery { getQuoteUseCase("INVALID", null) } throws
             BackendDataException.unknownSymbol("INVALID")
 
-        assertThrows<BackendDataException> { useCase(listOf("AAPL", "INVALID")) }
+        val result = useCase(listOf("AAPL", "INVALID"))
+
+        assertEquals(2, result.size)
+        assertNotNull(result[0].data)
+        assertNull(result[0].error)
+        assertNull(result[1].data)
+        assertNotNull(result[1].error)
     }
 
     @Test
     fun `passes currency to underlying use case`() = runTest {
-        coEvery { analyzeStockUseCase("AAPL", "EUR") } returns testAnalysis("AAPL")
+        coEvery { getQuoteUseCase("AAPL", "EUR") } returns testQuote("AAPL")
 
         useCase(listOf("AAPL"), "EUR")
 
-        coVerify { analyzeStockUseCase("AAPL", "EUR") }
+        coVerify { getQuoteUseCase("AAPL", "EUR") }
     }
 
-    private fun testAnalysis(symbol: String) = Analysis(
+    private fun testQuote(symbol: String) = Quote(
         symbol = symbol,
         name = "Test",
         date = LocalDate(2024, 6, 15),
         lastPrice = 150.0,
-        gain = Analysis.Gain(0.01, 0.02, 0.05, 0.1, 0.15, 0.12, 0.25, 0.8),
-        rsi = Analysis.Rsi(55.0, 60.0, 65.0),
-        macd = Analysis.Macd(1.5, 1.2, 0.3),
-        bollingerBands = Analysis.BollingerBands(200.0, 195.0, 190.0),
-        movingAverages = Analysis.MovingAverages(193.0, 180.0, 194.0, 182.0),
-        atr = 3.5,
+        gain = Quote.Gain(0.01, 0.02, 0.05, 0.1, 0.15, 0.12, 0.25, 0.8),
+        peRatio = 30.0,
+        pbRatio = 45.0,
+        eps = 6.5,
+        roe = 1.5,
+        marketCap = 3_000_000_000.0,
+        beta = 1.2,
         dividendYield = 0.005,
         dividendGrowth = 0.042,
-        peRatio = 30.0f,
-        pbRatio = 45.0f,
-        eps = 6.5f,
-        roe = 1.5f,
-        marketCap = 3_000_000_000.0,
-        recommendation = "buy",
-        analystCount = 40,
-        fiftyTwoWeekHigh = 210.0f,
-        fiftyTwoWeekLow = 150.0f,
-        beta = 1.2f,
+        fiftyTwoWeekHigh = 210.0,
+        fiftyTwoWeekLow = 150.0,
         sector = "Technology",
         industry = "Consumer Electronics",
-        earningsDate = "2024-07-25"
+        earningsDate = LocalDate(2024, 7, 25),
+        recommendation = "buy",
+        analystCount = 40
     )
 }

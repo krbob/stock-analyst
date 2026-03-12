@@ -242,64 +242,6 @@ class TestInfoEndpoint:
         assert "Internal details" not in str(response.get_json())
 
 
-class TestDividendsEndpoint:
-    def test_returns_dividends(self, client, mock_ticker):
-        index = pd.DatetimeIndex([pd.Timestamp("2024-01-15"), pd.Timestamp("2024-04-15")])
-        dividends = pd.Series([0.24, 0.25], index=index)
-        mock_ticker(dividends=dividends)
-
-        response = client.get("/dividends/AAPL")
-
-        assert response.status_code == 200
-        data = response.get_json()
-        assert len(data) == 2
-        assert data[0]["date"] == "2024-01-15"
-        assert data[0]["amount"] == 0.24
-        assert data[1]["date"] == "2024-04-15"
-        assert data[1]["amount"] == 0.25
-
-    def test_returns_empty_for_no_dividends(self, client, mock_ticker):
-        mock_ticker(dividends=pd.Series(dtype=float))
-
-        response = client.get("/dividends/AAPL")
-
-        assert response.status_code == 200
-        assert response.get_json() == []
-
-    def test_multiple_dividends_ordering(self, client, mock_ticker):
-        index = pd.DatetimeIndex([
-            pd.Timestamp("2024-01-15"),
-            pd.Timestamp("2024-04-15"),
-            pd.Timestamp("2024-07-15"),
-        ])
-        dividends = pd.Series([0.24, 0.25, 0.26], index=index)
-        mock_ticker(dividends=dividends)
-
-        response = client.get("/dividends/AAPL")
-
-        assert response.status_code == 200
-        data = response.get_json()
-        assert len(data) == 3
-        dates = [d["date"] for d in data]
-        assert dates == sorted(dates)
-
-    def test_yfinance_error_returns_empty_list(self, client, mock_ticker):
-        ticker = mock_ticker()
-        type(ticker).dividends = PropertyMock(side_effect=Exception("API error"))
-
-        response = client.get("/dividends/AAPL")
-
-        assert response.status_code == 200
-        assert response.get_json() == []
-
-    def test_cache_header_set(self, client, mock_ticker):
-        mock_ticker(dividends=pd.Series(dtype=float))
-
-        response = client.get("/dividends/AAPL")
-
-        assert response.headers["Cache-Control"] == "public, max-age=3600"
-
-
 class TestCacheHeaders:
     def test_info_cache_5_minutes(self, client, mock_ticker):
         mock_ticker(info={"longName": "Test"})
@@ -347,17 +289,6 @@ class TestDataCache:
 
             client.get("/history/AAPL/1y")
             client.get("/history/AAPL/1y")
-
-            assert mock_class.call_count == 1
-
-    def test_dividends_serves_from_cache(self, client):
-        with patch("app.yf.Ticker") as mock_class:
-            instance = mock_class.return_value
-            index = pd.DatetimeIndex([pd.Timestamp("2024-01-15")])
-            type(instance).dividends = PropertyMock(return_value=pd.Series([0.24], index=index))
-
-            client.get("/dividends/AAPL")
-            client.get("/dividends/AAPL")
 
             assert mock_class.call_count == 1
 

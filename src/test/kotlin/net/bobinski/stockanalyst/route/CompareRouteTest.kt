@@ -16,8 +16,8 @@ import io.mockk.mockk
 import kotlinx.datetime.LocalDate
 import kotlinx.serialization.json.Json
 import net.bobinski.stockanalyst.core.dependency.CoreModule
-import net.bobinski.stockanalyst.domain.error.BackendDataException
-import net.bobinski.stockanalyst.domain.model.Analysis
+import net.bobinski.stockanalyst.domain.model.CompareResult
+import net.bobinski.stockanalyst.domain.model.Quote
 import net.bobinski.stockanalyst.domain.usecase.CompareStocksUseCase
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -29,10 +29,13 @@ import org.koin.ktor.plugin.Koin
 class CompareRouteTest {
 
     @Test
-    fun `responds with analyses for valid symbols`() = testApplication {
+    fun `responds with results for valid symbols`() = testApplication {
         val useCase = mockk<CompareStocksUseCase>()
         coEvery { useCase.invoke(listOf("AAPL", "MSFT"), null) } returns
-            listOf(testAnalysis("AAPL"), testAnalysis("MSFT"))
+            listOf(
+                CompareResult("AAPL", testQuote("AAPL")),
+                CompareResult("MSFT", testQuote("MSFT"))
+            )
         configureApp(useCase)
 
         val response = client.get("/compare?symbols=AAPL,MSFT")
@@ -78,21 +81,28 @@ class CompareRouteTest {
     }
 
     @Test
-    fun `responds with 404 when any symbol is unknown`() = testApplication {
+    fun `returns partial results when one symbol is unknown`() = testApplication {
         val useCase = mockk<CompareStocksUseCase>()
-        coEvery { useCase.invoke(listOf("AAPL", "INVALID"), null) } throws
-            BackendDataException.unknownSymbol("INVALID")
+        coEvery { useCase.invoke(listOf("AAPL", "INVALID"), null) } returns
+            listOf(
+                CompareResult("AAPL", testQuote("AAPL")),
+                CompareResult("INVALID", error = "Unknown symbol: INVALID")
+            )
         configureApp(useCase)
 
         val response = client.get("/compare?symbols=AAPL,INVALID")
 
-        assertEquals(HttpStatusCode.NotFound, response.status)
+        assertEquals(HttpStatusCode.OK, response.status)
+        val body = response.bodyAsText()
+        assertTrue(body.contains("AAPL"))
+        assertTrue(body.contains("Unknown symbol"))
     }
 
     @Test
     fun `passes currency parameter to use case`() = testApplication {
         val useCase = mockk<CompareStocksUseCase>()
-        coEvery { useCase.invoke(listOf("AAPL"), "EUR") } returns listOf(testAnalysis("AAPL"))
+        coEvery { useCase.invoke(listOf("AAPL"), "EUR") } returns
+            listOf(CompareResult("AAPL", testQuote("AAPL")))
         configureApp(useCase)
 
         client.get("/compare?symbols=AAPL&currency=EUR")
@@ -109,18 +119,6 @@ class CompareRouteTest {
 
         assertEquals(HttpStatusCode.BadRequest, response.status)
         assertTrue(response.bodyAsText().contains("No symbols"))
-    }
-
-    @Test
-    fun `responds with 422 for insufficient conversion data`() = testApplication {
-        val useCase = mockk<CompareStocksUseCase>()
-        coEvery { useCase.invoke(listOf("AAPL"), "EUR") } throws
-            BackendDataException.insufficientConversion("EUR=X")
-        configureApp(useCase)
-
-        val response = client.get("/compare?symbols=AAPL&currency=EUR")
-
-        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
     }
 
     private fun ApplicationTestBuilder.configureApp(useCase: CompareStocksUseCase) {
@@ -141,31 +139,26 @@ class CompareRouteTest {
         }
     }
 
-    private fun testAnalysis(symbol: String) = Analysis(
+    private fun testQuote(symbol: String) = Quote(
         symbol = symbol,
         name = "Test",
         date = LocalDate(2024, 6, 15),
         lastPrice = 195.0,
-        gain = Analysis.Gain(0.01, 0.02, 0.05, 0.1, 0.15, 0.12, 0.25, 0.8),
-        rsi = Analysis.Rsi(55.0, 60.0, 65.0),
-        macd = Analysis.Macd(1.5, 1.2, 0.3),
-        bollingerBands = Analysis.BollingerBands(200.0, 195.0, 190.0),
-        movingAverages = Analysis.MovingAverages(193.0, 180.0, 194.0, 182.0),
-        atr = 3.5,
+        gain = Quote.Gain(0.01, 0.02, 0.05, 0.1, 0.15, 0.12, 0.25, 0.8),
+        peRatio = 30.0,
+        pbRatio = 45.0,
+        eps = 6.5,
+        roe = 1.5,
+        marketCap = 3_000_000_000.0,
+        beta = 1.2,
         dividendYield = 0.005,
         dividendGrowth = 0.042,
-        peRatio = 30.0f,
-        pbRatio = 45.0f,
-        eps = 6.5f,
-        roe = 1.5f,
-        marketCap = 3_000_000_000.0,
-        recommendation = "buy",
-        analystCount = 40,
-        fiftyTwoWeekHigh = 210.0f,
-        fiftyTwoWeekLow = 150.0f,
-        beta = 1.2f,
+        fiftyTwoWeekHigh = 210.0,
+        fiftyTwoWeekLow = 150.0,
         sector = "Technology",
         industry = "Consumer Electronics",
-        earningsDate = "2024-07-25"
+        earningsDate = LocalDate(2024, 7, 25),
+        recommendation = "buy",
+        analystCount = 40
     )
 }

@@ -68,18 +68,13 @@ jobs:
           done
 
           echo "🔍 Sending test requests..."
-          if ! curl --fail -X GET http://localhost:8080/analysis/aapl; then
-            echo "❌ analysis endpoint did not respond properly"
+          if ! curl --fail -X GET http://localhost:8080/quote/aapl; then
+            echo "❌ quote endpoint did not respond properly"
             exit 1
           fi
 
-          if ! curl --fail -X GET "http://localhost:8080/analysis/aapl?currency=EUR"; then
-            echo "❌ analysis with currency conversion did not respond properly"
-            exit 1
-          fi
-
-          if ! curl --fail -X GET http://localhost:8080/price/aapl; then
-            echo "❌ price endpoint did not respond properly"
+          if ! curl --fail -X GET "http://localhost:8080/quote/aapl?currency=EUR"; then
+            echo "❌ quote with currency conversion did not respond properly"
             exit 1
           fi
 

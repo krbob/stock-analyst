@@ -46,23 +46,9 @@ services:
 
 ## API
 
-### `GET /analysis/{symbol}`
+### `GET /quote/{symbol}`
 
-Returns full analysis for a stock symbol.
-
-| Parameter    | Type   | Description                                   |
-|--------------|--------|-----------------------------------------------|
-| `symbol`     | path   | Stock ticker (e.g., `AAPL`, `MSFT`, `GC=F`)  |
-| `currency`   | query  | Optional target currency ISO code (e.g., `EUR`, `PLN`) |
-
-```bash
-curl http://localhost:8080/analysis/aapl
-curl http://localhost:8080/analysis/aapl?currency=EUR
-```
-
-### `GET /price/{symbol}`
-
-Returns lightweight price and gain data. Faster than `/analysis` — no technical indicators.
+Returns fundamental data, gains and dividend metrics for a stock symbol.
 
 | Parameter    | Type   | Description                                   |
 |--------------|--------|-----------------------------------------------|
@@ -70,7 +56,8 @@ Returns lightweight price and gain data. Faster than `/analysis` — no technica
 | `currency`   | query  | Optional target currency ISO code (e.g., `EUR`, `PLN`) |
 
 ```bash
-curl http://localhost:8080/price/aapl
+curl http://localhost:8080/quote/aapl
+curl http://localhost:8080/quote/aapl?currency=EUR
 ```
 
 #### Example response
@@ -91,24 +78,54 @@ curl http://localhost:8080/price/aapl
     "ytd": 0.064,
     "yearly": 0.283,
     "fiveYear": 1.45
-  }
+  },
+  "peRatio": 29.18,
+  "pbRatio": 64.35,
+  "eps": 6.09,
+  "roe": 1.57,
+  "marketCap": 3664221000000.0,
+  "beta": 1.24,
+  "dividendYield": 0.004,
+  "dividendGrowth": 0.042,
+  "fiftyTwoWeekHigh": 260.1,
+  "fiftyTwoWeekLow": 164.08,
+  "sector": "Technology",
+  "industry": "Consumer Electronics",
+  "earningsDate": "2026-04-24",
+  "recommendation": "buy",
+  "analystCount": 40
 }
 ```
 
+Technical indicators (RSI, MACD, Bollinger Bands, Moving Averages, ATR) are available as time series
+via `GET /history/{symbol}?indicators=...`. The UI derives current technical values from the last point
+of each indicator series.
+
 ### `GET /compare?symbols=...`
 
-Compares multiple stocks in a single request. Returns a list of full analysis objects.
+Compares multiple stocks in a single request. Returns partial results — each symbol independently
+succeeds or fails.
 
 | Parameter    | Type   | Description                                        |
 |--------------|--------|----------------------------------------------------|
 | `symbols`    | query  | Comma-separated tickers (max 10). Required.        |
-| `conversion` | query  | Optional currency pair (e.g., `eur=x`)             |
+| `currency`   | query  | Optional target currency ISO code (e.g., `EUR`, `PLN`) |
 
 ```bash
-curl "http://localhost:8080/compare?symbols=AAPL,MSFT,GOOG"
+curl "http://localhost:8080/compare?symbols=AAPL,MSFT,INVALID"
 ```
 
-Each element in the response array has the same schema as the `/analysis/{symbol}` response.
+#### Example response
+
+```json
+[
+  { "symbol": "AAPL", "data": { "lastPrice": 242.41, "gain": { ... }, ... } },
+  { "symbol": "MSFT", "data": { "lastPrice": 410.30, "gain": { ... }, ... } },
+  { "symbol": "INVALID", "error": "Unknown symbol: INVALID" }
+]
+```
+
+Each `data` object has the same schema as the `/quote/{symbol}` response.
 
 ### `GET /search/{query}`
 
@@ -205,73 +222,7 @@ curl "http://localhost:8080/history/aapl?period=1y&currency=EUR"
 
 **Intraday intervals** (`1m`, `5m`, `15m`, `30m`, `1h`) return bars with a `timestamp` field (epoch seconds). Data availability depends on the period — yfinance limits: `1m` up to 7 days, `5m`/`15m`/`30m` up to 60 days, `1h` up to 730 days. Intraday responses are cached for 30 seconds.
 
-### `GET /analysis/{symbol}` — example response
-
-```json
-{
-  "symbol": "aapl",
-  "name": "Apple Inc.",
-  "currency": "USD",
-  "date": "2026-02-28",
-  "lastPrice": 242.41,
-  "gain": {
-    "daily": 0.005,
-    "weekly": 0.031,
-    "monthly": 0.089,
-    "quarterly": 0.102,
-    "halfYearly": 0.185,
-    "ytd": 0.064,
-    "yearly": 0.283,
-    "fiveYear": 1.45
-  },
-  "rsi": {
-    "daily": 55.23,
-    "weekly": 60.17,
-    "monthly": 65.44
-  },
-  "macd": {
-    "macd": 1.54,
-    "signal": 1.21,
-    "histogram": 0.33
-  },
-  "bollingerBands": {
-    "upper": 251.45,
-    "middle": 244.80,
-    "lower": 238.15
-  },
-  "movingAverages": {
-    "sma50": 240.67,
-    "sma200": 220.34,
-    "ema50": 241.15,
-    "ema200": 222.48
-  },
-  "atr": 3.47,
-  "dividendYield": 0.004,
-  "dividendGrowth": 0.042,
-  "peRatio": 29.18,
-  "pbRatio": 64.35,
-  "eps": 6.09,
-  "roe": 1.57,
-  "marketCap": 3664221000000.0,
-  "recommendation": "buy",
-  "analystCount": 40,
-  "fiftyTwoWeekHigh": 260.1,
-  "fiftyTwoWeekLow": 164.08,
-  "beta": 1.24,
-  "sector": "Technology",
-  "industry": "Consumer Electronics",
-  "earningsDate": "2026-04-24"
-}
-```
-
 ## Response fields
-
-### Price
-
-| Field       | Description                              |
-|-------------|------------------------------------------|
-| `lastPrice` | Current market price (refreshed every 5 min) |
-| `currency`  | ISO 4217 currency code (e.g., `USD`, `EUR`, `GBP`) |
 
 ### Gain
 
@@ -288,76 +239,13 @@ Percentage price change over a given period. A value of `0.05` means a 5% increa
 | `yearly`     | 1 year      |
 | `fiveYear`   | 5 years     |
 
-### RSI (Relative Strength Index)
-
-Momentum oscillator on a 0–100 scale. Measures the speed and magnitude of price changes over a 14-period window.
-
-- **> 70** — overbought, potential signal for a decline
-- **< 30** — oversold, potential signal for a rise
-- **40–60** — neutral range
-
-Calculated on daily, weekly and monthly data.
-
-### MACD (Moving Average Convergence Divergence)
-
-Trend and momentum indicator based on the difference between two exponential moving averages (EMA 12 and EMA 26).
-
-| Field       | Description                                                  |
-|-------------|--------------------------------------------------------------|
-| `macd`      | MACD line (EMA 12 - EMA 26). Positive = upward trend.       |
-| `signal`    | Signal line (9-period EMA of the MACD line).                 |
-| `histogram` | MACD minus signal. A sign change suggests a potential trend reversal. |
-
-How to read it:
-- **MACD crosses above signal** — bullish crossover (buy signal)
-- **MACD crosses below signal** — bearish crossover (sell signal)
-- **Rising histogram** — upward momentum is strengthening
-
-### Bollinger Bands
-
-Volatility bands based on a 20-day SMA and standard deviation (2x).
-
-| Field    | Description                                              |
-|----------|----------------------------------------------------------|
-| `upper`  | Upper band (SMA + 2 * std dev). Dynamic resistance.      |
-| `middle` | Middle line (20-day SMA).                                 |
-| `lower`  | Lower band (SMA - 2 * std dev). Dynamic support.         |
-
-How to read it:
-- **Price near upper band** — potentially overbought
-- **Price near lower band** — potentially oversold
-- **Narrow bands** — low volatility, anticipates a move (squeeze)
-- **Wide bands** — high volatility
-
-### Moving Averages
-
-Moving averages smooth out price noise and help identify trends.
-
-| Field    | Description                                                 |
-|----------|-------------------------------------------------------------|
-| `sma50`  | 50-day simple moving average                                |
-| `sma200` | 200-day simple moving average                               |
-| `ema50`  | 50-day exponential moving average (reacts faster)           |
-| `ema200` | 200-day exponential moving average                          |
-
-How to read it:
-- **SMA50 > SMA200** — Golden Cross, bullish trend signal
-- **SMA50 < SMA200** — Death Cross, bearish trend signal
-- **Price > SMA200** — long-term uptrend
-
-### ATR (Average True Range)
-
-A measure of price volatility (14-day). Does not indicate direction, only the scale of price movements.
-
-- Higher value = greater volatility (and risk)
-- Useful for setting stop-loss levels: e.g., 2x ATR below the current price
-
 ### Fundamental data
 
 | Field                | Description                                              |
 |----------------------|----------------------------------------------------------|
+| `lastPrice`          | Current market price (refreshed every 5 min)             |
 | `dividendYield`      | Annual dividend yield (0.005 = 0.5%)                     |
-| `dividendGrowth`     | Year-over-year dividend growth (0.042 = +4.2%)           |
+| `dividendGrowth`     | Year-over-year dividend growth from actual history (0.042 = +4.2%) |
 | `peRatio`            | Price/Earnings ratio. Lower = cheaper valuation.         |
 | `pbRatio`            | Price/Book ratio.                                        |
 | `eps`                | Earnings Per Share.                                      |
@@ -370,29 +258,40 @@ A measure of price volatility (14-day). Does not indicate direction, only the sc
 | `fiftyTwoWeekLow`    | Lowest price in the last 52 weeks.                       |
 | `sector`             | Sector (e.g., Technology).                               |
 | `industry`           | Industry (e.g., Consumer Electronics).                   |
-| `earningsDate`       | Next quarterly earnings report date.                     |
+| `earningsDate`       | Next quarterly earnings report date (ISO 8601).          |
+
+### Technical indicators (via /history)
+
+Available as time series through `GET /history/{symbol}?indicators=sma50,rsi,macd`:
+
+| Indicator | Key | Description |
+|-----------|-----|-------------|
+| SMA 50/200 | `sma50`, `sma200` | Simple moving averages |
+| EMA 50/200 | `ema50`, `ema200` | Exponential moving averages |
+| Bollinger Bands | `bb` | Upper, middle, lower bands (20-day, 2σ) |
+| RSI | `rsi` | Relative Strength Index (14-period, 0–100 scale) |
+| MACD | `macd` | MACD line, signal line, histogram |
 
 ## Currency conversion
 
 Adding `?currency=PLN` converts monetary values to the target currency. The API uses the stock's native currency (from the `currency` response field) to automatically resolve the correct exchange rate.
 
 ```bash
-curl http://localhost:8080/price/aapl?currency=PLN
-curl http://localhost:8080/analysis/vow3.de?currency=USD
+curl http://localhost:8080/quote/aapl?currency=PLN
+curl http://localhost:8080/quote/vow3.de?currency=USD
 curl "http://localhost:8080/history/aapl?period=1y&currency=EUR"
 ```
 
-Converted fields (`/price` and `/analysis`):
+Converted fields (`/quote`):
 - `lastPrice`, `eps`, `marketCap`, `fiftyTwoWeekHigh`, `fiftyTwoWeekLow` — at the current exchange rate
 - `gain` — at historical exchange rates for the respective dates
-- `dividendYield` — at historical exchange rates on dividend payment dates
-- `macd`, `bollingerBands`, `movingAverages`, `atr` — at historical exchange rates
+- `dividendYield`, `dividendGrowth` — at historical exchange rates on dividend payment dates
 
 Converted fields (`/history`):
 - OHLCV prices and dividends — at historical exchange rates for each date
 - All indicator values (when `indicators` param is used) — at historical exchange rates
 
-Not converted (dimensionless): `rsi`, `peRatio`, `pbRatio`, `roe`, `beta`.
+Not converted (dimensionless): `peRatio`, `pbRatio`, `roe`, `beta`.
 
 The `currency` field in the response reflects the target currency when conversion is active, or the stock's native currency otherwise.
 
