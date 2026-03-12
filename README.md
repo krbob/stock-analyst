@@ -2,14 +2,11 @@
 
 ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/krbob/stock-analyst/ci-build.yml)
 
-Stock analysis API providing technical indicators and fundamental data. Built with Kotlin/Ktor and Python/Flask, data sourced from Yahoo Finance via [yfinance](https://github.com/ranaroussi/yfinance).
+Stock analysis API providing fundamental data, technical indicators, and historical prices. Built with Kotlin/Ktor and Python/Flask, with market data sourced from Yahoo Finance via [yfinance](https://github.com/ranaroussi/yfinance).
 
 ## Architecture
 
-Two-service Docker setup:
-
-- **Kotlin API** (port 8080) — Ktor server, business logic, technical analysis via [TA4J](https://github.com/ta4j/ta4j)
-- **Python backend** (port 8081, internal) — Flask wrapper around yfinance, serves historical prices and stock info
+Two-service setup: a Kotlin API handles business logic, technical analysis ([TA4J](https://github.com/ta4j/ta4j)), and currency conversion, while a Python backend wraps yfinance to serve raw market data.
 
 ```
 Client → Kotlin API (:8080) → Python backend (:8081) → Yahoo Finance
@@ -19,55 +16,36 @@ Client → Kotlin API (:8080) → Python backend (:8081) → Yahoo Finance
 
 ```
 stock-analyst/
-├── core/           Shared utilities (serialization, DI, time provider)
-├── domain/         Business logic, models, use cases
-├── src/            Ktor application (routes, HTTP client, config)
-└── backend-yfinance/  Python/Flask data provider (Yahoo Finance)
+├── core/               Shared utilities (serialization, DI, time provider)
+├── domain/             Business logic, models, use cases
+├── src/                Ktor application (routes, HTTP client, config)
+└── backend-yfinance/   Python/Flask data provider (Yahoo Finance)
 ```
 
-## Usage
-
-```yaml
-services:
-  stock-analyst:
-    image: ghcr.io/krbob/stock-analyst:main
-    ports:
-      - "8080:8080"
-    depends_on:
-      - stock-analyst-backend-yfinance
-    environment:
-      - BACKEND_URL=http://stock-analyst-backend-yfinance:8081
-    restart: unless-stopped
-
-  stock-analyst-backend-yfinance:
-    image: ghcr.io/krbob/stock-analyst-backend-yfinance:main
-    restart: unless-stopped
-```
-
-## API
+## API Endpoints
 
 ### `GET /quote/{symbol}`
 
-Returns fundamental data, gains and dividend metrics for a stock symbol.
+Returns fundamental data, gains, and dividend metrics for a stock.
 
-| Parameter    | Type   | Description                                   |
-|--------------|--------|-----------------------------------------------|
-| `symbol`     | path   | Stock ticker (e.g., `AAPL`, `MSFT`, `GC=F`)  |
-| `currency`   | query  | Optional target currency ISO code (e.g., `EUR`, `PLN`) |
+| Parameter  | Type  | Required | Description                                      |
+|------------|-------|----------|--------------------------------------------------|
+| `symbol`   | path  | yes      | Stock ticker (e.g., `AAPL`, `MSFT`, `GC=F`)     |
+| `currency` | query | no       | Target currency ISO code (e.g., `EUR`, `PLN`)    |
 
 ```bash
-curl http://localhost:8080/quote/aapl
-curl http://localhost:8080/quote/aapl?currency=EUR
+curl http://localhost:8080/quote/AAPL
+curl http://localhost:8080/quote/AAPL?currency=EUR
 ```
 
-#### Example response
+**Example response:**
 
 ```json
 {
-  "symbol": "aapl",
+  "symbol": "AAPL",
   "name": "Apple Inc.",
   "currency": "USD",
-  "date": "2026-02-28",
+  "date": "2026-03-12",
   "lastPrice": 242.41,
   "gain": {
     "daily": 0.005,
@@ -97,89 +75,80 @@ curl http://localhost:8080/quote/aapl?currency=EUR
 }
 ```
 
-Technical indicators (RSI, MACD, Bollinger Bands, Moving Averages, ATR) are available as time series
-via `GET /history/{symbol}?indicators=...`. The UI derives current technical values from the last point
-of each indicator series.
+---
 
-### `GET /compare?symbols=...`
+### `GET /indicators/{symbol}`
 
-Compares multiple stocks in a single request. Returns partial results — each symbol independently
-succeeds or fails.
+Returns the latest values of technical indicators for a stock. Computes indicators from historical data and returns only the most recent value of each.
 
-| Parameter    | Type   | Description                                        |
-|--------------|--------|----------------------------------------------------|
-| `symbols`    | query  | Comma-separated tickers (max 10). Required.        |
-| `currency`   | query  | Optional target currency ISO code (e.g., `EUR`, `PLN`) |
-
-```bash
-curl "http://localhost:8080/compare?symbols=AAPL,MSFT,INVALID"
-```
-
-#### Example response
-
-```json
-[
-  { "symbol": "AAPL", "data": { "lastPrice": 242.41, "gain": { ... }, ... } },
-  { "symbol": "MSFT", "data": { "lastPrice": 410.30, "gain": { ... }, ... } },
-  { "symbol": "INVALID", "error": "Unknown symbol: INVALID" }
-]
-```
-
-Each `data` object has the same schema as the `/quote/{symbol}` response.
-
-### `GET /search/{query}`
-
-Searches for stocks, ETFs and indices by name or ticker.
-
-| Parameter | Type | Description                                      |
-|-----------|------|--------------------------------------------------|
-| `query`   | path | Search term (e.g., `apple`, `AAPL`, `s&p`). Max 50 chars. |
+| Parameter    | Type  | Required | Description                                                        |
+|--------------|-------|----------|--------------------------------------------------------------------|
+| `symbol`     | path  | yes      | Stock ticker (e.g., `AAPL`, `MSFT`)                               |
+| `indicators` | query | no       | Comma-separated indicators: `rsi`, `macd`, `bb`, `sma50`, `sma200`, `ema50`, `ema200`. Omit for all. |
+| `period`     | query | no       | History period for computation. Default: `1y`. Values: `1d`, `5d`, `1mo`, `3mo`, `6mo`, `1y`, `2y`, `5y`, `10y`, `ytd`, `max` |
+| `interval`   | query | no       | Bar interval. Auto-selected if omitted. Values: `1m`, `5m`, `15m`, `30m`, `1h`, `1d`, `1wk`, `1mo`. Use `1wk` for weekly indicators, `1mo` for monthly. |
+| `currency`   | query | no       | Target currency ISO code (e.g., `EUR`, `PLN`)                     |
 
 ```bash
-curl http://localhost:8080/search/apple
+curl http://localhost:8080/indicators/AAPL
+curl "http://localhost:8080/indicators/AAPL?indicators=rsi,macd&currency=EUR"
+curl "http://localhost:8080/indicators/AAPL?indicators=rsi&period=5y&interval=1wk"   # weekly RSI
+curl "http://localhost:8080/indicators/AAPL?indicators=rsi&period=max&interval=1mo"  # monthly RSI
 ```
 
-#### Example response
-
-```json
-[
-  { "symbol": "AAPL", "name": "Apple Inc.", "exchange": "NMS", "quoteType": "EQUITY" },
-  { "symbol": "APLE", "name": "Apple Hospitality REIT, Inc.", "exchange": "NYQ", "quoteType": "EQUITY" },
-  { "symbol": "APC.DE", "name": "Apple Inc.", "exchange": "GER", "quoteType": "EQUITY" }
-]
-```
-
-Results are filtered to equities, ETFs and indices. Returns an empty array when no matches are found.
-
-### `GET /history/{symbol}`
-
-Returns historical OHLCV price data for a stock symbol.
-
-| Parameter  | Type  | Description                                         |
-|------------|-------|-----------------------------------------------------|
-| `symbol`   | path  | Stock ticker (e.g., `AAPL`, `MSFT`, `GC=F`)        |
-| `period`   | query | Time range. Default: `1y`. Values: `1d`, `5d`, `1mo`, `3mo`, `6mo`, `1y`, `2y`, `5y`, `10y`, `ytd`, `max` |
-| `interval` | query | Candle interval. Optional — defaults based on period (`5y`/`10y` → weekly, `max` → monthly, others → daily). Values: `1m`, `5m`, `15m`, `30m`, `1h`, `1d`, `1wk`, `1mo` |
-| `indicators` | query | Comma-separated technical indicators to include. Optional. Values: `sma50`, `sma200`, `ema50`, `ema200`, `bb`, `rsi`, `macd` |
-| `currency` | query | Target currency (ISO 4217, e.g. `EUR`, `PLN`). Converts OHLCV prices and indicator values using historical exchange rates. Optional — omit for native currency. |
-| `dividends` | query | Set to `true` to include dividend data in weekly/monthly candles. For daily candles, dividends are always present. Optional — defaults to `false`. |
-
-When `indicators` is provided, the backend automatically fetches extra historical data for indicator warmup (e.g., 200 extra bars for SMA200) and trims the result to the requested period.
-
-```bash
-curl http://localhost:8080/history/aapl
-curl http://localhost:8080/history/aapl?period=5y
-curl http://localhost:8080/history/aapl?period=5y&interval=1d
-curl "http://localhost:8080/history/aapl?period=1y&indicators=sma50,sma200,rsi,macd"
-curl "http://localhost:8080/history/aapl?period=1d&interval=5m"
-curl "http://localhost:8080/history/aapl?period=1y&currency=EUR"
-```
-
-#### Example response
+**Example response:**
 
 ```json
 {
-  "symbol": "aapl",
+  "symbol": "AAPL",
+  "date": "2026-03-12",
+  "rsi": 55.2,
+  "macd": {
+    "macd": 1.54,
+    "signal": 1.21,
+    "histogram": 0.33
+  },
+  "bb": {
+    "upper": 251.4,
+    "middle": 244.8,
+    "lower": 238.1
+  },
+  "sma50": 240.5,
+  "sma200": 220.3,
+  "ema50": 241.1,
+  "ema200": 222.7
+}
+```
+
+Only requested indicators are included in the response. When `indicators` is omitted, all are returned.
+
+---
+
+### `GET /history/{symbol}`
+
+Returns historical OHLCV price data with optional technical indicator series and dividends.
+
+| Parameter    | Type  | Required | Description                                                        |
+|--------------|-------|----------|--------------------------------------------------------------------|
+| `symbol`     | path  | yes      | Stock ticker (e.g., `AAPL`, `MSFT`, `GC=F`)                      |
+| `period`     | query | no       | Time range. Default: `1y`. Values: `1d`, `5d`, `1mo`, `3mo`, `6mo`, `1y`, `2y`, `5y`, `10y`, `ytd`, `max` |
+| `interval`   | query | no       | Candle interval. Auto-selected if omitted (`5y`/`10y` → weekly, `max` → monthly, others → daily). Values: `1m`, `5m`, `15m`, `30m`, `1h`, `1d`, `1wk`, `1mo` |
+| `indicators` | query | no       | Comma-separated: `sma50`, `sma200`, `ema50`, `ema200`, `bb`, `rsi`, `macd` |
+| `currency`   | query | no       | Target currency ISO code (e.g., `EUR`, `PLN`)                     |
+| `dividends`  | query | no       | Set to `true` to include dividends in weekly/monthly candles. Daily candles always include dividends. Default: `false` |
+
+```bash
+curl http://localhost:8080/history/AAPL
+curl "http://localhost:8080/history/AAPL?period=1y&indicators=sma50,sma200,rsi,macd"
+curl "http://localhost:8080/history/AAPL?period=1y&currency=EUR&dividends=true"
+curl "http://localhost:8080/history/AAPL?period=1d&interval=5m"
+```
+
+**Example response:**
+
+```json
+{
+  "symbol": "AAPL",
   "name": "Apple Inc.",
   "currency": "USD",
   "period": "1y",
@@ -205,113 +174,169 @@ curl "http://localhost:8080/history/aapl?period=1y&currency=EUR"
 }
 ```
 
-| Field      | Description                                          |
-|------------|------------------------------------------------------|
-| `period`   | The time range used for the query.                   |
-| `interval` | The candle interval used (e.g., `1d`, `5m`, `1wk`). |
-| `prices`   | Array of OHLCV data sorted by time ascending.        |
-| `open`     | Opening price for the bar.                           |
-| `close`    | Closing price for the bar.                           |
-| `high`     | Highest price during the bar.                        |
-| `low`      | Lowest price during the bar.                         |
-| `volume`   | Number of shares traded.                             |
-| `dividend` | Dividend paid on that date (0 if none).              |
-| `timestamp`| Epoch seconds (UTC). Present only for intraday intervals. |
-| `currency`   | Currency of the prices (native or converted). Present when known. |
-| `indicators` | Object with requested indicator series. Omitted when `indicators` param is absent. |
+When `indicators` is provided, extra historical data is fetched for indicator warmup (e.g., 200 extra bars for SMA200) and trimmed to the requested period. Intraday intervals (`1m`, `5m`, etc.) include a `timestamp` field (epoch seconds) instead of `date`. Intraday responses are cached for 30 seconds.
 
-**Intraday intervals** (`1m`, `5m`, `15m`, `30m`, `1h`) return bars with a `timestamp` field (epoch seconds). Data availability depends on the period — yfinance limits: `1m` up to 7 days, `5m`/`15m`/`30m` up to 60 days, `1h` up to 730 days. Intraday responses are cached for 30 seconds.
+---
 
-## Response fields
+### `GET /compare?symbols=...`
 
-### Gain
+Compares multiple stocks in a single request. Returns partial results -- individual symbols can fail without failing the whole request.
 
-Percentage price change over a given period. A value of `0.05` means a 5% increase.
-
-| Field        | Period      |
-|--------------|-------------|
-| `daily`      | 1 day       |
-| `weekly`     | 1 week      |
-| `monthly`    | 1 month     |
-| `quarterly`  | 3 months    |
-| `halfYearly` | 6 months    |
-| `ytd`        | Year to date|
-| `yearly`     | 1 year      |
-| `fiveYear`   | 5 years     |
-
-### Fundamental data
-
-| Field                | Description                                              |
-|----------------------|----------------------------------------------------------|
-| `lastPrice`          | Current market price (refreshed every 5 min)             |
-| `dividendYield`      | Annual dividend yield (0.005 = 0.5%)                     |
-| `dividendGrowth`     | Year-over-year dividend growth from actual history (0.042 = +4.2%) |
-| `peRatio`            | Price/Earnings ratio. Lower = cheaper valuation.         |
-| `pbRatio`            | Price/Book ratio.                                        |
-| `eps`                | Earnings Per Share.                                      |
-| `roe`                | Return on Equity.                                        |
-| `marketCap`          | Market capitalization.                                   |
-| `beta`               | Volatility vs market. 1.0 = same as market, >1 = more volatile. |
-| `recommendation`     | Analyst consensus: `strong_buy`, `buy`, `hold`, `sell`, `strong_sell`. |
-| `analystCount`       | Number of analysts covering the stock.                   |
-| `fiftyTwoWeekHigh`   | Highest price in the last 52 weeks.                      |
-| `fiftyTwoWeekLow`    | Lowest price in the last 52 weeks.                       |
-| `sector`             | Sector (e.g., Technology).                               |
-| `industry`           | Industry (e.g., Consumer Electronics).                   |
-| `earningsDate`       | Next quarterly earnings report date (ISO 8601).          |
-
-### Technical indicators (via /history)
-
-Available as time series through `GET /history/{symbol}?indicators=sma50,rsi,macd`:
-
-| Indicator | Key | Description |
-|-----------|-----|-------------|
-| SMA 50/200 | `sma50`, `sma200` | Simple moving averages |
-| EMA 50/200 | `ema50`, `ema200` | Exponential moving averages |
-| Bollinger Bands | `bb` | Upper, middle, lower bands (20-day, 2σ) |
-| RSI | `rsi` | Relative Strength Index (14-period, 0–100 scale) |
-| MACD | `macd` | MACD line, signal line, histogram |
-
-## Currency conversion
-
-Adding `?currency=PLN` converts monetary values to the target currency. The API uses the stock's native currency (from the `currency` response field) to automatically resolve the correct exchange rate.
+| Parameter  | Type  | Required | Description                                         |
+|------------|-------|----------|-----------------------------------------------------|
+| `symbols`  | query | yes      | Comma-separated tickers, max 10 (e.g., `AAPL,MSFT`) |
+| `currency` | query | no       | Target currency ISO code (e.g., `EUR`, `PLN`)       |
 
 ```bash
-curl http://localhost:8080/quote/aapl?currency=PLN
-curl http://localhost:8080/quote/vow3.de?currency=USD
-curl "http://localhost:8080/history/aapl?period=1y&currency=EUR"
+curl "http://localhost:8080/compare?symbols=AAPL,MSFT,INVALID"
+curl "http://localhost:8080/compare?symbols=AAPL,MSFT&currency=EUR"
 ```
 
-Converted fields (`/quote`):
-- `lastPrice`, `eps`, `marketCap`, `fiftyTwoWeekHigh`, `fiftyTwoWeekLow` — at the current exchange rate
-- `gain` — at historical exchange rates for the respective dates
-- `dividendYield`, `dividendGrowth` — at historical exchange rates on dividend payment dates
+**Example response:**
 
-Converted fields (`/history`):
-- OHLCV prices and dividends — at historical exchange rates for each date
-- All indicator values (when `indicators` param is used) — at historical exchange rates
+```json
+[
+  {
+    "symbol": "AAPL",
+    "data": {
+      "symbol": "AAPL",
+      "name": "Apple Inc.",
+      "currency": "USD",
+      "date": "2026-03-12",
+      "lastPrice": 242.41,
+      "gain": { "daily": 0.005, "weekly": 0.031, "monthly": 0.089, "..." : "..." },
+      "peRatio": 29.18,
+      "dividendYield": 0.004,
+      "..."  : "..."
+    }
+  },
+  {
+    "symbol": "MSFT",
+    "data": { "..." : "..." }
+  },
+  {
+    "symbol": "INVALID",
+    "error": "Unknown symbol: INVALID"
+  }
+]
+```
 
-Not converted (dimensionless): `peRatio`, `pbRatio`, `roe`, `beta`.
+Each `data` object has the same schema as the `/quote/{symbol}` response.
 
-The `currency` field in the response reflects the target currency when conversion is active, or the stock's native currency otherwise.
+---
 
-## Error codes
+### `GET /search/{query}`
 
-| Code | Reason                                                    |
-|------|-----------------------------------------------------------|
-| 400  | Invalid symbol format or too many symbols (max 10)        |
-| 404  | Unknown symbol or no history available                    |
-| 422  | Insufficient conversion data for date range               |
-| 502  | Yahoo Finance backend error                               |
+Searches for stocks, ETFs, and indices by name or ticker. Results are cached for 5 minutes.
 
-## Development
+| Parameter | Type | Required | Description                                        |
+|-----------|------|----------|----------------------------------------------------|
+| `query`   | path | yes      | Search term (e.g., `apple`, `AAPL`). Max 50 chars. |
 
-### Prerequisites
+```bash
+curl http://localhost:8080/search/apple
+```
 
-- JDK 25+
-- Python 3.9+
+**Example response:**
 
-### Running tests
+```json
+[
+  { "symbol": "AAPL", "name": "Apple Inc.", "exchange": "NMS", "quoteType": "EQUITY" },
+  { "symbol": "APLE", "name": "Apple Hospitality REIT, Inc.", "exchange": "NYQ", "quoteType": "EQUITY" }
+]
+```
+
+Results are filtered to equities, ETFs, and indices. Returns an empty array when no matches are found.
+
+## Key Features
+
+### Currency conversion
+
+Add `?currency=PLN` (or any ISO 4217 code) to convert monetary values using exchange rates.
+
+```bash
+curl http://localhost:8080/quote/AAPL?currency=PLN
+curl http://localhost:8080/quote/VOW3.DE?currency=USD
+curl "http://localhost:8080/history/AAPL?period=1y&currency=EUR"
+```
+
+**Converted fields (`/quote`):** `lastPrice`, `eps`, `marketCap`, `fiftyTwoWeekHigh`, `fiftyTwoWeekLow` (current rate), `gain` (historical rates), `dividendYield`, `dividendGrowth` (historical rates on dividend dates).
+
+**Converted fields (`/history`):** OHLCV prices, dividends, and all indicator values -- each at historical exchange rates for the respective date.
+
+**Not converted** (dimensionless): `peRatio`, `pbRatio`, `roe`, `beta`.
+
+The `currency` field in the response reflects the target currency when conversion is active.
+
+### Technical indicators
+
+Available via `/indicators/{symbol}` (latest values) and `/history/{symbol}?indicators=...` (time series):
+
+| Indicator        | Key      | Output fields                            |
+|------------------|----------|------------------------------------------|
+| SMA 50           | `sma50`  | `value`                                  |
+| SMA 200          | `sma200` | `value`                                  |
+| EMA 50           | `ema50`  | `value`                                  |
+| EMA 200          | `ema200` | `value`                                  |
+| Bollinger Bands  | `bb`     | `upper`, `middle`, `lower` (20-day, 2 sigma) |
+| RSI              | `rsi`    | `value` (14-period, 0-100 scale)         |
+| MACD             | `macd`   | `macd`, `signal`, `histogram`            |
+
+### Partial compare results
+
+The `/compare` endpoint fetches each symbol independently. If one symbol fails (e.g., unknown ticker), the others still return data. Failed symbols include an `error` string instead of `data`.
+
+### Search caching
+
+Search results are cached in-memory for 5 minutes (up to 1000 entries) to reduce Yahoo Finance API calls.
+
+## Error Codes
+
+| Code | Reason                                               |
+|------|------------------------------------------------------|
+| 400  | Invalid symbol format, missing parameters, or too many symbols (max 10) |
+| 404  | Unknown symbol or no history available               |
+| 422  | Insufficient conversion data for requested date range |
+| 502  | Yahoo Finance backend error                          |
+
+## Running
+
+### Docker
+
+```bash
+docker compose up -d
+```
+
+This starts both the Kotlin API (port 8080) and the Python backend (port 8081, internal).
+
+For production with pre-built images:
+
+```yaml
+services:
+  stock-analyst:
+    image: ghcr.io/krbob/stock-analyst:main
+    ports:
+      - "8080:8080"
+    depends_on:
+      - stock-analyst-backend-yfinance
+    environment:
+      - BACKEND_URL=http://stock-analyst-backend-yfinance:8081
+    restart: unless-stopped
+
+  stock-analyst-backend-yfinance:
+    image: ghcr.io/krbob/stock-analyst-backend-yfinance:main
+    restart: unless-stopped
+```
+
+### Development
+
+Requires the Python backend to be running (either via Docker or directly).
+
+```bash
+./gradlew run
+```
+
+### Tests
 
 ```bash
 # Kotlin
@@ -322,7 +347,7 @@ pip install -r backend-yfinance/requirements-dev.txt
 pytest backend-yfinance/test_app.py
 ```
 
-## Tech stack
+## Tech Stack
 
 | Component          | Technology              |
 |--------------------|-------------------------|

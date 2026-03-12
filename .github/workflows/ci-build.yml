@@ -107,6 +107,16 @@ jobs:
             echo "❌ history with dividends did not respond properly"
             exit 1
           fi
+
+          if ! curl --fail -X GET "http://localhost:8080/indicators/aapl?indicators=rsi"; then
+            echo "❌ indicators endpoint did not respond properly"
+            exit 1
+          fi
+
+          if ! curl --fail -X GET "http://localhost:8080/indicators/aapl?indicators=rsi&period=5y&interval=1wk"; then
+            echo "❌ indicators with weekly interval did not respond properly"
+            exit 1
+          fi
       - name: Clean up test containers
         if: always()
         run: docker compose down
