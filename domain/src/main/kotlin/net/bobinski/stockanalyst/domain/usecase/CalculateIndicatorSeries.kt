@@ -2,6 +2,7 @@ package net.bobinski.stockanalyst.domain.usecase
 
 import net.bobinski.stockanalyst.domain.model.BollingerValue
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
+import net.bobinski.stockanalyst.domain.model.IndicatorCatalog
 import net.bobinski.stockanalyst.domain.model.Indicators
 import net.bobinski.stockanalyst.domain.model.MacdValue
 import net.bobinski.stockanalyst.domain.model.SingleValue
@@ -17,7 +18,7 @@ import java.time.Duration
 
 object CalculateIndicatorSeries {
 
-    private val VALID_KEYS = setOf("sma50", "sma200", "ema50", "ema200", "bb", "rsi", "macd")
+    val validKeys = IndicatorCatalog.validKeys
 
     private data class BarTime(val date: kotlinx.datetime.LocalDate, val timestamp: Long?)
 
@@ -27,7 +28,7 @@ object CalculateIndicatorSeries {
         barDuration: Duration = Duration.ofDays(1),
         conversion: Collection<HistoricalPrice>? = null
     ): Indicators {
-        val keys = requested.intersect(VALID_KEYS)
+        val keys = requested.intersect(validKeys)
         if (keys.isEmpty()) return Indicators()
 
         val sorted = data.sortedBy { it.sortKey }

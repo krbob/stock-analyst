@@ -13,11 +13,13 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
+import kotlinx.io.IOException
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.model.BasicInfo
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
+import net.bobinski.stockanalyst.domain.model.SearchResult
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
@@ -109,6 +111,47 @@ class BackendProviderTest {
         val result = provider.getHistory("BAD", StockDataProvider.Period._1y)
 
         assertTrue(result.isEmpty())
+    }
+
+    @Test
+    fun `search returns results on success`() = runTest {
+        val expected = listOf(SearchResult("AAPL", "Apple Inc.", "NMS", "EQUITY"))
+        val provider = providerWith(json.encodeToString(expected), HttpStatusCode.OK)
+
+        val result = provider.search("apple")
+
+        assertEquals(expected, result)
+    }
+
+    @Test
+    fun `search returns empty on 404`() = runTest {
+        val provider = providerWith("{}", HttpStatusCode.NotFound)
+
+        val result = provider.search("missing")
+
+        assertTrue(result.isEmpty())
+    }
+
+    @Test
+    fun `search throws on 500`() = runTest {
+        val provider = providerWith("{}", HttpStatusCode.InternalServerError)
+
+        val exception = assertThrows<BackendDataException> { provider.search("apple") }
+
+        assertEquals(BackendDataException.Reason.BACKEND_ERROR, exception.reason)
+    }
+
+    @Test
+    fun `getInfo throws on transport exception`() = runTest {
+        val engine = MockEngine { throw IOException("timeout") }
+        val client = HttpClient(engine) {
+            install(ContentNegotiation) { json(json) }
+        }
+        val provider = BackendProvider(client, "http://localhost:8081")
+
+        val exception = assertThrows<BackendDataException> { provider.getInfo("AAPL") }
+
+        assertEquals(BackendDataException.Reason.BACKEND_ERROR, exception.reason)
     }
 
     @Test

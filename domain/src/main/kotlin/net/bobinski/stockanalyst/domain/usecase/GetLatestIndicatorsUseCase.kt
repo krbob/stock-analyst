@@ -4,6 +4,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import net.bobinski.stockanalyst.core.time.CurrentTimeProvider
 import net.bobinski.stockanalyst.domain.error.BackendDataException
+import net.bobinski.stockanalyst.domain.model.IndicatorCatalog
 import net.bobinski.stockanalyst.domain.model.LatestIndicators
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider.Interval
@@ -15,7 +16,7 @@ class GetLatestIndicatorsUseCase(
     private val currentTimeProvider: CurrentTimeProvider
 ) {
 
-    private val allIndicators = setOf("rsi", "macd", "bb", "sma50", "sma200", "ema50", "ema200")
+    private val allIndicators = IndicatorCatalog.validKeys
 
     suspend operator fun invoke(
         symbol: String,
@@ -34,13 +35,8 @@ class GetLatestIndicatorsUseCase(
         val info = infoDeferred.await()
         info?.name ?: throw BackendDataException.unknownSymbol(symbol)
 
-        val nativeCurrency = info.currency?.uppercase()
-        val targetCurrency = currency?.uppercase()
-        val conversionSymbol = if (targetCurrency != null && nativeCurrency != null
-            && targetCurrency != nativeCurrency
-        ) {
-            stockDataProvider.resolveConversionSymbol(nativeCurrency, targetCurrency)
-        } else null
+        val conversionPlan = stockDataProvider.planCurrencyConversion(symbol, info.currency, currency)
+        val conversionSymbol = conversionPlan.conversionSymbol
 
         var history = historyDeferred.await()
         if (history.isEmpty()) throw BackendDataException.missingHistory(symbol)

@@ -14,6 +14,7 @@ import net.bobinski.stockanalyst.domain.model.latestPrice
 import net.bobinski.stockanalyst.domain.model.priceFor
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider.Period
+import org.slf4j.LoggerFactory
 
 class GetQuoteUseCase(
     private val stockDataProvider: StockDataProvider,
@@ -21,6 +22,8 @@ class GetQuoteUseCase(
     private val calculateGain: CalculateGain,
     private val calculateYield: CalculateYield
 ) {
+
+    private val logger = LoggerFactory.getLogger(GetQuoteUseCase::class.java)
 
     suspend operator fun invoke(symbol: String, currency: String? = null): Quote =
         coroutineScope {
@@ -30,14 +33,19 @@ class GetQuoteUseCase(
             val info = infoDeferred.await()
             val name = info?.name ?: throw BackendDataException.unknownSymbol(symbol)
 
-            val nativeCurrency = info.currency?.uppercase()
-            val targetCurrency = currency?.uppercase()
-            val conversionSymbol = if (targetCurrency != null && nativeCurrency != null
-                && targetCurrency != nativeCurrency) {
-                stockDataProvider.resolveConversionSymbol(nativeCurrency, targetCurrency)
-            } else null
+            val conversionPlan = stockDataProvider.planCurrencyConversion(symbol, info.currency, currency)
+            val conversionSymbol = conversionPlan.conversionSymbol
 
-            val convInfoDeferred = conversionSymbol?.let { async { stockDataProvider.getInfo(it) } }
+            val convInfoDeferred = conversionSymbol?.let { conversion ->
+                async {
+                    try {
+                        stockDataProvider.getInfo(conversion)
+                    } catch (e: BackendDataException) {
+                        logger.warn("Failed to fetch spot conversion info for {}", conversion, e)
+                        null
+                    }
+                }
+            }
 
             var period = Period._5y
             var history = historyDeferred.await()
@@ -57,7 +65,6 @@ class GetQuoteUseCase(
             }
             if (history.isEmpty()) throw BackendDataException.missingHistory(symbol)
 
-            val conversionInfo = convInfoDeferred?.await()
             val conversionHistory = conversionSymbol?.let {
                 val convHistory = stockDataProvider.getHistory(it, period)
                 if (convHistory.isEmpty()) throw BackendDataException.insufficientConversion(it)
@@ -66,6 +73,7 @@ class GetQuoteUseCase(
                 if (history.isEmpty()) throw BackendDataException.insufficientConversion(it)
                 convHistory
             }
+            val conversionInfo = convInfoDeferred?.await()
             val conversionPrice = conversionInfo?.price
             val latestConvRate = conversionHistory?.latestPrice()
             val convRate = conversionPrice ?: latestConvRate
@@ -73,7 +81,7 @@ class GetQuoteUseCase(
             Quote(
                 symbol = symbol,
                 name = name,
-                currency = targetCurrency ?: nativeCurrency,
+                currency = conversionPlan.responseCurrency,
                 date = currentTimeProvider.localDate(),
                 lastPrice = (info.price ?: CalculateLastPrice(history, null))
                     .applyConversion(conversionPrice),

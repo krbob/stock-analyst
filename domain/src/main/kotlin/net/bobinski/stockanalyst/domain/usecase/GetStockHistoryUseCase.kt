@@ -46,12 +46,8 @@ class GetStockHistoryUseCase(
             val info = infoDeferred.await()
             val name = info?.name ?: throw BackendDataException.unknownSymbol(symbol)
 
-            val nativeCurrency = info.currency?.uppercase()
-            val targetCurrency = currency?.uppercase()
-            val conversionSymbol = if (targetCurrency != null && nativeCurrency != null
-                && targetCurrency != nativeCurrency) {
-                stockDataProvider.resolveConversionSymbol(nativeCurrency, targetCurrency)
-            } else null
+            val conversionPlan = stockDataProvider.planCurrencyConversion(symbol, info.currency, currency)
+            val conversionSymbol = conversionPlan.conversionSymbol
 
             val conversionHistory = conversionSymbol?.let {
                 val convHistory = stockDataProvider.getHistory(it, fetchPeriod)
@@ -98,7 +94,7 @@ class GetStockHistoryUseCase(
                 interval = interval.value,
                 prices = finalPrices,
                 indicators = computed,
-                currency = targetCurrency ?: nativeCurrency
+                currency = conversionPlan.responseCurrency
             )
         }
 

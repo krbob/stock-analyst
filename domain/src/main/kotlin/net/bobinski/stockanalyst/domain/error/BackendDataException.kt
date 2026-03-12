@@ -17,6 +17,9 @@ class BackendDataException(
         fun insufficientConversion(symbol: String) =
             BackendDataException("Not enough conversion history for $symbol", Reason.INSUFFICIENT_DATA)
 
+        fun currencyUnavailable(symbol: String) =
+            BackendDataException("Currency conversion is unavailable for $symbol", Reason.INSUFFICIENT_DATA)
+
         fun backendError(symbol: String) =
             BackendDataException("Backend error for $symbol", Reason.BACKEND_ERROR)
     }

@@ -6,6 +6,7 @@ import io.ktor.client.plugins.cache.HttpCache
 import io.ktor.client.plugins.cache.storage.FileStorage
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logging
 import io.ktor.client.plugins.logging.LoggingFormat
@@ -24,6 +25,11 @@ val BackendProviderModule = module {
         HttpClient(CIO) {
             install(ContentNegotiation) { json(get<Json>()) }
             defaultRequest { accept(ContentType.Application.Json) }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 15_000
+                connectTimeoutMillis = 5_000
+                socketTimeoutMillis = 15_000
+            }
             install(HttpCache) {
                 val cacheDir = Files.createDirectories(
                     Paths.get(System.getProperty("java.io.tmpdir"), "stock-analyst-cache")

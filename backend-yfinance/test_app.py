@@ -1,6 +1,5 @@
-import calendar
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import pandas as pd
@@ -100,8 +99,8 @@ class TestHistoryEndpoint:
 
         response = client.get("/history/AAPL/1y")
 
-        assert response.status_code == 200
-        assert response.get_json() == []
+        assert response.status_code == 502
+        assert response.get_json()["error"] == "Failed to fetch data from upstream provider"
 
     def test_intraday_includes_timestamp(self, client, mock_ticker):
         ts = pd.Timestamp("2024-06-15 09:30:00", tz="America/New_York")
@@ -133,7 +132,7 @@ class TestHistoryEndpoint:
         response = client.get("/history/AAPL/1d?interval=5m")
 
         data = response.get_json()
-        expected = calendar.timegm(datetime(2024, 6, 15, 9, 30).timetuple())
+        expected = int(datetime(2024, 6, 15, 13, 30, tzinfo=timezone.utc).timestamp())
         assert data[0]["timestamp"] == expected
 
     def test_daily_excludes_timestamp(self, client, mock_ticker):
@@ -238,7 +237,7 @@ class TestInfoEndpoint:
 
         response = client.get("/info/AAPL")
 
-        assert response.status_code == 404
+        assert response.status_code == 502
         assert "Internal details" not in str(response.get_json())
 
 
@@ -303,7 +302,7 @@ class TestDataCache:
             r1 = client.get("/info/AAPL")
             r2 = client.get("/info/AAPL")
 
-            assert r1.status_code == 404
+            assert r1.status_code == 502
             assert r2.status_code == 200
             assert r2.get_json()["name"] == "Apple Inc."
 
@@ -346,12 +345,12 @@ class TestSearchEndpoint:
             assert "^GSPC" in symbols
             assert "AAPL240621C00200000" not in symbols
 
-    def test_returns_empty_on_error(self, client):
+    def test_returns_502_on_error(self, client):
         with patch("app.yf.Search", side_effect=Exception("API error")):
             response = client.get("/search/xyz")
 
-            assert response.status_code == 200
-            assert response.get_json() == []
+            assert response.status_code == 502
+            assert response.get_json()["error"] == "Failed to fetch data from upstream provider"
 
     def test_cache_header_set(self, client):
         with patch("app.yf.Search") as mock_search:

@@ -218,6 +218,21 @@ class GetStockHistoryUseCaseTest {
     }
 
     @Test
+    fun `throws when requested currency cannot be resolved without native currency`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.", currency = null)
+        coEvery { stockDataProvider.getHistory("AAPL", Period._1y, Interval.DAILY) } returns listOf(
+            historicalPrice(LocalDate(2024, 6, 15), 200.0)
+        )
+
+        val exception = assertThrows<BackendDataException> {
+            useCase("AAPL", Period._1y, currency = "EUR")
+        }
+
+        assertEquals(BackendDataException.Reason.INSUFFICIENT_DATA, exception.reason)
+        assertTrue(exception.message!!.contains("Currency conversion is unavailable"))
+    }
+
+    @Test
     fun `trims history to conversion overlap when conversion starts later`() = runTest {
         coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.", currency = "USD")
         coEvery { stockDataProvider.getHistory("AAPL", Period._1y, Interval.DAILY) } returns listOf(

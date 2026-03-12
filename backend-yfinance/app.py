@@ -1,4 +1,3 @@
-import calendar
 import logging
 import math
 import threading
@@ -37,6 +36,7 @@ INTRADAY_CACHE_SECONDS = 30
 
 INFO_CACHE_SECONDS = 300
 SEARCH_CACHE_SECONDS = 300
+MAX_CACHE_ENTRIES = 2048
 
 SEARCH_QUOTE_TYPES = {"EQUITY", "ETF", "INDEX"}
 
@@ -44,17 +44,46 @@ _data_cache = {}
 _data_cache_lock = threading.Lock()
 
 
+class ApiError(Exception):
+    def __init__(self, message, status_code):
+        super().__init__(message)
+        self.message = message
+        self.status_code = status_code
+
+
+class UpstreamDataError(ApiError):
+    def __init__(self, message="Failed to fetch data from upstream provider"):
+        super().__init__(message, 502)
+
+
+def _cache_cleanup(now=None):
+    current_time = now or time.time()
+    expired_keys = [key for key, (_value, expiry) in _data_cache.items() if current_time >= expiry]
+    for key in expired_keys:
+        _data_cache.pop(key, None)
+
+    overflow = len(_data_cache) - MAX_CACHE_ENTRIES
+    if overflow > 0:
+        for key, _entry in sorted(_data_cache.items(), key=lambda item: item[1][1])[:overflow]:
+            _data_cache.pop(key, None)
+
+
 def _cache_get(key):
     with _data_cache_lock:
+        _cache_cleanup()
         entry = _data_cache.get(key)
         if entry and time.time() < entry[1]:
             return entry[0]
+        if entry:
+            _data_cache.pop(key, None)
         return None
 
 
 def _cache_set(key, value, ttl):
     with _data_cache_lock:
+        _cache_cleanup()
         _data_cache[key] = (value, time.time() + ttl)
+        _cache_cleanup()
 
 
 @dataclass
@@ -108,8 +137,8 @@ def get_history(symbol, period, interval="1d"):
     try:
         history = ticker.history(period=period, interval=interval, auto_adjust=False)
     except Exception:
-        logger.warning("Failed to fetch history for %s (%s)", symbol, period)
-        return []
+        logger.warning("Failed to fetch history for %s (%s)", symbol, period, exc_info=True)
+        raise UpstreamDataError()
     try:
         dividends = ticker.dividends
     except Exception:
@@ -131,10 +160,8 @@ def get_history(symbol, period, interval="1d"):
             dividend=dividends.loc[index] if index in dividends.index else 0.0,
         )
         if intraday:
-            # Shift to exchange-local time for chart display:
-            # strip timezone to get naive local wall-clock, then treat as UTC
-            naive_local = index.replace(tzinfo=None)
-            price.timestamp = int(calendar.timegm(naive_local.timetuple()))
+            utc_index = index.tz_localize("UTC") if index.tzinfo is None else index.tz_convert("UTC")
+            price.timestamp = int(utc_index.timestamp())
         result.append(price)
 
     if result:
@@ -151,8 +178,8 @@ def get_basic_info(symbol):
     try:
         info = yf.Ticker(symbol).info
     except Exception:
-        logger.warning("Failed to fetch info for %s", symbol)
-        return None
+        logger.warning("Failed to fetch info for %s", symbol, exc_info=True)
+        raise UpstreamDataError()
     if not info:
         return None
 
@@ -201,8 +228,8 @@ def search_tickers(query):
     try:
         results = yf.Search(query, max_results=20).quotes
     except Exception:
-        logger.warning("Failed to search for %s", query)
-        return []
+        logger.warning("Failed to search for %s", query, exc_info=True)
+        raise UpstreamDataError()
 
     filtered = [
         SearchResult(
@@ -236,6 +263,11 @@ def log_request_info(response):
 def handle_exception(e):
     logger.error("Exception: %s\n%s", e, traceback.format_exc())
     return jsonify({"error": "An internal error occurred"}), 500
+
+
+@app.errorhandler(ApiError)
+def handle_api_error(e):
+    return jsonify({"error": e.message}), e.status_code
 
 
 def _serialize_price(price):

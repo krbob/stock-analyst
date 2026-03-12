@@ -81,6 +81,19 @@ class QuoteRouteTest {
     }
 
     @Test
+    fun `responds with 422 when currency conversion metadata is unavailable`() = testApplication {
+        val useCase = mockk<GetQuoteUseCase>()
+        coEvery { useCase.invoke("AAPL", "EUR") } throws
+            BackendDataException.currencyUnavailable("AAPL")
+        configureApp(useCase)
+
+        val response = client.get("/quote/AAPL?currency=EUR")
+
+        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+        assertTrue(response.bodyAsText().contains("Currency conversion is unavailable"))
+    }
+
+    @Test
     fun `responds with 500 when unexpected exception is thrown`() = testApplication {
         val useCase = mockk<GetQuoteUseCase>()
         coEvery { useCase.invoke("FAIL", null) } throws RuntimeException("Something went wrong")

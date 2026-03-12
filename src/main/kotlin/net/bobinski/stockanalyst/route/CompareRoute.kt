@@ -7,8 +7,6 @@ import io.ktor.server.routing.get
 import net.bobinski.stockanalyst.domain.usecase.CompareStocksUseCase
 import org.koin.ktor.ext.inject
 
-private val SYMBOL_PATTERN = Regex("^[a-zA-Z0-9.\\-=^]{1,20}$")
-private val CURRENCY_PATTERN = Regex("^[A-Za-z]{3}$")
 private const val MAX_SYMBOLS = 10
 
 fun Route.compareRoute() {
@@ -30,13 +28,13 @@ fun Route.compareRoute() {
             )
         }
 
-        val invalidSymbol = symbols.firstOrNull { !SYMBOL_PATTERN.matches(it) }
+        val invalidSymbol = symbols.firstOrNull { !symbolPattern.matches(it) }
         if (invalidSymbol != null) {
             return@get call.respondError(HttpStatusCode.BadRequest, "Invalid symbol: $invalidSymbol")
         }
 
         val currency = call.request.queryParameters["currency"]
-        if (currency != null && !CURRENCY_PATTERN.matches(currency)) {
+        if (currency != null && !currencyPattern.matches(currency)) {
             return@get call.respondError(HttpStatusCode.BadRequest, "Invalid currency code: $currency")
         }
 

@@ -138,6 +138,31 @@ class GetQuoteUseCaseTest {
     }
 
     @Test
+    fun `falls back to historical fx rate when spot conversion info fails`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
+        every { stockDataProvider.resolveConversionSymbol("USD", "EUR") } returns "EUR=X"
+        coEvery { stockDataProvider.getInfo("EUR=X") } throws BackendDataException.backendError("EUR=X")
+        coEvery { stockDataProvider.getHistory("AAPL", Period._5y) } returns priceHistory(500)
+        coEvery { stockDataProvider.getHistory("EUR=X", Period._5y) } returns priceHistory(500)
+
+        val result = useCase("AAPL", "EUR")
+
+        assertEquals("EUR", result.currency)
+        assertTrue(result.lastPrice > 0)
+    }
+
+    @Test
+    fun `throws when requested currency cannot be resolved without native currency`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.").copy(currency = null)
+        coEvery { stockDataProvider.getHistory("AAPL", Period._5y) } returns priceHistory(500)
+
+        val exception = assertThrows<BackendDataException> { useCase("AAPL", "EUR") }
+
+        assertEquals(BackendDataException.Reason.INSUFFICIENT_DATA, exception.reason)
+        assertTrue(exception.message!!.contains("Currency conversion is unavailable"))
+    }
+
+    @Test
     fun `calculates dividend growth from history`() = runTest {
         val today = LocalDate(2024, 6, 15)
         val history = (0 until 730).map { i ->

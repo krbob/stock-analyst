@@ -4,6 +4,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
+import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.model.SearchResult
 import net.bobinski.stockanalyst.domain.usecase.SearchTickerUseCase
 import org.koin.ktor.ext.inject
@@ -41,6 +42,11 @@ fun Route.searchRoute() {
 
         val results = try {
             searchTickerUseCase(query)
+        } catch (e: BackendDataException) {
+            return@get call.respondError(
+                e.toHttpStatusCode(),
+                e.message ?: "Error."
+            )
         } catch (e: Exception) {
             return@get call.respondError(
                 HttpStatusCode.InternalServerError,

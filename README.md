@@ -84,7 +84,7 @@ Returns the latest values of technical indicators for a stock. Computes indicato
 | Parameter    | Type  | Required | Description                                                        |
 |--------------|-------|----------|--------------------------------------------------------------------|
 | `symbol`     | path  | yes      | Stock ticker (e.g., `AAPL`, `MSFT`)                               |
-| `indicators` | query | no       | Comma-separated indicators: `rsi`, `macd`, `bb`, `sma50`, `sma200`, `ema50`, `ema200`. Omit for all. |
+| `indicators` | query | no       | Comma-separated indicators: `rsi`, `macd`, `bb`, `sma50`, `sma200`, `ema50`, `ema200`. Unknown values return `400`. Omit for all. |
 | `period`     | query | no       | History period for computation. Default: `1y`. Values: `1d`, `5d`, `1mo`, `3mo`, `6mo`, `1y`, `2y`, `5y`, `10y`, `ytd`, `max` |
 | `interval`   | query | no       | Bar interval. Auto-selected if omitted. Values: `1m`, `5m`, `15m`, `30m`, `1h`, `1d`, `1wk`, `1mo`. Use `1wk` for weekly indicators, `1mo` for monthly. |
 | `currency`   | query | no       | Target currency ISO code (e.g., `EUR`, `PLN`)                     |
@@ -133,9 +133,9 @@ Returns historical OHLCV price data with optional technical indicator series and
 | `symbol`     | path  | yes      | Stock ticker (e.g., `AAPL`, `MSFT`, `GC=F`)                      |
 | `period`     | query | no       | Time range. Default: `1y`. Values: `1d`, `5d`, `1mo`, `3mo`, `6mo`, `1y`, `2y`, `5y`, `10y`, `ytd`, `max` |
 | `interval`   | query | no       | Candle interval. Auto-selected if omitted (`5y`/`10y` → weekly, `max` → monthly, others → daily). Values: `1m`, `5m`, `15m`, `30m`, `1h`, `1d`, `1wk`, `1mo` |
-| `indicators` | query | no       | Comma-separated: `sma50`, `sma200`, `ema50`, `ema200`, `bb`, `rsi`, `macd` |
+| `indicators` | query | no       | Comma-separated: `sma50`, `sma200`, `ema50`, `ema200`, `bb`, `rsi`, `macd`. Unknown values return `400`. |
 | `currency`   | query | no       | Target currency ISO code (e.g., `EUR`, `PLN`)                     |
-| `dividends`  | query | no       | Set to `true` to include dividends in weekly/monthly candles. Daily candles always include dividends. Default: `false` |
+| `dividends`  | query | no       | Set to `true` to include dividends in weekly/monthly candles. Daily candles always include dividends. Valid values: `true`, `false`. Default: `false` |
 
 ```bash
 curl http://localhost:8080/history/AAPL
@@ -174,7 +174,7 @@ curl "http://localhost:8080/history/AAPL?period=1d&interval=5m"
 }
 ```
 
-When `indicators` is provided, extra historical data is fetched for indicator warmup (e.g., 200 extra bars for SMA200) and trimmed to the requested period. Intraday intervals (`1m`, `5m`, etc.) include a `timestamp` field (epoch seconds) instead of `date`. Intraday responses are cached for 30 seconds.
+When `indicators` is provided, extra historical data is fetched for indicator warmup (e.g., 200 extra bars for SMA200) and trimmed to the requested period. Intraday intervals (`1m`, `5m`, etc.) include a `timestamp` field with UTC epoch seconds alongside `date`. Intraday responses are cached for 30 seconds.
 
 ---
 
@@ -266,7 +266,7 @@ curl "http://localhost:8080/history/AAPL?period=1y&currency=EUR"
 
 **Not converted** (dimensionless): `peRatio`, `pbRatio`, `roe`, `beta`.
 
-The `currency` field in the response reflects the target currency when conversion is active.
+The `currency` field in the response reflects the target currency only after a successful conversion. If the source instrument does not expose its native currency or the FX series is unavailable, the API returns `422`.
 
 ### Technical indicators
 
@@ -294,10 +294,10 @@ Search results are cached in-memory for 5 minutes (up to 1000 entries) to reduce
 
 | Code | Reason                                               |
 |------|------------------------------------------------------|
-| 400  | Invalid symbol format, missing parameters, or too many symbols (max 10) |
+| 400  | Invalid symbol format, missing parameters, invalid indicator keys, invalid boolean flags, or too many symbols (max 10) |
 | 404  | Unknown symbol or no history available               |
-| 422  | Insufficient conversion data for requested date range |
-| 502  | Yahoo Finance backend error                          |
+| 422  | Insufficient conversion data or conversion unavailable for the requested symbol/date range |
+| 502  | Upstream Yahoo Finance/backend error                 |
 
 ## Running
 

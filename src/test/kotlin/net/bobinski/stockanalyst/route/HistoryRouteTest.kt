@@ -157,6 +157,17 @@ class HistoryRouteTest {
     }
 
     @Test
+    fun `responds with 400 for invalid indicators`() = testApplication {
+        val useCase = mockk<GetStockHistoryUseCase>()
+        configureApp(useCase)
+
+        val response = client.get("/history/AAPL?indicators=sma50,unknown")
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        assertTrue(response.bodyAsText().contains("Invalid indicators"))
+    }
+
+    @Test
     fun `passes empty indicators when not specified`() = testApplication {
         val useCase = mockk<GetStockHistoryUseCase>()
         coEvery { useCase.invoke("AAPL", Period._1y, null, emptySet()) } returns testHistory()
@@ -209,6 +220,30 @@ class HistoryRouteTest {
         val response = client.get("/history/AAPL?currency=INVALID")
 
         assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    @Test
+    fun `responds with 400 for invalid dividends flag`() = testApplication {
+        val useCase = mockk<GetStockHistoryUseCase>()
+        configureApp(useCase)
+
+        val response = client.get("/history/AAPL?dividends=yes")
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        assertTrue(response.bodyAsText().contains("Invalid dividends flag"))
+    }
+
+    @Test
+    fun `responds with 422 when currency conversion metadata is unavailable`() = testApplication {
+        val useCase = mockk<GetStockHistoryUseCase>()
+        coEvery { useCase.invoke("AAPL", Period._1y, null, emptySet(), "EUR", false) } throws
+            BackendDataException.currencyUnavailable("AAPL")
+        configureApp(useCase)
+
+        val response = client.get("/history/AAPL?currency=EUR")
+
+        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+        assertTrue(response.bodyAsText().contains("Currency conversion is unavailable"))
     }
 
     private fun ApplicationTestBuilder.configureApp(useCase: GetStockHistoryUseCase) {

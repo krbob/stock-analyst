@@ -106,6 +106,17 @@ class IndicatorsRouteTest {
     }
 
     @Test
+    fun `responds with 400 for invalid indicators`() = testApplication {
+        val useCase = mockk<GetLatestIndicatorsUseCase>()
+        configureApp(useCase)
+
+        val response = client.get("/indicators/AAPL?indicators=rsi,unknown")
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        assertTrue(response.bodyAsText().contains("Invalid indicators"))
+    }
+
+    @Test
     fun `passes currency parameter to use case`() = testApplication {
         val useCase = mockk<GetLatestIndicatorsUseCase>()
         coEvery { useCase.invoke("AAPL", emptySet(), "EUR", Period._1y, null) } returns testIndicators()
@@ -158,6 +169,19 @@ class IndicatorsRouteTest {
 
         assertEquals(HttpStatusCode.BadRequest, response.status)
         assertTrue(response.bodyAsText().contains("Invalid currency code"))
+    }
+
+    @Test
+    fun `responds with 422 when currency conversion metadata is unavailable`() = testApplication {
+        val useCase = mockk<GetLatestIndicatorsUseCase>()
+        coEvery { useCase.invoke("AAPL", emptySet(), "EUR", Period._1y, null) } throws
+            BackendDataException.currencyUnavailable("AAPL")
+        configureApp(useCase)
+
+        val response = client.get("/indicators/AAPL?currency=EUR")
+
+        assertEquals(HttpStatusCode.UnprocessableEntity, response.status)
+        assertTrue(response.bodyAsText().contains("Currency conversion is unavailable"))
     }
 
     private fun ApplicationTestBuilder.configureApp(useCase: GetLatestIndicatorsUseCase) {

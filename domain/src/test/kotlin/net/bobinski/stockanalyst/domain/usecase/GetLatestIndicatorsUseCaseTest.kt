@@ -126,6 +126,17 @@ class GetLatestIndicatorsUseCaseTest {
     }
 
     @Test
+    fun `throws when requested currency cannot be resolved without native currency`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.").copy(currency = null)
+        coEvery { stockDataProvider.getHistory("AAPL", Period._1y) } returns priceHistory(252)
+
+        val exception = assertThrows<BackendDataException> { useCase("AAPL", currency = "EUR") }
+
+        assertEquals(BackendDataException.Reason.INSUFFICIENT_DATA, exception.reason)
+        assertTrue(exception.message!!.contains("Currency conversion is unavailable"))
+    }
+
+    @Test
     fun `returns macd snapshot with correct fields`() = runTest {
         coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
         coEvery { stockDataProvider.getHistory("AAPL", Period._1y) } returns priceHistory(252)

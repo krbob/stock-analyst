@@ -47,8 +47,13 @@ internal class BackendProvider(
         period: StockDataProvider.Period,
         interval: StockDataProvider.Interval
     ): Collection<HistoricalPrice> = coalesce("history:$symbol:${period.value}:${interval.value}") {
-        val response = client.get("$backendUrl/history/$symbol/${period.value}") {
-            url.parameters.append("interval", interval.value)
+        val response = try {
+            client.get("$backendUrl/history/$symbol/${period.value}") {
+                url.parameters.append("interval", interval.value)
+            }
+        } catch (e: Exception) {
+            logger.error("Failed to fetch history for {} ({})", symbol, period.value, e)
+            throw BackendDataException.backendError(symbol)
         }
         if (response.status.value >= 500) {
             logger.error("Backend returned {} for history of {} ({})", response.status, symbol, period.value)
@@ -67,7 +72,16 @@ internal class BackendProvider(
     }
 
     override suspend fun search(query: String): List<SearchResult> = coalesce("search:$query") {
-        val response = client.get("$backendUrl/search/${query.encodeURLPath()}")
+        val response = try {
+            client.get("$backendUrl/search/${query.encodeURLPath()}")
+        } catch (e: Exception) {
+            logger.error("Failed to fetch search results for {}", query, e)
+            throw BackendDataException.backendError(query)
+        }
+        if (response.status.value >= 500) {
+            logger.error("Backend returned {} for search query: {}", response.status, query)
+            throw BackendDataException.backendError(query)
+        }
         if (!response.status.isSuccess()) {
             logger.warn("Backend returned {} for search query: {}", response.status, query)
             return@coalesce emptyList()
@@ -76,7 +90,7 @@ internal class BackendProvider(
             response.body()
         } catch (e: Exception) {
             logger.error("Failed to deserialize search results for {}", query, e)
-            emptyList()
+            throw BackendDataException.backendError(query)
         }
     }
 
@@ -85,7 +99,12 @@ internal class BackendProvider(
         else "${from.uppercase()}${to.uppercase()}=X"
 
     override suspend fun getInfo(symbol: String): BasicInfo? = coalesce("info:$symbol") {
-        val response = client.get("$backendUrl/info/$symbol")
+        val response = try {
+            client.get("$backendUrl/info/$symbol")
+        } catch (e: Exception) {
+            logger.error("Failed to fetch info for {}", symbol, e)
+            throw BackendDataException.backendError(symbol)
+        }
         if (response.status.value >= 500) {
             logger.error("Backend returned {} for info of {}", response.status, symbol)
             throw BackendDataException.backendError(symbol)
