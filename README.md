@@ -136,12 +136,15 @@ Returns historical OHLCV price data with optional technical indicator series and
 | `indicators` | query | no       | Comma-separated: `sma50`, `sma200`, `ema50`, `ema200`, `bb`, `rsi`, `macd`. Unknown values return `400`. |
 | `currency`   | query | no       | Target currency ISO code (e.g., `EUR`, `PLN`)                     |
 | `dividends`  | query | no       | Set to `true` to include dividends in weekly/monthly candles. Daily candles always include dividends. Valid values: `true`, `false`. Default: `false` |
+| `from`       | query | no       | Exact history start date in `YYYY-MM-DD`. Must be used together with `to`. |
+| `to`         | query | no       | Exact history end date in `YYYY-MM-DD`. Must be used together with `from`. |
 
 ```bash
 curl http://localhost:8080/history/AAPL
 curl "http://localhost:8080/history/AAPL?period=1y&indicators=sma50,sma200,rsi,macd"
 curl "http://localhost:8080/history/AAPL?period=1y&currency=EUR&dividends=true"
 curl "http://localhost:8080/history/AAPL?period=1d&interval=5m"
+curl "http://localhost:8080/history/AAPL?from=2024-01-01&to=2024-06-30"
 ```
 
 **Example response:**
@@ -153,6 +156,8 @@ curl "http://localhost:8080/history/AAPL?period=1d&interval=5m"
   "currency": "USD",
   "period": "1y",
   "interval": "1d",
+  "requestedFrom": "2024-01-01",
+  "requestedTo": "2024-06-30",
   "prices": [
     {
       "date": "2025-03-03",
@@ -174,7 +179,7 @@ curl "http://localhost:8080/history/AAPL?period=1d&interval=5m"
 }
 ```
 
-When `indicators` is provided, extra historical data is fetched for indicator warmup (e.g., 200 extra bars for SMA200) and trimmed to the requested period. Intraday intervals (`1m`, `5m`, etc.) include a `timestamp` field with UTC epoch seconds alongside `date`. Intraday responses are cached for 30 seconds.
+When `indicators` is provided, extra historical data is fetched for indicator warmup (e.g., 200 extra bars for SMA200) and trimmed to the requested period. When `from` and `to` are supplied, the response is trimmed to that exact date window and echoes it back via `requestedFrom` / `requestedTo`; the `period` field then reflects the internal fetch window chosen by the server. Intraday intervals (`1m`, `5m`, etc.) include a `timestamp` field with UTC epoch seconds alongside `date`. Intraday responses are cached for 30 seconds.
 
 ---
 

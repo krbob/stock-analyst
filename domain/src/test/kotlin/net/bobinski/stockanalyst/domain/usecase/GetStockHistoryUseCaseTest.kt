@@ -301,6 +301,55 @@ class GetStockHistoryUseCaseTest {
         assertEquals(0.25, result.prices[1].dividend, 0.001) // week ending 6/14 — includes 6/10 dividend
     }
 
+    @Test
+    fun `selects minimal fetch period and trims to requested range`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
+        coEvery { stockDataProvider.getHistory("AAPL", Period.ytd, Interval.DAILY) } returns listOf(
+            historicalPrice(LocalDate(2023, 12, 31), 180.0),
+            historicalPrice(LocalDate(2024, 1, 2), 185.0),
+            historicalPrice(LocalDate(2024, 3, 1), 195.0),
+            historicalPrice(LocalDate(2024, 6, 15), 210.0)
+        )
+
+        val result = useCase(
+            symbol = "AAPL",
+            period = Period._1mo,
+            requestedFrom = LocalDate(2024, 1, 2),
+            requestedTo = LocalDate(2024, 3, 1)
+        )
+
+        assertEquals("ytd", result.period)
+        assertEquals(LocalDate(2024, 1, 2), result.requestedFrom)
+        assertEquals(LocalDate(2024, 3, 1), result.requestedTo)
+        assertEquals(listOf(LocalDate(2024, 1, 2), LocalDate(2024, 3, 1)), result.prices.map { it.date })
+    }
+
+    @Test
+    fun `trims converted history to requested range`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.", currency = "USD")
+        coEvery { stockDataProvider.getHistory("AAPL", Period._1mo, Interval.DAILY) } returns listOf(
+            historicalPrice(LocalDate(2024, 1, 2), 100.0),
+            historicalPrice(LocalDate(2024, 6, 15), 200.0)
+        )
+        coEvery { stockDataProvider.resolveConversionSymbol("USD", "EUR") } returns "EUR=X"
+        coEvery { stockDataProvider.getHistory("EUR=X", Period._1mo) } returns listOf(
+            historicalPrice(LocalDate(2024, 1, 1), 0.9),
+            historicalPrice(LocalDate(2024, 6, 14), 0.95)
+        )
+
+        val result = useCase(
+            symbol = "AAPL",
+            period = Period._1y,
+            currency = "EUR",
+            requestedFrom = LocalDate(2024, 6, 1),
+            requestedTo = LocalDate(2024, 6, 15)
+        )
+
+        assertEquals(1, result.prices.size)
+        assertEquals(LocalDate(2024, 6, 15), result.prices.single().date)
+        assertEquals(190.0, result.prices.single().close, 0.01)
+    }
+
     private fun basicInfo(name: String, currency: String? = null) = BasicInfo(
         name = name, price = 150.0, peRatio = 25.0, pbRatio = 10.0, eps = 5.0, roe = 0.3,
         marketCap = 1_000_000.0, recommendation = "buy", analystCount = 30,

@@ -108,6 +108,11 @@ jobs:
             exit 1
           fi
 
+          if ! curl --fail -X GET "http://localhost:8080/history/aapl?from=2024-01-01&to=2024-06-30"; then
+            echo "❌ history with explicit range did not respond properly"
+            exit 1
+          fi
+
           if ! curl --fail -X GET "http://localhost:8080/indicators/aapl?indicators=rsi"; then
             echo "❌ indicators endpoint did not respond properly"
             exit 1

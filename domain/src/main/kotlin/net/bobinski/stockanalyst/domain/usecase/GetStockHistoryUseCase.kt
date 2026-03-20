@@ -11,6 +11,7 @@ import net.bobinski.stockanalyst.domain.model.HistoricalPrice
 import net.bobinski.stockanalyst.domain.model.StockHistory
 import net.bobinski.stockanalyst.domain.model.convertPrices
 import net.bobinski.stockanalyst.domain.model.trimTo
+import net.bobinski.stockanalyst.domain.model.trimToRange
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider.Interval
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider.Period
@@ -27,12 +28,25 @@ class GetStockHistoryUseCase(
         interval: Interval? = null,
         indicators: Set<String> = emptySet(),
         currency: String? = null,
-        dividends: Boolean = false
+        dividends: Boolean = false,
+        requestedFrom: LocalDate? = null,
+        requestedTo: LocalDate? = null
     ): StockHistory =
         coroutineScope {
+            val today = currentTimeProvider.localDate()
+            val range = if (requestedFrom != null && requestedTo != null) {
+                requestedFrom to requestedTo
+            } else {
+                null
+            }
+            val rangeRequested = range != null
             val interval = interval ?: intervalFor(period)
             val warmup = warmupBars(indicators)
-            val fetchPeriod = if (warmup > 0) extendedPeriod(period, interval, warmup) else period
+            val basePeriod = when {
+                rangeRequested -> minimalPeriodCovering(range.first, today)
+                else -> period
+            }
+            val fetchPeriod = if (warmup > 0) extendedPeriod(basePeriod, interval, warmup) else basePeriod
             val barDuration = barDuration(interval)
 
             val infoDeferred = async { stockDataProvider.getInfo(symbol) }
@@ -71,17 +85,22 @@ class GetStockHistoryUseCase(
 
             val sortedPrices = pricesWithDividends.sortedBy { it.sortKey }
 
-            val needsTrim = fetchPeriod != period
-            val cutoff = if (needsTrim) periodStartDate(period) else null
+            val periodCutoff = if (!rangeRequested && fetchPeriod != period) periodStartDate(period) else null
 
             val computed = if (indicators.isNotEmpty()) {
                 val raw = CalculateIndicatorSeries.compute(sortedPrices, indicators, barDuration, conversionHistory)
-                if (cutoff != null) raw.trimTo(cutoff) else raw
+                when {
+                    rangeRequested -> raw.trimToRange(range.first, range.second)
+                    periodCutoff != null -> raw.trimTo(periodCutoff)
+                    else -> raw
+                }
             } else null
 
-            val displayPrices = if (cutoff != null) {
-                sortedPrices.filter { it.date >= cutoff }
-            } else sortedPrices
+            val displayPrices = when {
+                rangeRequested -> sortedPrices.filter { it.date >= range.first && it.date <= range.second }
+                periodCutoff != null -> sortedPrices.filter { it.date >= periodCutoff }
+                else -> sortedPrices
+            }
 
             val finalPrices = if (conversionHistory != null) {
                 displayPrices.convertPrices(conversionHistory)
@@ -90,11 +109,13 @@ class GetStockHistoryUseCase(
             StockHistory(
                 symbol = symbol,
                 name = name,
-                period = period.value,
+                period = fetchPeriod.value,
                 interval = interval.value,
                 prices = finalPrices,
                 indicators = computed,
-                currency = conversionPlan.responseCurrency
+                currency = conversionPlan.responseCurrency,
+                requestedFrom = range?.first,
+                requestedTo = range?.second
             )
         }
 
@@ -194,4 +215,12 @@ class GetStockHistoryUseCase(
             Period.max -> LocalDate(1900, 1, 1)
         }
     }
+
+    private fun minimalPeriodCovering(from: LocalDate, today: LocalDate): Period =
+        Period.entries
+            .map { period -> period to periodStartDate(period) }
+            .filter { (_, start) -> start <= from }
+            .maxByOrNull { (_, start) -> start }
+            ?.first
+            ?: if (from > today) Period._1d else Period.max
 }

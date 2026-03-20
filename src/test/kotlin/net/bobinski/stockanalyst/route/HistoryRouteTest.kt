@@ -246,6 +246,56 @@ class HistoryRouteTest {
         assertTrue(response.bodyAsText().contains("Currency conversion is unavailable"))
     }
 
+    @Test
+    fun `passes explicit range to use case`() = testApplication {
+        val useCase = mockk<GetStockHistoryUseCase>()
+        val from = LocalDate(2024, 1, 2)
+        val to = LocalDate(2024, 6, 15)
+        coEvery {
+            useCase.invoke("AAPL", Period._1y, null, emptySet(), null, false, from, to)
+        } returns testHistory()
+        configureApp(useCase)
+
+        client.get("/history/AAPL?from=2024-01-02&to=2024-06-15")
+
+        coVerify {
+            useCase.invoke("AAPL", Period._1y, null, emptySet(), null, false, from, to)
+        }
+    }
+
+    @Test
+    fun `responds with 400 when only one range endpoint is provided`() = testApplication {
+        val useCase = mockk<GetStockHistoryUseCase>(relaxed = true)
+        configureApp(useCase)
+
+        val response = client.get("/history/AAPL?from=2024-01-02")
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        assertTrue(response.bodyAsText().contains("'from' and 'to' must be provided together"))
+    }
+
+    @Test
+    fun `responds with 400 for invalid from date`() = testApplication {
+        val useCase = mockk<GetStockHistoryUseCase>(relaxed = true)
+        configureApp(useCase)
+
+        val response = client.get("/history/AAPL?from=2024-99-01&to=2024-06-15")
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        assertTrue(response.bodyAsText().contains("Invalid from date"))
+    }
+
+    @Test
+    fun `responds with 400 when range start is after end`() = testApplication {
+        val useCase = mockk<GetStockHistoryUseCase>(relaxed = true)
+        configureApp(useCase)
+
+        val response = client.get("/history/AAPL?from=2024-06-15&to=2024-01-02")
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        assertTrue(response.bodyAsText().contains("'from' must be earlier"))
+    }
+
     private fun ApplicationTestBuilder.configureApp(useCase: GetStockHistoryUseCase) {
         application {
             configureKoin(useCase)

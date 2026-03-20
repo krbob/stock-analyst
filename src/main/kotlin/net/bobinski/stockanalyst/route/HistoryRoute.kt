@@ -4,6 +4,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
+import kotlinx.datetime.LocalDate
 import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.usecase.GetStockHistoryUseCase
 import org.koin.ktor.ext.inject
@@ -59,8 +60,54 @@ fun Route.historyRoute() {
             )
         }
 
+        val fromParam = call.request.queryParameters["from"]
+        val toParam = call.request.queryParameters["to"]
+        if ((fromParam == null) != (toParam == null)) {
+            return@get call.respondError(
+                HttpStatusCode.BadRequest,
+                "Query parameters 'from' and 'to' must be provided together in YYYY-MM-DD format."
+            )
+        }
+
+        val requestedFrom = fromParam?.let {
+            try {
+                LocalDate.parse(it)
+            } catch (_: IllegalArgumentException) {
+                return@get call.respondError(
+                    HttpStatusCode.BadRequest,
+                    "Invalid from date: $it. Expected format: YYYY-MM-DD."
+                )
+            }
+        }
+        val requestedTo = toParam?.let {
+            try {
+                LocalDate.parse(it)
+            } catch (_: IllegalArgumentException) {
+                return@get call.respondError(
+                    HttpStatusCode.BadRequest,
+                    "Invalid to date: $it. Expected format: YYYY-MM-DD."
+                )
+            }
+        }
+
+        if (requestedFrom != null && requestedTo != null && requestedFrom > requestedTo) {
+            return@get call.respondError(
+                HttpStatusCode.BadRequest,
+                "Query parameter 'from' must be earlier than or equal to 'to'."
+            )
+        }
+
         val result = try {
-            getStockHistoryUseCase(stock, period, interval, indicators, currency, dividends)
+            getStockHistoryUseCase(
+                symbol = stock,
+                period = period,
+                interval = interval,
+                indicators = indicators,
+                currency = currency,
+                dividends = dividends,
+                requestedFrom = requestedFrom,
+                requestedTo = requestedTo
+            )
         } catch (e: BackendDataException) {
             return@get call.respondError(e.toHttpStatusCode(), e.message ?: "Error.")
         } catch (e: Exception) {

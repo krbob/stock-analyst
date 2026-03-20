@@ -48,3 +48,13 @@ fun Indicators.trimTo(cutoff: LocalDate): Indicators = Indicators(
     rsi = rsi?.filter { it.date >= cutoff },
     macd = macd?.filter { it.date >= cutoff },
 )
+
+fun Indicators.trimToRange(from: LocalDate, to: LocalDate): Indicators = Indicators(
+    sma50 = sma50?.filter { it.date >= from && it.date <= to },
+    sma200 = sma200?.filter { it.date >= from && it.date <= to },
+    ema50 = ema50?.filter { it.date >= from && it.date <= to },
+    ema200 = ema200?.filter { it.date >= from && it.date <= to },
+    bb = bb?.filter { it.date >= from && it.date <= to },
+    rsi = rsi?.filter { it.date >= from && it.date <= to },
+    macd = macd?.filter { it.date >= from && it.date <= to },
+)
