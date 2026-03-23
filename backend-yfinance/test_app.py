@@ -323,7 +323,7 @@ class TestDataCache:
 
 
 class TestSearchEndpoint:
-    def test_returns_filtered_results(self, client):
+    def test_returns_all_results(self, client):
         mock_quotes = [
             {"symbol": "AAPL", "shortname": "Apple Inc.", "exchange": "NMS", "quoteType": "EQUITY"},
             {"symbol": "AAPL240621C00200000", "shortname": "AAPL Call", "exchange": "OPR", "quoteType": "OPTION"},
@@ -338,12 +338,13 @@ class TestSearchEndpoint:
 
             assert response.status_code == 200
             data = response.get_json()
-            assert len(data) == 3
+            assert len(data) == 5
             symbols = [r["symbol"] for r in data]
             assert "AAPL" in symbols
             assert "SPY" in symbols
             assert "^GSPC" in symbols
-            assert "AAPL240621C00200000" not in symbols
+            assert "AAPL240621C00200000" in symbols
+            assert "EURUSD=X" in symbols
 
     def test_returns_502_on_error(self, client):
         with patch("app.yf.Search", side_effect=Exception("API error")):

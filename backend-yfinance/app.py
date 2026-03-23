@@ -38,7 +38,6 @@ INFO_CACHE_SECONDS = 300
 SEARCH_CACHE_SECONDS = 300
 MAX_CACHE_ENTRIES = 2048
 
-SEARCH_QUOTE_TYPES = {"EQUITY", "ETF", "INDEX"}
 
 _data_cache = {}
 _data_cache_lock = threading.Lock()
@@ -239,7 +238,6 @@ def search_tickers(query):
             quoteType=q.get("quoteType", ""),
         )
         for q in results
-        if q.get("quoteType") in SEARCH_QUOTE_TYPES
     ]
 
     _cache_set(f"search:{query}", filtered, SEARCH_CACHE_SECONDS)
