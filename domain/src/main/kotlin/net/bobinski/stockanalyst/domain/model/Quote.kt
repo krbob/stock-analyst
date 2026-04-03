@@ -26,7 +26,8 @@ data class Quote(
     val industry: String?,
     val earningsDate: LocalDate?,
     val recommendation: String?,
-    val analystCount: Int?
+    val analystCount: Int?,
+    val previousClose: Double? = null
 ) {
 
     @Serializable
@@ -61,7 +62,8 @@ data class Quote(
         roe = roe?.round(2),
         fiftyTwoWeekHigh = fiftyTwoWeekHigh?.round(2),
         fiftyTwoWeekLow = fiftyTwoWeekLow?.round(2),
-        beta = beta?.round(2)
+        beta = beta?.round(2),
+        previousClose = previousClose?.round(2)
     )
 
     private fun Double?.nanToNull(): Double? = if (this?.isNaN() == true) null else this

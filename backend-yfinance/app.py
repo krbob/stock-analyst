@@ -125,6 +125,7 @@ class BasicInfo:
     earnings_date: str
     dividend_rate: float
     trailing_annual_dividend_rate: float
+    previous_close: float
 
 
 def get_history(symbol, period, interval="1d"):
@@ -213,6 +214,7 @@ def get_basic_info(symbol):
         earnings_date=earnings_str,
         dividend_rate=info.get("dividendRate"),
         trailing_annual_dividend_rate=info.get("trailingAnnualDividendRate"),
+        previous_close=info.get("previousClose") or info.get("regularMarketPreviousClose"),
     )
 
     _cache_set(f"info:{symbol}", result, INFO_CACHE_SECONDS)

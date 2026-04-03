@@ -179,6 +179,7 @@ class TestInfoEndpoint:
             "industry": "Consumer Electronics",
             "dividendRate": 1.0,
             "trailingAnnualDividendRate": 0.96,
+            "previousClose": 193.5,
         })
 
         response = client.get("/info/AAPL")
@@ -199,6 +200,7 @@ class TestInfoEndpoint:
         assert data["industry"] == "Consumer Electronics"
         assert data["dividend_rate"] == 1.0
         assert data["trailing_annual_dividend_rate"] == 0.96
+        assert data["previous_close"] == 193.5
 
     def test_falls_back_to_short_name(self, client, mock_ticker):
         mock_ticker(info={"shortName": "AAPL"})

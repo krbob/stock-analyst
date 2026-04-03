@@ -48,6 +48,7 @@ class GetQuoteUseCaseTest {
         assertEquals(25.0, result.peRatio)
         assertEquals("buy", result.recommendation)
         assertEquals("Technology", result.sector)
+        assertEquals(148.0, result.previousClose)
     }
 
     @Test
@@ -199,7 +200,8 @@ class GetQuoteUseCaseTest {
         fiftyTwoWeekHigh = 200.0, fiftyTwoWeekLow = 120.0, beta = 1.2,
         sector = "Technology", industry = "Consumer Electronics",
         earningsDate = LocalDate(2024, 7, 25),
-        dividendRate = 1.0, trailingAnnualDividendRate = 0.96, currency = "USD"
+        dividendRate = 1.0, trailingAnnualDividendRate = 0.96, currency = "USD",
+        previousClose = 148.0
     )
 
     private fun priceHistory(days: Int): List<HistoricalPrice> = (0 until days).map { i ->

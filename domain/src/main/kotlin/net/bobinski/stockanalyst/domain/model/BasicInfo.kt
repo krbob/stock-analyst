@@ -32,5 +32,7 @@ data class BasicInfo(
     val dividendRate: Double?,
     @SerialName("trailing_annual_dividend_rate")
     val trailingAnnualDividendRate: Double?,
-    val currency: String? = null
+    val currency: String? = null,
+    @SerialName("previous_close")
+    val previousClose: Double? = null
 )

@@ -120,7 +120,8 @@ class GetQuoteUseCase(
                 beta = info.beta,
                 sector = info.sector,
                 industry = info.industry,
-                earningsDate = info.earningsDate
+                earningsDate = info.earningsDate,
+                previousClose = info.previousClose?.let { conversionPrice?.times(it) ?: it }
             ).roundValues()
         }
 
