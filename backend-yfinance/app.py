@@ -214,11 +214,27 @@ def get_basic_info(symbol):
         earnings_date=earnings_str,
         dividend_rate=info.get("dividendRate"),
         trailing_annual_dividend_rate=info.get("trailingAnnualDividendRate"),
-        previous_close=info.get("previousClose") or info.get("regularMarketPreviousClose"),
+        previous_close=_resolve_previous_close(info),
     )
 
     _cache_set(f"info:{symbol}", result, INFO_CACHE_SECONDS)
     return result
+
+
+def _resolve_previous_close(info):
+    """Return previous close, but if the market hasn't opened today,
+    previous_close == price (both refer to the same last session)."""
+    from datetime import datetime, timezone
+
+    price = info.get("regularMarketPrice") or info.get("currentPrice")
+    prev = info.get("previousClose") or info.get("regularMarketPreviousClose")
+    market_time = info.get("regularMarketTime")
+    if market_time and price and prev:
+        market_date = datetime.fromtimestamp(market_time, tz=timezone.utc).date()
+        today = datetime.now(tz=timezone.utc).date()
+        if market_date < today:
+            return price
+    return prev
 
 
 def search_tickers(query):

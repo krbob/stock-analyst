@@ -180,6 +180,7 @@ class TestInfoEndpoint:
             "dividendRate": 1.0,
             "trailingAnnualDividendRate": 0.96,
             "previousClose": 193.5,
+            "regularMarketTime": int(time.time()),
         })
 
         response = client.get("/info/AAPL")
@@ -201,6 +202,22 @@ class TestInfoEndpoint:
         assert data["dividend_rate"] == 1.0
         assert data["trailing_annual_dividend_rate"] == 0.96
         assert data["previous_close"] == 193.5
+
+    def test_previous_close_equals_price_when_market_not_open(self, client, mock_ticker):
+        yesterday = int(time.time()) - 86400
+        mock_ticker(info={
+            "longName": "Test",
+            "regularMarketPrice": 167.08,
+            "previousClose": 168.14,
+            "regularMarketTime": yesterday,
+            "currency": "USD",
+        })
+
+        response = client.get("/info/TEST")
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["previous_close"] == 167.08
 
     def test_falls_back_to_short_name(self, client, mock_ticker):
         mock_ticker(info={"shortName": "AAPL"})
