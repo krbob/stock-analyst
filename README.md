@@ -71,7 +71,8 @@ curl http://localhost:8080/quote/AAPL?currency=EUR
   "industry": "Consumer Electronics",
   "earningsDate": "2026-04-24",
   "recommendation": "buy",
-  "analystCount": 40
+  "analystCount": 40,
+  "previousClose": 240.18
 }
 ```
 
@@ -265,7 +266,7 @@ curl http://localhost:8080/quote/VOW3.DE?currency=USD
 curl "http://localhost:8080/history/AAPL?period=1y&currency=EUR"
 ```
 
-**Converted fields (`/quote`):** `lastPrice`, `eps`, `marketCap`, `fiftyTwoWeekHigh`, `fiftyTwoWeekLow` (current rate), `gain` (historical rates), `dividendYield`, `dividendGrowth` (historical rates on dividend dates).
+**Converted fields (`/quote`):** `lastPrice`, `previousClose`, `eps`, `marketCap`, `fiftyTwoWeekHigh`, `fiftyTwoWeekLow` (current rate), `gain` (historical rates), `dividendYield`, `dividendGrowth` (historical rates on dividend dates).
 
 **Converted fields (`/history`):** OHLCV prices, dividends, and all indicator values -- each at historical exchange rates for the respective date.
 
