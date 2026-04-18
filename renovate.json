@@ -3,5 +3,83 @@
   "extends": [
     "config:recommended"
   ],
-  "automerge": true
+  "timezone": "Europe/Warsaw",
+  "automerge": true,
+  "automergeType": "pr",
+  "platformAutomerge": false,
+  "schedule": [
+    "* * 1 * *"
+  ],
+  "automergeSchedule": [
+    "* * 1 * *"
+  ],
+  "updateNotScheduled": false,
+  "prConcurrentLimit": 0,
+  "branchConcurrentLimit": 0,
+  "prHourlyLimit": 0,
+  "packageRules": [
+    {
+      "description": "Group non-major Python backend dependency updates, except yfinance",
+      "matchManagers": [
+        "pip_requirements"
+      ],
+      "matchPackageNames": [
+        "Flask",
+        "flask",
+        "waitress",
+        "pyinstaller",
+        "pytest"
+      ],
+      "matchUpdateTypes": [
+        "patch",
+        "minor",
+        "digest",
+        "pin"
+      ],
+      "groupName": "Python backend dependencies"
+    },
+    {
+      "description": "Keep yfinance updates immediate instead of monthly",
+      "matchManagers": [
+        "pip_requirements"
+      ],
+      "matchPackageNames": [
+        "yfinance"
+      ],
+      "schedule": [
+        "at any time"
+      ],
+      "automergeSchedule": [
+        "at any time"
+      ],
+      "prPriority": 10
+    },
+    {
+      "description": "Group non-major GitHub Actions updates",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchUpdateTypes": [
+        "patch",
+        "minor",
+        "digest",
+        "pin"
+      ],
+      "groupName": "GitHub Actions"
+    },
+    {
+      "description": "Group non-major Docker image updates",
+      "matchManagers": [
+        "dockerfile",
+        "docker-compose"
+      ],
+      "matchUpdateTypes": [
+        "patch",
+        "minor",
+        "digest",
+        "pin"
+      ],
+      "groupName": "Docker images"
+    }
+  ]
 }
