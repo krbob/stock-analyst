@@ -67,6 +67,54 @@ class TestHistoryEndpoint:
         assert data[0]["close"] == 101.0
         assert data[0]["dividend"] == 0.5
 
+    def test_requests_history_with_actions(self, client, mock_ticker):
+        ticker = mock_ticker(history_df=_sample_history())
+
+        response = client.get("/history/AAPL/1y")
+
+        assert response.status_code == 200
+        ticker.history.assert_called_once_with(
+            period="1y",
+            interval="1d",
+            auto_adjust=False,
+            actions=True,
+        )
+
+    def test_uses_dividends_from_history_actions_column(self, client, mock_ticker):
+        index = pd.DatetimeIndex([pd.Timestamp("2024-06-15", tz="America/New_York")])
+        history = pd.DataFrame(
+            {
+                "Open": [100.0],
+                "Close": [101.0],
+                "Low": [99.0],
+                "High": [102.0],
+                "Volume": [1000],
+                "Dividends": [0.27],
+            },
+            index=index,
+        )
+        mock_ticker(history_df=history, dividends=pd.Series(dtype=float))
+
+        response = client.get("/history/AAPL/1y")
+
+        assert response.status_code == 200
+        assert response.get_json()[0]["dividend"] == 0.27
+
+    def test_matches_dividend_fallback_by_calendar_date(self, client, mock_ticker):
+        history_index = pd.DatetimeIndex([pd.Timestamp("2024-06-15", tz="America/New_York")])
+        dividend_index = pd.DatetimeIndex([pd.Timestamp("2024-06-15", tz="UTC")])
+        history = pd.DataFrame(
+            {"Open": [100.0], "Close": [101.0], "Low": [99.0], "High": [102.0], "Volume": [1000]},
+            index=history_index,
+        )
+        dividends = pd.Series([0.5], index=dividend_index)
+        mock_ticker(history_df=history, dividends=dividends)
+
+        response = client.get("/history/AAPL/1y")
+
+        assert response.status_code == 200
+        assert response.get_json()[0]["dividend"] == 0.5
+
     def test_zero_dividend_when_none_on_date(self, client, mock_ticker):
         mock_ticker(history_df=_sample_history())
 

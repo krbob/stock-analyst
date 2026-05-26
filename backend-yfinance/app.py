@@ -135,7 +135,7 @@ def get_history(symbol, period, interval="1d"):
 
     ticker = yf.Ticker(symbol)
     try:
-        history = ticker.history(period=period, interval=interval, auto_adjust=False)
+        history = ticker.history(period=period, interval=interval, auto_adjust=False, actions=True)
     except Exception:
         logger.warning("Failed to fetch history for %s (%s)", symbol, period, exc_info=True)
         raise UpstreamDataError()
@@ -145,19 +145,21 @@ def get_history(symbol, period, interval="1d"):
         dividends = pd.Series(dtype=float)
 
     intraday = interval in INTRADAY_INTERVALS
+    dividends_by_date = _dividends_by_date(dividends)
 
     result = []
     for index, row in history.iterrows():
         if math.isnan(row["Close"]) or math.isnan(row["Open"]):
             continue
+        date = index.strftime("%Y-%m-%d")
         price = HistoricalPrice(
-            date=index.strftime("%Y-%m-%d"),
+            date=date,
             open=row["Open"],
             close=row["Close"],
             low=row["Low"],
             high=row["High"],
             volume=int(row["Volume"]),
-            dividend=dividends.loc[index] if index in dividends.index else 0.0,
+            dividend=_resolve_dividend(row, date, dividends_by_date),
         )
         if intraday:
             utc_index = index.tz_localize("UTC") if index.tzinfo is None else index.tz_convert("UTC")
@@ -168,6 +170,48 @@ def get_history(symbol, period, interval="1d"):
         ttl = INTRADAY_CACHE_SECONDS if intraday else HISTORY_CACHE_SECONDS.get(period, 60)
         _cache_set(f"history:{symbol}:{period}:{interval}", result, ttl)
     return result
+
+
+def _finite_float(value):
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return None
+    return result if math.isfinite(result) else None
+
+
+def _date_key(index):
+    try:
+        return index.strftime("%Y-%m-%d")
+    except AttributeError:
+        return pd.Timestamp(index).strftime("%Y-%m-%d")
+
+
+def _dividends_by_date(dividends):
+    result = {}
+    if dividends is None:
+        return result
+    try:
+        items = dividends.items()
+    except AttributeError:
+        return result
+    for index, amount in items:
+        dividend = _finite_float(amount)
+        if dividend is None:
+            continue
+        date = _date_key(index)
+        result[date] = result.get(date, 0.0) + dividend
+    return result
+
+
+def _resolve_dividend(row, date, dividends_by_date):
+    row_dividend = _finite_float(row.get("Dividends"))
+    if row_dividend is not None and row_dividend != 0.0:
+        return row_dividend
+    fallback = dividends_by_date.get(date)
+    if fallback is not None:
+        return fallback
+    return row_dividend if row_dividend is not None else 0.0
 
 
 def get_basic_info(symbol):
