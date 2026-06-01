@@ -48,7 +48,7 @@ ta4j-core = { module = "org.ta4j:ta4j-core", version.ref = "ta4j-version" }
 junit-bom = { module = "org.junit:junit-bom", version.ref = "junit-version" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
-mockk = { module = "io.mockk:mockk", version = "1.14.9" }
+mockk = { module = "io.mockk:mockk", version = "1.14.11" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin-version" }
