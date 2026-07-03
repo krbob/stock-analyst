@@ -26,8 +26,8 @@ jobs:
 
       - name: Lint Dockerfiles
         run: |
-          docker run --rm -i hadolint/hadolint:v2.14.0 hadolint --failure-threshold error - < Dockerfile
-          docker run --rm -i hadolint/hadolint:v2.14.0 hadolint --failure-threshold error - < backend-yfinance/Dockerfile
+          docker run --rm -i hadolint/hadolint:latest hadolint --failure-threshold error - < Dockerfile
+          docker run --rm -i hadolint/hadolint:latest hadolint --failure-threshold error - < backend-yfinance/Dockerfile
 
       - name: Set up JDK
         uses: actions/setup-java@v5
