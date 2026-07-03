@@ -8,6 +8,7 @@ app.spec
 local.properties
 yfinance_cache.sqlite
 cache/
+__pycache__/
 
 ### STS ###
 .apt_generated

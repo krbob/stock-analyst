@@ -14,7 +14,10 @@ FROM debian:stable-slim
 
 WORKDIR /app
 
-RUN useradd -m stock-analyst \
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -m stock-analyst \
     && mkdir -p /home/stock-analyst/.cache/py-yfinance \
     && chown -R stock-analyst:stock-analyst /home/stock-analyst/.cache
 

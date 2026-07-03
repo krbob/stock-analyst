@@ -6,13 +6,26 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      - stock-analyst-backend-yfinance
+      stock-analyst-backend-yfinance:
+        condition: service_healthy
     environment:
       - BACKEND_URL=http://stock-analyst-backend-yfinance:8081
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
     restart: unless-stopped
 
   stock-analyst-backend-yfinance:
     build:
       context: ./backend-yfinance
       dockerfile: Dockerfile
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
     restart: unless-stopped

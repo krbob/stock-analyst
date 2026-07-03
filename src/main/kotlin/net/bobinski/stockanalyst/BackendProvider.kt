@@ -47,8 +47,9 @@ internal class BackendProvider(
         period: StockDataProvider.Period,
         interval: StockDataProvider.Interval
     ): Collection<HistoricalPrice> = coalesce("history:$symbol:${period.value}:${interval.value}") {
+        val encodedSymbol = symbol.encodeURLPath()
         val response = try {
-            client.get("$backendUrl/history/$symbol/${period.value}") {
+            client.get("$backendUrl/history/$encodedSymbol/${period.value}") {
                 url.parameters.append("interval", interval.value)
             }
         } catch (e: Exception) {
@@ -99,8 +100,9 @@ internal class BackendProvider(
         else "${from.uppercase()}${to.uppercase()}=X"
 
     override suspend fun getInfo(symbol: String): BasicInfo? = coalesce("info:$symbol") {
+        val encodedSymbol = symbol.encodeURLPath()
         val response = try {
-            client.get("$backendUrl/info/$symbol")
+            client.get("$backendUrl/info/$encodedSymbol")
         } catch (e: Exception) {
             logger.error("Failed to fetch info for {}", symbol, e)
             throw BackendDataException.backendError(symbol)

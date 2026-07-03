@@ -158,7 +158,7 @@ def get_history(symbol, period, interval="1d"):
             close=row["Close"],
             low=row["Low"],
             high=row["High"],
-            volume=int(row["Volume"]),
+            volume=_finite_int(row.get("Volume")),
             dividend=_resolve_dividend(row, date, dividends_by_date),
         )
         if intraday:
@@ -178,6 +178,11 @@ def _finite_float(value):
     except (TypeError, ValueError):
         return None
     return result if math.isfinite(result) else None
+
+
+def _finite_int(value, default=0):
+    value = _finite_float(value)
+    return int(value) if value is not None else default
 
 
 def _date_key(index):
@@ -328,6 +333,11 @@ def handle_exception(e):
 @app.errorhandler(ApiError)
 def handle_api_error(e):
     return jsonify({"error": e.message}), e.status_code
+
+
+@app.route("/health")
+def health_endpoint():
+    return jsonify({"status": "ok"})
 
 
 def _serialize_price(price):

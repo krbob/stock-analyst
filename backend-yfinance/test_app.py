@@ -141,6 +141,18 @@ class TestHistoryEndpoint:
         assert response.status_code == 200
         assert response.get_json() == []
 
+    def test_nan_volume_defaults_to_zero(self, client, mock_ticker):
+        history = pd.DataFrame(
+            {"Open": [100.0], "Close": [101.0], "Low": [99.0], "High": [102.0], "Volume": [float("nan")]},
+            index=pd.DatetimeIndex([pd.Timestamp("2024-06-15")]),
+        )
+        mock_ticker(history_df=history)
+
+        response = client.get("/history/AAPL/1y")
+
+        assert response.status_code == 200
+        assert response.get_json()[0]["volume"] == 0
+
     def test_yfinance_error_returns_empty_list(self, client, mock_ticker):
         ticker = mock_ticker()
         ticker.history.side_effect = Exception("API secret details")
@@ -387,6 +399,14 @@ class TestDataCache:
 
             client.get("/info/AAPL")
             assert mock_class.call_count == 2
+
+
+class TestHealthEndpoint:
+    def test_health_returns_ok(self, client):
+        response = client.get("/health")
+
+        assert response.status_code == 200
+        assert response.get_json() == {"status": "ok"}
 
 
 class TestSearchEndpoint:

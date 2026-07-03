@@ -56,8 +56,19 @@ jobs:
           echo "🛠️ Building and running containers locally for testing"
           docker compose up -d
 
-          echo "⏳ Waiting for containers to start..."
-          sleep 15
+          echo "⏳ Waiting for API health..."
+          for attempt in {1..60}; do
+            if curl --fail --silent --show-error http://localhost:8080/health >/dev/null; then
+              break
+            fi
+            if [ "$attempt" = "60" ]; then
+              echo "❌ API did not become healthy"
+              docker compose ps
+              docker compose logs
+              exit 1
+            fi
+            sleep 2
+          done
 
           echo "📦 Checking container status:"
           docker ps -a

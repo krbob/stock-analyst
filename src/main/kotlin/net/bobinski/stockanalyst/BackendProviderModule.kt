@@ -6,6 +6,7 @@ import io.ktor.client.plugins.cache.HttpCache
 import io.ktor.client.plugins.cache.storage.FileStorage
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
+import io.ktor.client.plugins.HttpRequestRetry
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logging
@@ -17,6 +18,7 @@ import kotlinx.serialization.json.Json
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider
 import org.koin.dsl.module
 import org.koin.dsl.onClose
+import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Paths
 
@@ -29,6 +31,16 @@ val BackendProviderModule = module {
                 requestTimeoutMillis = 15_000
                 connectTimeoutMillis = 5_000
                 socketTimeoutMillis = 15_000
+            }
+            install(HttpRequestRetry) {
+                maxRetries = 2
+                retryIf { _, response ->
+                    response.status.value == 429 || response.status.value >= 500
+                }
+                retryOnExceptionIf { _, cause ->
+                    cause is IOException
+                }
+                exponentialDelay()
             }
             install(HttpCache) {
                 val cacheDir = Files.createDirectories(

@@ -14,7 +14,10 @@ FROM eclipse-temurin:25.0.3_9-jre
 
 WORKDIR /app
 
-RUN useradd -m stock-analyst
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -m stock-analyst
 
 USER stock-analyst
 
