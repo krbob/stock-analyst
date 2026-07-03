@@ -3,7 +3,7 @@ package net.bobinski.stockanalyst
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
-import io.ktor.http.encodeURLPath
+import io.ktor.http.encodeURLPathPart
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -47,7 +47,7 @@ internal class BackendProvider(
         period: StockDataProvider.Period,
         interval: StockDataProvider.Interval
     ): Collection<HistoricalPrice> = coalesce("history:$symbol:${period.value}:${interval.value}") {
-        val encodedSymbol = symbol.encodeURLPath()
+        val encodedSymbol = symbol.encodeURLPathPart()
         val response = try {
             client.get("$backendUrl/history/$encodedSymbol/${period.value}") {
                 url.parameters.append("interval", interval.value)
@@ -74,7 +74,7 @@ internal class BackendProvider(
 
     override suspend fun search(query: String): List<SearchResult> = coalesce("search:$query") {
         val response = try {
-            client.get("$backendUrl/search/${query.encodeURLPath()}")
+            client.get("$backendUrl/search/${query.encodeURLPathPart()}")
         } catch (e: Exception) {
             logger.error("Failed to fetch search results for {}", query, e)
             throw BackendDataException.backendError(query)
@@ -100,7 +100,7 @@ internal class BackendProvider(
         else "${from.uppercase()}${to.uppercase()}=X"
 
     override suspend fun getInfo(symbol: String): BasicInfo? = coalesce("info:$symbol") {
-        val encodedSymbol = symbol.encodeURLPath()
+        val encodedSymbol = symbol.encodeURLPathPart()
         val response = try {
             client.get("$backendUrl/info/$encodedSymbol")
         } catch (e: Exception) {

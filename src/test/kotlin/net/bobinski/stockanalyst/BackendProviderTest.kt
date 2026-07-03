@@ -96,6 +96,24 @@ class BackendProviderTest {
     }
 
     @Test
+    fun `getHistory encodes slash inside symbol path segment`() = runTest {
+        val prices = emptyList<HistoricalPrice>()
+        var requestedPath = ""
+        val engine = MockEngine { request ->
+            requestedPath = request.url.encodedPath
+            respond(json.encodeToString(prices), HttpStatusCode.OK, jsonHeaders)
+        }
+        val client = HttpClient(engine) {
+            install(ContentNegotiation) { json(json) }
+        }
+        val provider = BackendProvider(client, "http://localhost:8081")
+
+        provider.getHistory("BRK/B", StockDataProvider.Period._1y)
+
+        assertEquals("/history/BRK%2FB/1y", requestedPath)
+    }
+
+    @Test
     fun `getHistory returns empty on 404`() = runTest {
         val provider = providerWith("{}", HttpStatusCode.NotFound)
 
@@ -139,6 +157,23 @@ class BackendProviderTest {
         provider.getInfo("^GSPC")
 
         assertEquals("/info/%5EGSPC", requestedPath)
+    }
+
+    @Test
+    fun `getInfo encodes slash inside symbol path segment`() = runTest {
+        var requestedPath = ""
+        val engine = MockEngine { request ->
+            requestedPath = request.url.encodedPath
+            respond(json.encodeToString(basicInfo()), HttpStatusCode.OK, jsonHeaders)
+        }
+        val client = HttpClient(engine) {
+            install(ContentNegotiation) { json(json) }
+        }
+        val provider = BackendProvider(client, "http://localhost:8081")
+
+        provider.getInfo("BRK/B")
+
+        assertEquals("/info/BRK%2FB", requestedPath)
     }
 
     @Test
