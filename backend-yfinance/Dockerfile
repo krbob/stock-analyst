@@ -1,30 +1,21 @@
-FROM python:3 AS builder
+FROM python:3-slim
 
 WORKDIR /app
 
 COPY requirements.txt .
 
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY app.py .
-
-RUN pyinstaller --onefile app.py
-
-FROM debian:stable-slim
-
-WORKDIR /app
-
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
+    && pip install --no-cache-dir -r requirements.txt \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m stock-analyst \
     && mkdir -p /home/stock-analyst/.cache/py-yfinance \
     && chown -R stock-analyst:stock-analyst /home/stock-analyst/.cache
 
-USER stock-analyst
+COPY app.py .
 
-COPY --from=builder /app/dist/app stock-analyst-backend-yfinance
+USER stock-analyst
 
 EXPOSE 8081
 
-CMD ["./stock-analyst-backend-yfinance"]
+CMD ["waitress-serve", "--host=0.0.0.0", "--port=8081", "app:app"]

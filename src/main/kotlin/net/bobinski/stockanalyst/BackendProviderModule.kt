@@ -2,8 +2,6 @@ package net.bobinski.stockanalyst
 
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
-import io.ktor.client.plugins.cache.HttpCache
-import io.ktor.client.plugins.cache.storage.FileStorage
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.plugins.HttpRequestRetry
@@ -19,8 +17,6 @@ import net.bobinski.stockanalyst.domain.provider.StockDataProvider
 import org.koin.dsl.module
 import org.koin.dsl.onClose
 import java.io.IOException
-import java.nio.file.Files
-import java.nio.file.Paths
 
 val BackendProviderModule = module {
     single<HttpClient>(createdAtStart = true) {
@@ -41,12 +37,6 @@ val BackendProviderModule = module {
                     cause is IOException
                 }
                 exponentialDelay()
-            }
-            install(HttpCache) {
-                val cacheDir = Files.createDirectories(
-                    Paths.get(System.getProperty("java.io.tmpdir"), "stock-analyst-cache")
-                ).toFile()
-                publicStorage(FileStorage(cacheDir))
             }
             install(Logging) {
                 level = LogLevel.INFO

@@ -292,9 +292,9 @@ Available via `/indicators/{symbol}` (latest values) and `/history/{symbol}?indi
 
 The `/compare` endpoint fetches each symbol independently. If one symbol fails (e.g., unknown ticker), the others still return data. Failed symbols include an `error` string instead of `data`.
 
-### Search caching
+### Backend caching
 
-Search results are cached in-memory for 5 minutes (up to 1000 entries) to reduce Yahoo Finance API calls.
+The yfinance backend caches successful history, info, and search responses in a bounded in-memory TTL cache to reduce Yahoo Finance API calls. The Kotlin API coalesces identical in-flight backend requests instead of maintaining a second response cache.
 
 ## Error Codes
 

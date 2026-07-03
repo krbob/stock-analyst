@@ -28,7 +28,6 @@
         "Flask",
         "flask",
         "waitress",
-        "pyinstaller",
         "pytest"
       ],
       "matchUpdateTypes": [
