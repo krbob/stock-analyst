@@ -57,10 +57,16 @@ val BackendProviderModule = module {
         client?.close()
     }
 
-    single<StockDataProvider> {
+    single<BackendProvider> {
         BackendProvider(
             client = get(),
             backendUrl = System.getenv("BACKEND_URL") ?: "http://localhost:8081"
         )
+    } onClose { provider ->
+        provider?.close()
+    }
+
+    single<StockDataProvider> {
+        get<BackendProvider>()
     }
 }

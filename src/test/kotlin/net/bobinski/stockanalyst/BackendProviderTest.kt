@@ -9,8 +9,10 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.IOException
@@ -209,6 +211,32 @@ class BackendProviderTest {
 
         assertEquals(1, requestCount)
         results.forEach { assertEquals(expected, it) }
+    }
+
+    @Test
+    fun `cancelled first waiter does not cancel coalesced backend request`() = runTest {
+        var requestCount = 0
+        val started = CompletableDeferred<Unit>()
+        val expected = basicInfo()
+        val engine = MockEngine { _ ->
+            requestCount++
+            started.complete(Unit)
+            delay(100)
+            respond(json.encodeToString(expected), HttpStatusCode.OK, jsonHeaders)
+        }
+        val client = HttpClient(engine) {
+            install(ContentNegotiation) { json(json) }
+        }
+        val provider = BackendProvider(client, "http://localhost:8081")
+
+        val first = async { provider.getInfo("AAPL") }
+        started.await()
+        first.cancelAndJoin()
+
+        val result = provider.getInfo("AAPL")
+
+        assertEquals(expected, result)
+        assertEquals(1, requestCount)
     }
 
     @Test

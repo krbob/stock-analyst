@@ -5,8 +5,12 @@ import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.http.encodeURLPath
 import io.ktor.http.isSuccess
-import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
 import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.model.BasicInfo
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
@@ -18,28 +22,24 @@ import java.util.concurrent.ConcurrentHashMap
 internal class BackendProvider(
     private val client: HttpClient,
     private val backendUrl: String
-) : StockDataProvider {
+) : StockDataProvider, AutoCloseable {
 
     private val logger = LoggerFactory.getLogger(BackendProvider::class.java)
+    private val workScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val inFlight = ConcurrentHashMap<String, Deferred<Any?>>()
 
     @Suppress("UNCHECKED_CAST")
     private suspend fun <T> coalesce(key: String, block: suspend () -> T): T {
-        val deferred = CompletableDeferred<Any?>()
-        val existing = inFlight.putIfAbsent(key, deferred)
-        if (existing != null) {
-            return existing.await() as T
+        var created: Deferred<Any?>? = null
+        val deferred = inFlight.computeIfAbsent(key) {
+            workScope.async { block() }.also { created = it }
         }
-        return try {
-            val result = block()
-            deferred.complete(result)
-            result
-        } catch (e: Throwable) {
-            deferred.completeExceptionally(e)
-            throw e
-        } finally {
-            inFlight.remove(key, deferred)
+        if (created === deferred) {
+            deferred.invokeOnCompletion {
+                inFlight.remove(key, deferred)
+            }
         }
+        return deferred.await() as T
     }
 
     override suspend fun getHistory(
@@ -121,5 +121,9 @@ internal class BackendProvider(
             logger.error("Failed to deserialize info for {}", symbol, e)
             throw BackendDataException.backendError(symbol)
         }
+    }
+
+    override fun close() {
+        workScope.cancel()
     }
 }
