@@ -1,5 +1,6 @@
 services:
   stock-analyst:
+    image: ${STOCK_ANALYST_IMAGE:-stock-analyst:local}
     build:
       context: .
       dockerfile: Dockerfile
@@ -19,6 +20,7 @@ services:
     restart: unless-stopped
 
   stock-analyst-backend-yfinance:
+    image: ${STOCK_ANALYST_BACKEND_YFINANCE_IMAGE:-stock-analyst-backend-yfinance:local}
     build:
       context: ./backend-yfinance
       dockerfile: Dockerfile
