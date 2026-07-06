@@ -302,6 +302,27 @@ class GetStockHistoryUseCaseTest {
     }
 
     @Test
+    fun `does not double-count dividends already present in weekly bars`() = runTest {
+        // yfinance now reports the dividend on the period-start bar (6/15) itself. Injecting the
+        // same payout from daily data would add a second copy on the next bar (6/22).
+        coEvery { stockDataProvider.getInfo("VWRD.L") } returns basicInfo("Vanguard FTSE All-World")
+        coEvery { stockDataProvider.getHistory("VWRD.L", Period._5y, Interval.WEEKLY) } returns listOf(
+            historicalPrice(LocalDate(2026, 6, 8), 100.0),
+            historicalPrice(LocalDate(2026, 6, 15), 101.0, dividend = 0.9055),
+            historicalPrice(LocalDate(2026, 6, 22), 102.0)
+        )
+        coEvery { stockDataProvider.getHistory("VWRD.L", Period._5y, Interval.DAILY) } returns listOf(
+            historicalPrice(LocalDate(2026, 6, 18), 101.5, dividend = 0.9055)
+        )
+
+        val result = useCase("VWRD.L", Period._5y, dividends = true)
+
+        assertEquals(1, result.prices.count { it.dividend > 0 })
+        assertEquals(0.9055, result.prices.first { it.date == LocalDate(2026, 6, 15) }.dividend, 0.001)
+        assertEquals(0.0, result.prices.first { it.date == LocalDate(2026, 6, 22) }.dividend, 0.001)
+    }
+
+    @Test
     fun `selects minimal fetch period and trims to requested range`() = runTest {
         coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
         coEvery { stockDataProvider.getHistory("AAPL", Period.ytd, Interval.DAILY) } returns listOf(

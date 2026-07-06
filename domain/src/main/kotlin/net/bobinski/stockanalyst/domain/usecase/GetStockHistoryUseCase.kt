@@ -179,13 +179,22 @@ class GetStockHistoryUseCase(
     }
 
     /**
-     * yfinance returns dividend=0 for weekly/monthly candles.
+     * Fallback dividend fill for weekly/monthly candles.
+     *
+     * Current yfinance already reports dividends in weekly/monthly candles (placed on the
+     * period-start bar, i.e. the bar whose week/month contains the ex-dividend date). When that
+     * is the case we must NOT inject from daily data as well — the injected copy lands on the
+     * *next* bar (whose (prev, cur] range covers the ex-date), so every payout would show up twice
+     * on two adjacent bars. We therefore only fall back to daily injection when the candles carry
+     * no dividends at all.
+     *
      * Inject dividends from daily data by summing daily dividends that fall within each bar's date range.
      */
     private fun injectDividends(
         bars: Collection<HistoricalPrice>,
         dailyPrices: Collection<HistoricalPrice>
     ): List<HistoricalPrice> {
+        if (bars.any { it.dividend > 0 }) return bars.toList()
         val dailyDividends = dailyPrices.filter { it.dividend > 0 }
         if (dailyDividends.isEmpty()) return bars.toList()
 
