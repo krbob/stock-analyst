@@ -476,6 +476,13 @@ pip install -r backend-yfinance/requirements-dev.txt
 pytest backend-yfinance/test_app.py
 ```
 
+### Dependency updates
+
+Renovate may automerge eligible routine dependency updates after CI, but every `yfinance` update
+is held for manual upstream-contract review and for at least seven days after release. Before
+merging it, run the Python adapter suite (including repair/subunit/split/error fixtures), build the
+backend image, and dispatch the non-blocking `Live Yahoo canary` against the candidate image.
+
 ## Tech Stack
 
 | Component          | Technology              |

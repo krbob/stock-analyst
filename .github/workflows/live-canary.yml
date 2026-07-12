@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '17 5 * * 1-5'
   workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Published tag to validate before promotion
+        required: false
+        default: main
 
 concurrency:
   group: live-yahoo-canary
@@ -31,8 +36,8 @@ jobs:
 
       - name: Start the published ecosystem slice
         env:
-          STOCK_ANALYST_IMAGE: ghcr.io/${{ github.repository }}:main
-          STOCK_ANALYST_BACKEND_YFINANCE_IMAGE: ghcr.io/${{ github.repository }}-backend-yfinance:main
+          STOCK_ANALYST_IMAGE: ghcr.io/${{ github.repository }}:${{ inputs.image_tag || 'main' }}
+          STOCK_ANALYST_BACKEND_YFINANCE_IMAGE: ghcr.io/${{ github.repository }}-backend-yfinance:${{ inputs.image_tag || 'main' }}
         run: |
           docker compose pull
           docker compose up --detach --no-build

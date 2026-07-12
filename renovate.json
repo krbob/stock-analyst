@@ -39,7 +39,7 @@
       "groupName": "Python backend dependencies"
     },
     {
-      "description": "Keep yfinance updates immediate instead of monthly",
+      "description": "Require upstream-contract review for every yfinance update",
       "matchManagers": [
         "pip_requirements"
       ],
@@ -49,8 +49,11 @@
       "schedule": [
         "at any time"
       ],
-      "automergeSchedule": [
-        "at any time"
+      "automerge": false,
+      "minimumReleaseAge": "7 days",
+      "labels": [
+        "upstream-contract",
+        "manual-review"
       ],
       "prPriority": 10
     },
