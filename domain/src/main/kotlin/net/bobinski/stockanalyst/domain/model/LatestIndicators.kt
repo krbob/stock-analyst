@@ -13,7 +13,8 @@ data class LatestIndicators(
     val sma50: Double? = null,
     val sma200: Double? = null,
     val ema50: Double? = null,
-    val ema200: Double? = null
+    val ema200: Double? = null,
+    val provenance: DataProvenance
 ) {
 
     @Serializable

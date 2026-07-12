@@ -338,7 +338,7 @@
       "Quote": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["symbol", "name", "date", "lastPrice", "gain"],
+        "required": ["symbol", "name", "date", "lastPrice", "gain", "provenance"],
         "properties": {
           "symbol": { "$ref": "#/components/schemas/Symbol" },
           "name": { "type": "string" },
@@ -361,7 +361,8 @@
           "earningsDate": { "type": "string", "format": "date", "nullable": true },
           "recommendation": { "type": "string", "nullable": true },
           "analystCount": { "type": "integer", "format": "int32", "nullable": true },
-          "previousClose": { "type": "number", "format": "double", "nullable": true }
+          "previousClose": { "type": "number", "format": "double", "nullable": true },
+          "provenance": { "$ref": "#/components/schemas/DataProvenance" }
         }
       },
       "Gain": {
@@ -391,7 +392,7 @@
       "StockHistory": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["symbol", "name", "period", "interval", "prices", "adjustment"],
+        "required": ["symbol", "name", "period", "interval", "prices", "adjustment", "provenance"],
         "properties": {
           "symbol": { "$ref": "#/components/schemas/Symbol" },
           "name": { "type": "string" },
@@ -405,7 +406,8 @@
           "indicators": { "$ref": "#/components/schemas/Indicators" },
           "currency": { "type": "string", "nullable": true },
           "requestedFrom": { "type": "string", "format": "date", "nullable": true },
-          "requestedTo": { "type": "string", "format": "date", "nullable": true }
+          "requestedTo": { "type": "string", "format": "date", "nullable": true },
+          "provenance": { "$ref": "#/components/schemas/DataProvenance" }
         }
       },
       "PriceAdjustment": {
@@ -478,7 +480,7 @@
       "LatestIndicators": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["symbol", "date"],
+        "required": ["symbol", "date", "provenance"],
         "properties": {
           "symbol": { "$ref": "#/components/schemas/Symbol" },
           "date": { "type": "string", "format": "date" },
@@ -488,7 +490,8 @@
           "sma50": { "type": "number", "format": "double", "nullable": true },
           "sma200": { "type": "number", "format": "double", "nullable": true },
           "ema50": { "type": "number", "format": "double", "nullable": true },
-          "ema200": { "type": "number", "format": "double", "nullable": true }
+          "ema200": { "type": "number", "format": "double", "nullable": true },
+          "provenance": { "$ref": "#/components/schemas/DataProvenance" }
         }
       },
       "MacdSnapshot": {
@@ -510,6 +513,35 @@
           "middle": { "type": "number", "format": "double" },
           "lower": { "type": "number", "format": "double" }
         }
+      },
+      "DataProvenance": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "retrievedAt", "unitScale", "adjustment", "status"],
+        "properties": {
+          "source": { "$ref": "#/components/schemas/MarketDataSource" },
+          "retrievedAt": { "type": "string", "format": "date-time" },
+          "marketTimestamp": { "type": "string", "format": "date-time", "nullable": true },
+          "marketDate": { "type": "string", "format": "date", "nullable": true },
+          "currency": { "type": "string", "nullable": true },
+          "unitScale": { "type": "number", "format": "double", "enum": [1.0] },
+          "adjustment": { "$ref": "#/components/schemas/DataAdjustment" },
+          "coverageFrom": { "type": "string", "format": "date", "nullable": true },
+          "coverageTo": { "type": "string", "format": "date", "nullable": true },
+          "status": { "$ref": "#/components/schemas/DataStatus" }
+        }
+      },
+      "MarketDataSource": {
+        "type": "string",
+        "enum": ["YAHOO_FINANCE"]
+      },
+      "DataAdjustment": {
+        "type": "string",
+        "enum": ["RAW", "SPLIT_ADJUSTED", "TOTAL_RETURN"]
+      },
+      "DataStatus": {
+        "type": "string",
+        "enum": ["FRESH", "STALE", "PARTIAL", "ERROR"]
       },
       "SearchResult": {
         "type": "object",

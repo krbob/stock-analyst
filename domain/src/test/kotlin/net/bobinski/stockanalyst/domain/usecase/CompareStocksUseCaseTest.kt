@@ -8,10 +8,15 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.LocalDate
 import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.model.Quote
+import net.bobinski.stockanalyst.domain.model.DataAdjustment
+import net.bobinski.stockanalyst.domain.model.DataProvenance
+import net.bobinski.stockanalyst.domain.model.DataStatus
+import net.bobinski.stockanalyst.domain.model.MarketDataSource
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
+import kotlin.time.Instant
 import org.junit.jupiter.api.assertThrows
 
 class CompareStocksUseCaseTest {
@@ -106,6 +111,17 @@ class CompareStocksUseCaseTest {
         industry = "Consumer Electronics",
         earningsDate = LocalDate(2024, 7, 25),
         recommendation = "buy",
-        analystCount = 40
+        analystCount = 40,
+        provenance = DataProvenance(
+            source = MarketDataSource.YAHOO_FINANCE,
+            retrievedAt = Instant.parse("2024-06-15T12:00:00Z"),
+            marketDate = LocalDate(2024, 6, 15),
+            currency = "USD",
+            unitScale = 1.0,
+            adjustment = DataAdjustment.SPLIT_ADJUSTED,
+            coverageFrom = LocalDate(2024, 1, 2),
+            coverageTo = LocalDate(2024, 6, 15),
+            status = DataStatus.FRESH
+        )
     )
 }

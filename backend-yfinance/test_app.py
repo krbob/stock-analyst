@@ -636,6 +636,7 @@ class TestInfoEndpoint:
 
         assert response.status_code == 200
         assert response.get_json()["market_date"] == "2024-06-15"
+        assert response.get_json()["market_timestamp"] == market_time
 
     def test_returns_null_market_date_when_market_timestamp_is_invalid(self, client, mock_ticker):
         mock_ticker(info={
@@ -647,6 +648,7 @@ class TestInfoEndpoint:
 
         assert response.status_code == 200
         assert response.get_json()["market_date"] is None
+        assert response.get_json()["market_timestamp"] is None
 
     def test_previous_close_equals_price_when_market_not_open(self, client, mock_ticker):
         yesterday = int(time.time()) - 86400

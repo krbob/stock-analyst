@@ -211,6 +211,7 @@ class IndicatorsRouteTest {
         sma50 = 174.2,
         sma200 = 168.9,
         ema50 = 173.8,
-        ema200 = 169.1
+        ema200 = 169.1,
+        provenance = testProvenance()
     )
 }

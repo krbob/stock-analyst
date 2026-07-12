@@ -348,6 +348,7 @@ class HistoryRouteTest {
                 splitRatio = splitRatio
             )
         ),
-        adjustment = PriceAdjustment.SPLIT_ADJUSTED
+        adjustment = PriceAdjustment.SPLIT_ADJUSTED,
+        provenance = testProvenance()
     )
 }

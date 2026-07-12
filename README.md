@@ -78,7 +78,19 @@ curl http://localhost:8080/v1/quote/AAPL?currency=EUR
   "earningsDate": "2026-04-24",
   "recommendation": "buy",
   "analystCount": 40,
-  "previousClose": 240.18
+  "previousClose": 240.18,
+  "provenance": {
+    "source": "YAHOO_FINANCE",
+    "retrievedAt": "2026-03-12T18:42:10Z",
+    "marketTimestamp": "2026-03-12T16:00:00Z",
+    "marketDate": "2026-03-12",
+    "currency": "USD",
+    "unitScale": 1.0,
+    "adjustment": "SPLIT_ADJUSTED",
+    "coverageFrom": "2021-03-12",
+    "coverageTo": "2026-03-12",
+    "status": "FRESH"
+  }
 }
 ```
 
@@ -293,6 +305,27 @@ transition counters (`failure_threshold`, `force_open`, `cooldown_elapsed`, `pro
 `probe_failure`). These labels likewise never contain ticker symbols or search values.
 
 ## Key Features
+
+### Market-data provenance
+
+Quote, history and latest-indicator responses include a required `provenance` object. It keeps
+source and freshness metadata separate from the financial values and uses the same shape for all
+three endpoints:
+
+- `retrievedAt` is when this API assembled the response; `marketTimestamp` and `marketDate`
+  describe the effective upstream market observation.
+- `coverageFrom` and `coverageTo` describe the history actually used, which can be narrower than
+  a requested range when currency-conversion history starts later.
+- `currency`, `unitScale` and `adjustment` make the value basis explicit. Prices are returned in
+  major currency units (`unitScale: 1.0`) on a split-adjusted basis.
+- `status` is `FRESH`, `STALE` or `PARTIAL`; `ERROR` is reserved for future batch responses.
+  `PARTIAL` takes precedence when the requested calculation cannot be fully populated, while
+  `STALE` describes the market observation (not the retrieval). The maximum expected age follows
+  its cadence: four days for quote/intraday/daily data, ten for weekly bars and forty for monthly
+  bars. An upstream `marketTimestamp`, when available, takes precedence over its calendar date.
+
+Consumers should render this metadata as supporting context, not infer freshness from the API
+server clock or from a chart's last visible point.
 
 ### Currency conversion
 

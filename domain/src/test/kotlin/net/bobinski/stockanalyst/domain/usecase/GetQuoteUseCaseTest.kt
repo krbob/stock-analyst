@@ -10,6 +10,8 @@ import kotlinx.datetime.minus
 import net.bobinski.stockanalyst.core.time.MutableCurrentTimeProvider
 import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.model.BasicInfo
+import net.bobinski.stockanalyst.domain.model.DataStatus
+import net.bobinski.stockanalyst.domain.model.MarketDataSource
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider.Period
@@ -49,6 +51,11 @@ class GetQuoteUseCaseTest {
         assertEquals("buy", result.recommendation)
         assertEquals("Technology", result.sector)
         assertEquals(148.0, result.previousClose)
+        assertEquals(MarketDataSource.YAHOO_FINANCE, result.provenance.source)
+        assertEquals(DataStatus.FRESH, result.provenance.status)
+        assertEquals(LocalDate(2023, 2, 2), result.provenance.coverageFrom)
+        assertEquals(LocalDate(2024, 6, 15), result.provenance.coverageTo)
+        assertEquals(1.0, result.provenance.unitScale)
     }
 
     @Test
@@ -105,6 +112,7 @@ class GetQuoteUseCaseTest {
         assertNull(result.gain.daily)
         assertNull(result.gain.weekly)
         assertNull(result.dividendYield)
+        assertEquals(DataStatus.PARTIAL, result.provenance.status)
     }
 
     @Test
@@ -289,6 +297,7 @@ class GetQuoteUseCaseTest {
         assertEquals(29.75, result.fiftyTwoWeekLow)
         assertEquals(8.5, result.eps)
         assertEquals(4_250_000.0, result.marketCap)
+        assertEquals(DataStatus.PARTIAL, result.provenance.status)
     }
 
     @Test

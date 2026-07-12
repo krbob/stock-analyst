@@ -10,6 +10,7 @@ import kotlinx.datetime.minus
 import net.bobinski.stockanalyst.core.time.MutableCurrentTimeProvider
 import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.model.BasicInfo
+import net.bobinski.stockanalyst.domain.model.DataStatus
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider.Interval
@@ -46,6 +47,9 @@ class GetLatestIndicatorsUseCaseTest {
         assertNotNull(result.bb)
         assertNotNull(result.sma200)
         assertNotNull(result.ema200)
+        assertEquals(DataStatus.FRESH, result.provenance.status)
+        assertEquals(LocalDate(2023, 10, 8), result.provenance.coverageFrom)
+        assertEquals(LocalDate(2024, 6, 15), result.provenance.coverageTo)
     }
 
     @Test
@@ -58,6 +62,7 @@ class GetLatestIndicatorsUseCaseTest {
         assertNotNull(result.rsi)
         assertNotNull(result.sma50)
         assertNull(result.sma200)
+        assertEquals(DataStatus.FRESH, result.provenance.status)
         assertNull(result.ema50)
         assertNull(result.ema200)
         assertNull(result.macd)
@@ -72,6 +77,7 @@ class GetLatestIndicatorsUseCaseTest {
         val result = useCase("AAPL", setOf("sma200"))
 
         assertNull(result.sma200)
+        assertEquals(DataStatus.PARTIAL, result.provenance.status)
     }
 
     @Test
@@ -113,6 +119,20 @@ class GetLatestIndicatorsUseCaseTest {
 
         assertEquals("AAPL", result.symbol)
         assertNotNull(result.sma50)
+    }
+
+    @Test
+    fun `marks provenance partial when currency history narrows coverage`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
+        every { stockDataProvider.resolveConversionSymbol("USD", "EUR") } returns "EUR=X"
+        coEvery { stockDataProvider.getHistory("AAPL", Period._1y) } returns priceHistory(252)
+        coEvery { stockDataProvider.getHistory("EUR=X", Period._1y) } returns priceHistory(100)
+
+        val result = useCase("AAPL", setOf("sma50"), "EUR")
+
+        assertNotNull(result.sma50)
+        assertEquals(DataStatus.PARTIAL, result.provenance.status)
+        assertEquals(LocalDate(2024, 3, 8), result.provenance.coverageFrom)
     }
 
     @Test

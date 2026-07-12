@@ -7,6 +7,8 @@ import kotlinx.datetime.LocalDate
 import net.bobinski.stockanalyst.core.time.MutableCurrentTimeProvider
 import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.model.BasicInfo
+import net.bobinski.stockanalyst.domain.model.DataStatus
+import net.bobinski.stockanalyst.domain.model.MarketDataSource
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider.Interval
@@ -36,6 +38,10 @@ class GetStockHistoryUseCaseTest {
         assertEquals("Apple Inc.", result.name)
         assertEquals("1y", result.period)
         assertEquals(2, result.prices.size)
+        assertEquals(MarketDataSource.YAHOO_FINANCE, result.provenance.source)
+        assertEquals(DataStatus.FRESH, result.provenance.status)
+        assertEquals(LocalDate(2024, 1, 2), result.provenance.coverageFrom)
+        assertEquals(LocalDate(2024, 6, 15), result.provenance.coverageTo)
     }
 
     @Test

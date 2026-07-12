@@ -187,6 +187,7 @@ class CompareRouteTest {
         industry = "Consumer Electronics",
         earningsDate = LocalDate(2024, 7, 25),
         recommendation = "buy",
-        analystCount = 40
+        analystCount = 40,
+        provenance = testProvenance()
     )
 }

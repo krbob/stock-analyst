@@ -7,6 +7,7 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.minus
 import net.bobinski.stockanalyst.core.time.CurrentTimeProvider
 import net.bobinski.stockanalyst.domain.error.BackendDataException
+import net.bobinski.stockanalyst.domain.model.DataAdjustment
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
 import net.bobinski.stockanalyst.domain.model.PriceAdjustment
 import net.bobinski.stockanalyst.domain.model.StockHistory
@@ -73,9 +74,12 @@ class GetStockHistoryUseCase(
             var history = historyDeferred.await()
             if (history.isEmpty()) throw BackendDataException.missingHistory(symbol)
 
+            var partial = false
             if (conversionHistory != null) {
                 val convMinDate = conversionHistory.minOf { it.date }
+                val originalSize = history.size
                 history = history.filter { it.date >= convMinDate }
+                partial = history.size < originalSize
                 if (history.isEmpty()) throw BackendDataException.insufficientConversion(conversionSymbol)
             }
 
@@ -106,6 +110,9 @@ class GetStockHistoryUseCase(
             val finalPrices = if (conversionHistory != null) {
                 displayPrices.convertPrices(conversionHistory)
             } else displayPrices
+            val coverageFrom = finalPrices.minOfOrNull(HistoricalPrice::date)
+            val coverageTo = finalPrices.maxOfOrNull(HistoricalPrice::date)
+            val marketTimestamp = finalPrices.lastOrNull()?.timestamp
 
             StockHistory(
                 symbol = symbol,
@@ -117,7 +124,18 @@ class GetStockHistoryUseCase(
                 indicators = computed,
                 currency = conversionPlan.responseCurrency,
                 requestedFrom = range?.first,
-                requestedTo = range?.second
+                requestedTo = range?.second,
+                provenance = marketDataProvenance(
+                    currentTimeProvider = currentTimeProvider,
+                    marketDate = coverageTo,
+                    marketTimestampEpochSeconds = marketTimestamp,
+                    currency = conversionPlan.responseCurrency,
+                    adjustment = DataAdjustment.SPLIT_ADJUSTED,
+                    coverageFrom = coverageFrom,
+                    coverageTo = coverageTo,
+                    cadence = interval.marketDataCadence(),
+                    partial = partial || finalPrices.isEmpty()
+                )
             )
         }
 

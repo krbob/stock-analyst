@@ -36,5 +36,7 @@ data class BasicInfo(
     @SerialName("previous_close")
     val previousClose: Double? = null,
     @SerialName("market_date")
-    val marketDate: LocalDate? = null
+    val marketDate: LocalDate? = null,
+    @SerialName("market_timestamp")
+    val marketTimestamp: Long? = null
 )

@@ -319,6 +319,7 @@ class BasicInfo:
     trailing_annual_dividend_rate: float | None
     previous_close: float | None
     market_date: str | None
+    market_timestamp: int | None
 
 
 def get_history(symbol, period, interval="1d"):
@@ -504,6 +505,7 @@ def _load_basic_info(symbol, cache_key):
         trailing_annual_dividend_rate=_finite_float(info.get("trailingAnnualDividendRate")),
         previous_close=_resolve_previous_close(info),
         market_date=_resolve_market_date(info),
+        market_timestamp=_finite_int(info.get("regularMarketTime"), default=None),
     )
 
     _cache_set(cache_key, result, INFO_CACHE_SECONDS)

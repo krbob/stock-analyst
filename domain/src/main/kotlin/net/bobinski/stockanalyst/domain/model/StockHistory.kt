@@ -15,7 +15,8 @@ data class StockHistory(
     val indicators: Indicators? = null,
     val currency: String? = null,
     val requestedFrom: LocalDate? = null,
-    val requestedTo: LocalDate? = null
+    val requestedTo: LocalDate? = null,
+    val provenance: DataProvenance
 )
 
 @Serializable

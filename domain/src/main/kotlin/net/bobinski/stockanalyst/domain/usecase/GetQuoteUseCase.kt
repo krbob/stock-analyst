@@ -8,6 +8,7 @@ import kotlinx.datetime.minus
 import net.bobinski.stockanalyst.core.time.CurrentTimeProvider
 import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.error.BackendDataException.Reason
+import net.bobinski.stockanalyst.domain.model.DataAdjustment
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
 import net.bobinski.stockanalyst.domain.model.Quote
 import net.bobinski.stockanalyst.domain.model.applyConversion
@@ -66,11 +67,14 @@ class GetQuoteUseCase(
             }
             if (history.isEmpty()) throw BackendDataException.missingHistory(symbol)
 
+            var conversionTrimmedHistory = false
             val conversionHistory = conversionSymbol?.let {
                 val convHistory = stockDataProvider.getHistory(it, period)
                 if (convHistory.isEmpty()) throw BackendDataException.insufficientConversion(it)
                 val convMinDate = convHistory.minOf { p -> p.date }
+                val originalSize = history.size
                 history = history.filter { p -> p.date >= convMinDate }
+                conversionTrimmedHistory = history.size < originalSize
                 if (history.isEmpty()) throw BackendDataException.insufficientConversion(it)
                 convHistory
             }
@@ -85,6 +89,10 @@ class GetQuoteUseCase(
                 conversionMarketDate = conversionInfo?.marketDate
             )
             val convRate = priceSnapshot.effectiveConversionRate
+            val marketTimestamp = sequenceOf(info, conversionInfo)
+                .filter { candidate -> candidate?.marketDate == priceSnapshot.terminalDate }
+                .mapNotNull { candidate -> candidate?.marketTimestamp }
+                .minOrNull()
 
             Quote(
                 symbol = symbol,
@@ -124,7 +132,18 @@ class GetQuoteUseCase(
                 earningsDate = info.earningsDate,
                 previousClose = info.previousClose
                     ?.let(conversionPlan::normalizeSpotPrice)
-                    ?.let { convRate?.times(it) ?: it }
+                    ?.let { convRate?.times(it) ?: it },
+                provenance = marketDataProvenance(
+                    currentTimeProvider = currentTimeProvider,
+                    marketDate = priceSnapshot.terminalDate,
+                    marketTimestampEpochSeconds = marketTimestamp,
+                    currency = conversionPlan.responseCurrency,
+                    adjustment = DataAdjustment.SPLIT_ADJUSTED,
+                    coverageFrom = priceSnapshot.history.minOfOrNull(HistoricalPrice::date),
+                    coverageTo = priceSnapshot.terminalDate,
+                    cadence = MarketDataCadence.DAILY,
+                    partial = lacking || conversionTrimmedHistory
+                )
             ).roundValues()
         }
 

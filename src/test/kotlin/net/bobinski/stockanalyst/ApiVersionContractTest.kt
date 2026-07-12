@@ -15,10 +15,14 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import net.bobinski.stockanalyst.domain.model.BollingerValue
 import net.bobinski.stockanalyst.domain.model.CompareResult
+import net.bobinski.stockanalyst.domain.model.DataAdjustment
+import net.bobinski.stockanalyst.domain.model.DataProvenance
+import net.bobinski.stockanalyst.domain.model.DataStatus
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
 import net.bobinski.stockanalyst.domain.model.Indicators
 import net.bobinski.stockanalyst.domain.model.LatestIndicators
 import net.bobinski.stockanalyst.domain.model.MacdValue
+import net.bobinski.stockanalyst.domain.model.MarketDataSource
 import net.bobinski.stockanalyst.domain.model.PriceAdjustment
 import net.bobinski.stockanalyst.domain.model.Quote
 import net.bobinski.stockanalyst.domain.model.SearchResult
@@ -99,7 +103,16 @@ class ApiVersionContractTest {
             .getValue("enum").jsonArray.map { it.jsonPrimitive.content }
         assertEquals(ApiErrorCode.entries.map(ApiErrorCode::name), errorCodes)
         assertEquals(PriceAdjustment.serializer().descriptor.fieldNames(), adjustments.toSet())
+        assertEquals(
+            MarketDataSource.entries.map(MarketDataSource::name),
+            schemas.enumValues("MarketDataSource")
+        )
+        assertEquals(DataAdjustment.entries.map(DataAdjustment::name), schemas.enumValues("DataAdjustment"))
+        assertEquals(DataStatus.entries.map(DataStatus::name), schemas.enumValues("DataStatus"))
     }
+
+    private fun kotlinx.serialization.json.JsonObject.enumValues(schemaName: String): List<String> =
+        getValue(schemaName).jsonObject.getValue("enum").jsonArray.map { it.jsonPrimitive.content }
 
     private fun KSerializer<*>.fieldNames(): Set<String> = descriptor.fieldNames()
 
@@ -123,6 +136,7 @@ class ApiVersionContractTest {
             "LatestIndicators" to LatestIndicators.serializer(),
             "MacdSnapshot" to LatestIndicators.MacdSnapshot.serializer(),
             "BollingerSnapshot" to LatestIndicators.BollingerSnapshot.serializer(),
+            "DataProvenance" to DataProvenance.serializer(),
             "SearchResult" to SearchResult.serializer()
         )
     }

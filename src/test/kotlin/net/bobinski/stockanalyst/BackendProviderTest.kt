@@ -422,7 +422,8 @@ class BackendProviderTest {
         kotlinx.datetime.LocalDate(2024, 7, 25), 1.0, 0.96,
         currency = "USD",
         previousClose = 193.5,
-        marketDate = kotlinx.datetime.LocalDate(2024, 6, 15)
+        marketDate = kotlinx.datetime.LocalDate(2024, 6, 15),
+        marketTimestamp = 1_718_467_200L
     )
 
     private fun providerWith(

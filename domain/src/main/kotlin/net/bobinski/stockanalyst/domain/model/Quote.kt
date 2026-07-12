@@ -27,7 +27,8 @@ data class Quote(
     val earningsDate: LocalDate?,
     val recommendation: String?,
     val analystCount: Int?,
-    val previousClose: Double? = null
+    val previousClose: Double? = null,
+    val provenance: DataProvenance
 ) {
 
     @Serializable
