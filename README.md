@@ -366,7 +366,10 @@ permits exactly one half-open probe. Cache limits and the bulkhead timeout may b
 active-loader, retry-after, circuit-breaker and worker values must be positive integers, with
 workers greater than loaders. The Kotlin API forwards every received HTTP status without an
 immediate retry, preserving `429`/`503` and `Retry-After`; its two retries are reserved for
-transport-level `IOException`s where the backend returned no response.
+transport-level `IOException`s where the backend returned no response. Each Kotlin-to-Python
+attempt has a six-second request/socket deadline (two seconds to connect) and retries wait a fixed
+250 ms. Consequently, even the worst permitted three-attempt transport path is bounded at 18.5 s;
+callers must use a strictly larger total deadline and must not retry classified HTTP responses.
 
 ## Error Codes
 

@@ -4,6 +4,8 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.plugins.HttpRequestRetry
+import io.ktor.client.plugins.HttpRequestRetryConfig
+import io.ktor.client.plugins.HttpTimeoutConfig
 import io.ktor.client.request.get
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -16,6 +18,21 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 
 class BackendProviderRetryTest {
+
+    @Test
+    fun `backend transport budget is explicit and bounded below caller deadline`() {
+        val timeout = HttpTimeoutConfig()
+        val retry = HttpRequestRetryConfig()
+
+        timeout.configureBackendTimeouts()
+        retry.configureBackendTransportRetries()
+
+        assertEquals(6_000L, timeout.requestTimeoutMillis)
+        assertEquals(2_000L, timeout.connectTimeoutMillis)
+        assertEquals(6_000L, timeout.socketTimeoutMillis)
+        assertEquals(2, retry.maxRetries)
+        assertEquals(18_500L, BackendHttpBudget.MAX_TOTAL_ELAPSED_MILLIS)
+    }
 
     @Test
     fun `does not retry classified backend HTTP responses`() = runTest {
