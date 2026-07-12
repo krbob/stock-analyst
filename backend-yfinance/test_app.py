@@ -5,7 +5,8 @@ from unittest.mock import MagicMock, PropertyMock, patch
 import pandas as pd
 import pytest
 
-from app import app, _data_cache, SEARCH_CACHE_SECONDS
+from app import app, _data_cache, RATE_LIMIT_RETRY_AFTER_SECONDS, SEARCH_CACHE_SECONDS
+from yfinance.exceptions import YFPricesMissingError, YFRateLimitError, YFTzMissingError
 
 
 @pytest.fixture
@@ -106,6 +107,7 @@ class TestHistoryEndpoint:
             auto_adjust=False,
             actions=True,
             repair=True,
+            raise_errors=True,
         )
 
     def test_preserves_repaired_10_for_1_split_basis_without_double_adjustment(self, client, mock_ticker):
@@ -134,6 +136,7 @@ class TestHistoryEndpoint:
             auto_adjust=False,
             actions=True,
             repair=True,
+            raise_errors=True,
         )
 
     def test_keeps_history_without_splits_unchanged(self, client, mock_ticker):
@@ -188,6 +191,7 @@ class TestHistoryEndpoint:
             auto_adjust=False,
             actions=True,
             repair=True,
+            raise_errors=True,
         )
 
     def test_uses_dividends_from_history_actions_column(self, client, mock_ticker):
@@ -263,7 +267,7 @@ class TestHistoryEndpoint:
         assert response.status_code == 200
         assert response.get_json()[0]["volume"] == 0
 
-    def test_yfinance_error_returns_empty_list(self, client, mock_ticker):
+    def test_yfinance_error_returns_502_instead_of_empty_history(self, client, mock_ticker):
         ticker = mock_ticker()
         ticker.history.side_effect = Exception("API secret details")
 
@@ -271,6 +275,68 @@ class TestHistoryEndpoint:
 
         assert response.status_code == 502
         assert response.get_json()["error"] == "Failed to fetch data from upstream provider"
+
+    def test_history_rate_limit_remains_retryable(self, client, mock_ticker):
+        ticker = mock_ticker()
+        ticker.history.side_effect = YFRateLimitError()
+
+        response = client.get("/history/AAPL/1y")
+
+        assert response.status_code == 429
+        assert response.headers["Retry-After"] == str(RATE_LIMIT_RETRY_AFTER_SECONDS)
+        assert response.get_json()["error"] == "Upstream provider rate limit exceeded"
+
+    def test_dividend_fallback_rate_limit_remains_retryable(self, client, mock_ticker):
+        ticker = mock_ticker(history_df=_sample_history())
+        type(ticker).dividends = PropertyMock(side_effect=YFRateLimitError())
+
+        response = client.get("/history/AAPL/1y")
+
+        assert response.status_code == 429
+        assert response.headers["Retry-After"] == str(RATE_LIMIT_RETRY_AFTER_SECONDS)
+
+    def test_missing_timezone_is_the_only_history_exception_mapped_to_not_found(self, client, mock_ticker):
+        ticker = mock_ticker()
+        ticker.history.side_effect = YFTzMissingError("INVALID")
+
+        response = client.get("/history/INVALID/1y")
+
+        assert response.status_code == 404
+        assert response.get_json()["error"] == "Symbol not found: INVALID"
+
+    def test_prices_missing_for_known_symbol_is_legal_empty_history(self, client, mock_ticker):
+        ticker = mock_ticker(info={"longName": "Apple Inc."})
+        ticker.history.side_effect = YFPricesMissingError("AAPL", "for requested range")
+
+        response = client.get("/history/AAPL/1y")
+
+        assert response.status_code == 200
+        assert response.get_json() == []
+
+    def test_prices_missing_for_unidentified_symbol_maps_to_not_found(self, client, mock_ticker):
+        ticker = mock_ticker(info={"trailingPegRatio": None})
+        ticker.history.side_effect = YFPricesMissingError("INVALID", "for requested range")
+
+        response = client.get("/history/INVALID/1y")
+
+        assert response.status_code == 404
+
+    def test_prices_missing_verification_failure_is_not_unknown_symbol(self, client, mock_ticker):
+        ticker = mock_ticker()
+        ticker.history.side_effect = YFPricesMissingError("AAPL", "for requested range")
+        type(ticker).info = PropertyMock(side_effect=RuntimeError("HTTP Error 403: Forbidden"))
+
+        response = client.get("/history/AAPL/1y")
+
+        assert response.status_code == 502
+
+    def test_upstream_403_is_failure_not_unknown_symbol(self, client, mock_ticker):
+        ticker = mock_ticker()
+        ticker.history.side_effect = RuntimeError("HTTP Error 403: Forbidden")
+
+        response = client.get("/history/AAPL/1y")
+
+        assert response.status_code == 502
 
     def test_intraday_includes_timestamp(self, client, mock_ticker):
         ts = pd.Timestamp("2024-06-15 09:30:00", tz="America/New_York")
@@ -445,6 +511,37 @@ class TestInfoEndpoint:
 
         assert response.status_code == 404
 
+    def test_empty_info_returns_404_for_missing_symbol(self, client, mock_ticker):
+        mock_ticker(info={})
+
+        response = client.get("/info/INVALID")
+
+        assert response.status_code == 404
+
+    def test_info_without_identity_fields_returns_404(self, client, mock_ticker):
+        mock_ticker(info={"trailingPegRatio": None})
+
+        response = client.get("/info/INVALID")
+
+        assert response.status_code == 404
+
+    def test_info_rate_limit_remains_retryable(self, client, mock_ticker):
+        ticker = mock_ticker()
+        type(ticker).info = PropertyMock(side_effect=YFRateLimitError())
+
+        response = client.get("/info/AAPL")
+
+        assert response.status_code == 429
+        assert response.headers["Retry-After"] == str(RATE_LIMIT_RETRY_AFTER_SECONDS)
+
+    def test_info_missing_timezone_maps_to_not_found(self, client, mock_ticker):
+        ticker = mock_ticker()
+        type(ticker).info = PropertyMock(side_effect=YFTzMissingError("INVALID"))
+
+        response = client.get("/info/INVALID")
+
+        assert response.status_code == 404
+
     def test_yfinance_error_returns_404(self, client, mock_ticker):
         ticker = mock_ticker()
         type(ticker).info = PropertyMock(side_effect=Exception("Internal details"))
@@ -574,6 +671,13 @@ class TestSearchEndpoint:
 
             assert response.status_code == 502
             assert response.get_json()["error"] == "Failed to fetch data from upstream provider"
+
+    def test_search_rate_limit_remains_retryable(self, client):
+        with patch("app.yf.Search", side_effect=YFRateLimitError()):
+            response = client.get("/search/apple")
+
+        assert response.status_code == 429
+        assert response.headers["Retry-After"] == str(RATE_LIMIT_RETRY_AFTER_SECONDS)
 
     def test_cache_header_set(self, client):
         with patch("app.yf.Search") as mock_search:

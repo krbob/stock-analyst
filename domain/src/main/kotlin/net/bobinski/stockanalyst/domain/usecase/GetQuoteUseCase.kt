@@ -7,6 +7,7 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.minus
 import net.bobinski.stockanalyst.core.time.CurrentTimeProvider
 import net.bobinski.stockanalyst.domain.error.BackendDataException
+import net.bobinski.stockanalyst.domain.error.BackendDataException.Reason
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
 import net.bobinski.stockanalyst.domain.model.Quote
 import net.bobinski.stockanalyst.domain.model.applyConversion
@@ -40,6 +41,7 @@ class GetQuoteUseCase(
                     try {
                         stockDataProvider.getInfo(conversion)
                     } catch (e: BackendDataException) {
+                        if (e.reason == Reason.RATE_LIMITED) throw e
                         logger.warn("Failed to fetch spot conversion info for {}", conversion, e)
                         null
                     }

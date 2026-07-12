@@ -3,8 +3,11 @@ package net.bobinski.stockanalyst
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
 import io.ktor.http.encodeURLPathPart
 import io.ktor.http.isSuccess
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -52,20 +55,28 @@ internal class BackendProvider(
             client.get("$backendUrl/history/$encodedSymbol/${period.value}") {
                 url.parameters.append("interval", interval.value)
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("Failed to fetch history for {} ({})", symbol, period.value, e)
             throw BackendDataException.backendError(symbol)
         }
-        if (response.status.value >= 500) {
+        if (response.status == HttpStatusCode.NotFound) {
+            logger.info("Backend has no history for {} ({})", symbol, period.value)
+            return@coalesce emptyList()
+        }
+        if (response.status == HttpStatusCode.TooManyRequests) {
+            logger.warn("Backend rate limited history of {} ({})", symbol, period.value)
+            throw BackendDataException.rateLimited(symbol, response.headers[HttpHeaders.RetryAfter])
+        }
+        if (!response.status.isSuccess()) {
             logger.error("Backend returned {} for history of {} ({})", response.status, symbol, period.value)
             throw BackendDataException.backendError(symbol)
         }
-        if (!response.status.isSuccess()) {
-            logger.warn("Backend returned {} for history of {} ({})", response.status, symbol, period.value)
-            return@coalesce emptyList()
-        }
         try {
             response.body()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("Failed to deserialize history for {} ({})", symbol, period.value, e)
             throw BackendDataException.backendError(symbol)
@@ -75,20 +86,24 @@ internal class BackendProvider(
     override suspend fun search(query: String): List<SearchResult> = coalesce("search:$query") {
         val response = try {
             client.get("$backendUrl/search/${query.encodeURLPathPart()}")
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("Failed to fetch search results for {}", query, e)
             throw BackendDataException.backendError(query)
         }
-        if (response.status.value >= 500) {
+        if (response.status == HttpStatusCode.TooManyRequests) {
+            logger.warn("Backend rate limited search query: {}", query)
+            throw BackendDataException.rateLimited(query, response.headers[HttpHeaders.RetryAfter])
+        }
+        if (!response.status.isSuccess()) {
             logger.error("Backend returned {} for search query: {}", response.status, query)
             throw BackendDataException.backendError(query)
         }
-        if (!response.status.isSuccess()) {
-            logger.warn("Backend returned {} for search query: {}", response.status, query)
-            return@coalesce emptyList()
-        }
         try {
             response.body()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("Failed to deserialize search results for {}", query, e)
             throw BackendDataException.backendError(query)
@@ -103,20 +118,28 @@ internal class BackendProvider(
         val encodedSymbol = symbol.encodeURLPathPart()
         val response = try {
             client.get("$backendUrl/info/$encodedSymbol")
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("Failed to fetch info for {}", symbol, e)
             throw BackendDataException.backendError(symbol)
         }
-        if (response.status.value >= 500) {
+        if (response.status == HttpStatusCode.NotFound) {
+            logger.info("Backend has no info for {}", symbol)
+            return@coalesce null
+        }
+        if (response.status == HttpStatusCode.TooManyRequests) {
+            logger.warn("Backend rate limited info of {}", symbol)
+            throw BackendDataException.rateLimited(symbol, response.headers[HttpHeaders.RetryAfter])
+        }
+        if (!response.status.isSuccess()) {
             logger.error("Backend returned {} for info of {}", response.status, symbol)
             throw BackendDataException.backendError(symbol)
         }
-        if (!response.status.isSuccess()) {
-            logger.warn("Backend returned {} for info of {}", response.status, symbol)
-            return@coalesce null
-        }
         try {
             response.body()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             logger.error("Failed to deserialize info for {}", symbol, e)
             throw BackendDataException.backendError(symbol)

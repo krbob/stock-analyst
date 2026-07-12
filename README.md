@@ -302,7 +302,7 @@ Available via `/indicators/{symbol}` (latest values) and `/history/{symbol}?indi
 
 ### Partial compare results
 
-The `/compare` endpoint fetches each symbol independently. If one symbol fails (e.g., unknown ticker), the others still return data. Failed symbols include an `error` string instead of `data`.
+The `/compare` endpoint fetches each symbol independently. If one symbol fails (e.g., unknown ticker), the others still return data. Failed symbols include an `error` string instead of `data`. An upstream rate limit aborts the whole comparison with `429`, because retrying individual entries would amplify the limit.
 
 ### Backend caching
 
@@ -314,6 +314,7 @@ The yfinance backend caches successful history, info, and search responses in a 
 |------|------------------------------------------------------|
 | 400  | Invalid symbol format, missing parameters, invalid indicator keys, invalid boolean flags, or too many symbols (max 10) |
 | 404  | Unknown symbol or no history available               |
+| 429  | Upstream rate limit; retry according to `Retry-After` |
 | 422  | Insufficient conversion data or conversion unavailable for the requested symbol/date range |
 | 502  | Upstream Yahoo Finance/backend error                 |
 

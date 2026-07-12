@@ -2,6 +2,7 @@ package net.bobinski.stockanalyst.route
 
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
@@ -65,6 +66,19 @@ class QuoteRouteTest {
 
         assertEquals(HttpStatusCode.BadGateway, response.status)
         assertTrue(response.bodyAsText().contains("Backend error"))
+    }
+
+    @Test
+    fun `responds with retryable 429 and Retry-After when upstream is rate limited`() = testApplication {
+        val useCase = mockk<GetQuoteUseCase>()
+        coEvery { useCase.invoke("AAPL", null) } throws BackendDataException.rateLimited("AAPL", "120")
+        configureApp(useCase)
+
+        val response = client.get("/quote/AAPL")
+
+        assertEquals(HttpStatusCode.TooManyRequests, response.status)
+        assertEquals("120", response.headers[HttpHeaders.RetryAfter])
+        assertTrue(response.bodyAsText().contains("Upstream rate limit"))
     }
 
     @Test

@@ -5,11 +5,13 @@ import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.http.ContentType
+import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancelAndJoin
@@ -136,12 +138,12 @@ class BackendProviderTest {
     }
 
     @Test
-    fun `getInfo returns null on 400`() = runTest {
+    fun `getInfo treats 400 as backend failure instead of missing symbol`() = runTest {
         val provider = providerWith("{}", HttpStatusCode.BadRequest)
 
-        val result = provider.getInfo("BAD")
+        val exception = assertThrows<BackendDataException> { provider.getInfo("BAD") }
 
-        assertNull(result)
+        assertEquals(BackendDataException.Reason.BACKEND_ERROR, exception.reason)
     }
 
     @Test
@@ -179,12 +181,14 @@ class BackendProviderTest {
     }
 
     @Test
-    fun `getHistory returns empty on 400`() = runTest {
+    fun `getHistory treats 400 as backend failure instead of empty history`() = runTest {
         val provider = providerWith("{}", HttpStatusCode.BadRequest)
 
-        val result = provider.getHistory("BAD", StockDataProvider.Period._1y)
+        val exception = assertThrows<BackendDataException> {
+            provider.getHistory("BAD", StockDataProvider.Period._1y)
+        }
 
-        assertTrue(result.isEmpty())
+        assertEquals(BackendDataException.Reason.BACKEND_ERROR, exception.reason)
     }
 
     @Test
@@ -198,12 +202,71 @@ class BackendProviderTest {
     }
 
     @Test
-    fun `search returns empty on 404`() = runTest {
+    fun `search treats 404 as backend failure instead of legal empty results`() = runTest {
         val provider = providerWith("{}", HttpStatusCode.NotFound)
 
-        val result = provider.search("missing")
+        val exception = assertThrows<BackendDataException> { provider.search("missing") }
 
-        assertTrue(result.isEmpty())
+        assertEquals(BackendDataException.Reason.BACKEND_ERROR, exception.reason)
+    }
+
+    @Test
+    fun `getHistory preserves rate limit and Retry-After`() = runTest {
+        val provider = providerWith(
+            responseBody = "{}",
+            status = HttpStatusCode.TooManyRequests,
+            headers = headersOf(HttpHeaders.RetryAfter, "120")
+        )
+
+        val exception = assertThrows<BackendDataException> {
+            provider.getHistory("AAPL", StockDataProvider.Period._1y)
+        }
+
+        assertEquals(BackendDataException.Reason.RATE_LIMITED, exception.reason)
+        assertEquals("120", exception.retryAfter)
+    }
+
+    @Test
+    fun `getInfo preserves rate limit without invented Retry-After`() = runTest {
+        val provider = providerWith("{}", HttpStatusCode.TooManyRequests)
+
+        val exception = assertThrows<BackendDataException> { provider.getInfo("AAPL") }
+
+        assertEquals(BackendDataException.Reason.RATE_LIMITED, exception.reason)
+        assertNull(exception.retryAfter)
+    }
+
+    @Test
+    fun `search preserves rate limit`() = runTest {
+        val provider = providerWith("{}", HttpStatusCode.TooManyRequests)
+
+        val exception = assertThrows<BackendDataException> { provider.search("apple") }
+
+        assertEquals(BackendDataException.Reason.RATE_LIMITED, exception.reason)
+    }
+
+    @Test
+    fun `getHistory treats upstream 403 as backend failure`() = runTest {
+        val provider = providerWith("{}", HttpStatusCode.Forbidden)
+
+        val exception = assertThrows<BackendDataException> {
+            provider.getHistory("AAPL", StockDataProvider.Period._1y)
+        }
+
+        assertEquals(BackendDataException.Reason.BACKEND_ERROR, exception.reason)
+    }
+
+    @Test
+    fun `transport cancellation is rethrown`() = runTest {
+        val engine = MockEngine { throw CancellationException("cancelled") }
+        val client = HttpClient(engine) {
+            install(ContentNegotiation) { json(json) }
+        }
+        val provider = BackendProvider(client, "http://localhost:8081")
+
+        assertThrows<CancellationException> {
+            provider.getHistory("AAPL", StockDataProvider.Period._1y)
+        }
     }
 
     @Test
@@ -303,9 +366,13 @@ class BackendProviderTest {
         marketDate = kotlinx.datetime.LocalDate(2024, 6, 15)
     )
 
-    private fun providerWith(responseBody: String, status: HttpStatusCode): BackendProvider {
+    private fun providerWith(
+        responseBody: String,
+        status: HttpStatusCode,
+        headers: Headers = jsonHeaders
+    ): BackendProvider {
         val engine = MockEngine { _ ->
-            respond(responseBody, status, jsonHeaders)
+            respond(responseBody, status, headers)
         }
         val client = HttpClient(engine) {
             install(ContentNegotiation) { json(json) }

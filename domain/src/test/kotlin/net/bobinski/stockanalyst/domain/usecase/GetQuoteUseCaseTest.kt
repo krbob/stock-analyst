@@ -219,6 +219,20 @@ class GetQuoteUseCaseTest {
     }
 
     @Test
+    fun `does not hide spot FX rate limit behind historical fallback`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
+        every { stockDataProvider.resolveConversionSymbol("USD", "PLN") } returns "PLN=X"
+        coEvery { stockDataProvider.getInfo("PLN=X") } throws BackendDataException.rateLimited("PLN=X", "120")
+        coEvery { stockDataProvider.getHistory("AAPL", Period._5y) } returns priceHistory(500)
+        coEvery { stockDataProvider.getHistory("PLN=X", Period._5y) } returns priceHistory(500)
+
+        val exception = assertThrows<BackendDataException> { useCase("AAPL", "PLN") }
+
+        assertEquals(BackendDataException.Reason.RATE_LIMITED, exception.reason)
+        assertEquals("120", exception.retryAfter)
+    }
+
+    @Test
     fun `uses effective spot as terminal point for every gain period when history is stale`() = runTest {
         coEvery { stockDataProvider.getInfo("STALE") } returns basicInfo("Stale History Corp").copy(
             price = 120.0,

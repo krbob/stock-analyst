@@ -3,6 +3,7 @@ package net.bobinski.stockanalyst.domain.usecase
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.LocalDate
 import net.bobinski.stockanalyst.domain.error.BackendDataException
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 
 class CompareStocksUseCaseTest {
 
@@ -54,6 +56,23 @@ class CompareStocksUseCaseTest {
         useCase(listOf("AAPL"), "EUR")
 
         coVerify { getQuoteUseCase("AAPL", "EUR") }
+    }
+
+    @Test
+    fun `does not turn cancellation into a partial compare error`() = runTest {
+        coEvery { getQuoteUseCase("AAPL", null) } throws CancellationException("cancelled")
+
+        assertThrows<CancellationException> { useCase(listOf("AAPL")) }
+    }
+
+    @Test
+    fun `does not turn upstream rate limit into a partial compare error`() = runTest {
+        coEvery { getQuoteUseCase("AAPL", null) } throws BackendDataException.rateLimited("AAPL", "120")
+
+        val exception = assertThrows<BackendDataException> { useCase(listOf("AAPL")) }
+
+        assertEquals(BackendDataException.Reason.RATE_LIMITED, exception.reason)
+        assertEquals("120", exception.retryAfter)
     }
 
     private fun testQuote(symbol: String) = Quote(

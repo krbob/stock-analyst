@@ -8,6 +8,7 @@ from dataclasses import asdict, dataclass
 import pandas as pd
 import yfinance as yf
 from flask import Flask, g, jsonify, request
+from yfinance.exceptions import YFPricesMissingError, YFRateLimitError, YFTzMissingError
 
 app = Flask(__name__)
 
@@ -37,6 +38,8 @@ INTRADAY_CACHE_SECONDS = 30
 INFO_CACHE_SECONDS = 300
 SEARCH_CACHE_SECONDS = 300
 MAX_CACHE_ENTRIES = 2048
+RATE_LIMIT_RETRY_AFTER_SECONDS = 60
+SYMBOL_IDENTITY_FIELDS = ("symbol", "shortName", "longName", "quoteType", "exchange")
 
 
 _data_cache = {}
@@ -44,15 +47,52 @@ _data_cache_lock = threading.Lock()
 
 
 class ApiError(Exception):
-    def __init__(self, message, status_code):
+    def __init__(self, message, status_code, headers=None):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
+        self.headers = headers or {}
 
 
 class UpstreamDataError(ApiError):
     def __init__(self, message="Failed to fetch data from upstream provider"):
         super().__init__(message, 502)
+
+
+class UpstreamRateLimitError(ApiError):
+    def __init__(self):
+        super().__init__(
+            "Upstream provider rate limit exceeded",
+            429,
+            headers={"Retry-After": str(RATE_LIMIT_RETRY_AFTER_SECONDS)},
+        )
+
+
+class SymbolNotFoundError(ApiError):
+    def __init__(self, symbol):
+        super().__init__(f"Symbol not found: {symbol}", 404)
+
+
+def _raise_classified_upstream_error(error, symbol=None):
+    if isinstance(error, YFRateLimitError):
+        raise UpstreamRateLimitError() from error
+    if symbol is not None and isinstance(error, YFTzMissingError):
+        raise SymbolNotFoundError(symbol) from error
+    raise UpstreamDataError() from error
+
+
+def _has_symbol_identity(info):
+    return isinstance(info, dict) and any(info.get(field) for field in SYMBOL_IDENTITY_FIELDS)
+
+
+def _empty_history_for_known_symbol(ticker, symbol):
+    try:
+        info = ticker.info
+    except Exception as error:
+        _raise_classified_upstream_error(error, symbol)
+    if not _has_symbol_identity(info):
+        raise SymbolNotFoundError(symbol)
+    return []
 
 
 def _cache_cleanup(now=None):
@@ -148,13 +188,21 @@ def get_history(symbol, period, interval="1d"):
             auto_adjust=False,
             actions=True,
             repair=True,
+            raise_errors=True,
         )
-    except Exception:
+    except YFPricesMissingError:
+        logger.info("No prices returned for %s (%s); verifying symbol identity", symbol, period)
+        return _empty_history_for_known_symbol(ticker, symbol)
+    except Exception as error:
         logger.warning("Failed to fetch history for %s (%s)", symbol, period, exc_info=True)
-        raise UpstreamDataError()
+        _raise_classified_upstream_error(error, symbol)
     try:
         dividends = ticker.dividends
+    except YFRateLimitError as error:
+        logger.warning("Rate limited while fetching dividends for %s", symbol)
+        _raise_classified_upstream_error(error, symbol)
     except Exception:
+        logger.warning("Failed to fetch dividend fallback for %s", symbol, exc_info=True)
         dividends = pd.Series(dtype=float)
 
     intraday = interval in INTRADAY_INTERVALS
@@ -245,10 +293,10 @@ def get_basic_info(symbol):
 
     try:
         info = yf.Ticker(symbol).info
-    except Exception:
+    except Exception as error:
         logger.warning("Failed to fetch info for %s", symbol, exc_info=True)
-        raise UpstreamDataError()
-    if not info:
+        _raise_classified_upstream_error(error, symbol)
+    if not _has_symbol_identity(info):
         return None
 
     earnings = info.get("earningsDate")
@@ -333,9 +381,9 @@ def search_tickers(query):
 
     try:
         results = yf.Search(query, max_results=20).quotes
-    except Exception:
+    except Exception as error:
         logger.warning("Failed to search for %s", query, exc_info=True)
-        raise UpstreamDataError()
+        _raise_classified_upstream_error(error)
 
     filtered = [
         SearchResult(
@@ -372,7 +420,10 @@ def handle_exception(e):
 
 @app.errorhandler(ApiError)
 def handle_api_error(e):
-    return jsonify({"error": e.message}), e.status_code
+    response = jsonify({"error": e.message})
+    for header, value in e.headers.items():
+        response.headers[header] = value
+    return response, e.status_code
 
 
 @app.route("/health")

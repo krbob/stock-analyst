@@ -2,6 +2,7 @@ package net.bobinski.stockanalyst.route
 
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.Application
@@ -16,6 +17,7 @@ import io.mockk.mockk
 import kotlinx.datetime.LocalDate
 import kotlinx.serialization.json.Json
 import net.bobinski.stockanalyst.core.dependency.CoreModule
+import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.model.CompareResult
 import net.bobinski.stockanalyst.domain.model.Quote
 import net.bobinski.stockanalyst.domain.usecase.CompareStocksUseCase
@@ -96,6 +98,19 @@ class CompareRouteTest {
         val body = response.bodyAsText()
         assertTrue(body.contains("AAPL"))
         assertTrue(body.contains("Unknown symbol"))
+    }
+
+    @Test
+    fun `propagates compare rate limit with Retry-After`() = testApplication {
+        val useCase = mockk<CompareStocksUseCase>()
+        coEvery { useCase.invoke(listOf("AAPL", "MSFT"), null) } throws
+            BackendDataException.rateLimited("AAPL", "120")
+        configureApp(useCase)
+
+        val response = client.get("/compare?symbols=AAPL,MSFT")
+
+        assertEquals(HttpStatusCode.TooManyRequests, response.status)
+        assertEquals("120", response.headers[HttpHeaders.RetryAfter])
     }
 
     @Test
