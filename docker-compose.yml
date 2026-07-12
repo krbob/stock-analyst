@@ -24,6 +24,11 @@ services:
     build:
       context: ./backend-yfinance
       dockerfile: Dockerfile
+    environment:
+      YFINANCE_HISTORY_CACHE_MAX_BYTES: ${YFINANCE_HISTORY_CACHE_MAX_BYTES:-67108864}
+      YFINANCE_HISTORY_CACHE_MAX_ENTRIES: ${YFINANCE_HISTORY_CACHE_MAX_ENTRIES:-512}
+      YFINANCE_METADATA_CACHE_MAX_BYTES: ${YFINANCE_METADATA_CACHE_MAX_BYTES:-8388608}
+      YFINANCE_METADATA_CACHE_MAX_ENTRIES: ${YFINANCE_METADATA_CACHE_MAX_ENTRIES:-2048}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8081/health"]
       interval: 10s

@@ -1,5 +1,6 @@
 import json
 import time
+from dataclasses import replace
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, PropertyMock, patch
 
@@ -7,7 +8,15 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from app import app, _data_cache, RATE_LIMIT_RETRY_AFTER_SECONDS, SEARCH_CACHE_SECONDS
+from app import (
+    HistoricalPrice,
+    RATE_LIMIT_RETRY_AFTER_SECONDS,
+    SEARCH_CACHE_SECONDS,
+    _history_cache,
+    _metadata_cache,
+    app,
+)
+from memory_cache import ByteBoundedTTLCache, estimate_cache_entry_bytes
 from yfinance.exceptions import YFPricesMissingError, YFRateLimitError, YFTzMissingError
 
 
@@ -20,9 +29,11 @@ def client():
 
 @pytest.fixture(autouse=True)
 def clear_data_cache():
-    _data_cache.clear()
+    _history_cache.clear()
+    _metadata_cache.clear()
     yield
-    _data_cache.clear()
+    _history_cache.clear()
+    _metadata_cache.clear()
 
 
 @pytest.fixture
@@ -60,6 +71,17 @@ def _standard_json(response):
         pytest.fail(f"Non-standard JSON numeric constant emitted: {value}")
 
     return json.loads(response.get_data(as_text=True), parse_constant=reject_constant)
+
+
+class FakeClock:
+    def __init__(self):
+        self.now = 0.0
+
+    def __call__(self):
+        return self.now
+
+    def advance(self, seconds):
+        self.now += seconds
 
 
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
@@ -721,6 +743,95 @@ class TestCacheHeaders:
         assert response.headers["Cache-Control"] == "public, max-age=14400"
 
 
+class TestByteBoundedTTLCache:
+    @staticmethod
+    def sized_cache(max_bytes, max_entries, clock):
+        return ByteBoundedTTLCache(
+            max_bytes,
+            max_entries,
+            clock=clock,
+            size_of=lambda _key, value: value[0],
+        )
+
+    def test_evicts_by_access_order_not_by_shortest_ttl(self):
+        clock = FakeClock()
+        cache = self.sized_cache(100, 2, clock)
+        cache.set("short-lived", (10, "short"), ttl=5)
+        cache.set("long-lived", (10, "long"), ttl=500)
+
+        assert cache.get("short-lived") == (10, "short")
+        cache.set("new", (10, "new"), ttl=100)
+
+        assert cache.keys_lru_to_mru == ("short-lived", "new")
+        assert cache.get("long-lived") is None
+
+    def test_expires_entries_at_ttl_boundary_and_reclaims_budget(self):
+        clock = FakeClock()
+        cache = self.sized_cache(100, 10, clock)
+        cache.set("quote", (25, "value"), ttl=5)
+
+        clock.advance(5)
+
+        assert cache.get("quote") is None
+        assert len(cache) == 0
+        assert cache.total_bytes == 0
+
+    def test_evicts_lru_entries_until_byte_budget_is_met(self):
+        clock = FakeClock()
+        cache = self.sized_cache(25, 10, clock)
+        cache.set("a", (10, "a"), ttl=100)
+        cache.set("b", (10, "b"), ttl=100)
+        cache.get("a")
+
+        assert cache.set("c", (10, "c"), ttl=100)
+
+        assert cache.keys_lru_to_mru == ("a", "c")
+        assert cache.total_bytes == 20
+        assert cache.get("b") is None
+
+    def test_rejects_oversized_entry_and_removes_stale_value_for_same_key(self):
+        payload = ["x" * 1024]
+        entry_size = estimate_cache_entry_bytes("large", payload)
+        cache = ByteBoundedTTLCache(entry_size - 1, 10)
+
+        assert not cache.set("large", payload, ttl=100)
+        assert cache.get("large") is None
+        assert cache.total_bytes == 0
+
+        sized_cache = self.sized_cache(20, 10, FakeClock())
+        assert sized_cache.set("same", (10, "old"), ttl=100)
+        assert not sized_cache.set("same", (21, "new"), ttl=100)
+        assert sized_cache.get("same") is None
+
+    def test_copies_mutable_containers_on_write_and_read(self):
+        cache = ByteBoundedTTLCache(1_000, 10, size_of=lambda _key, _value: 10)
+        source = ["original"]
+        cache.set("list", source, ttl=100)
+        source.append("source mutation")
+
+        cached = cache.get("list")
+        cached.append("consumer mutation")
+
+        assert cache.get("list") == ["original"]
+
+    def test_default_estimator_walks_history_dataclasses_without_json_serialization(self):
+        price = HistoricalPrice(
+            date="2024-06-15",
+            open=100.0,
+            close=101.0,
+            low=99.0,
+            high=102.0,
+            volume=1_000,
+            dividend=0.25,
+        )
+        second_price = replace(price, date="2024-06-16", close=102.0)
+        with patch("json.dumps", side_effect=AssertionError("JSON serialization is not allowed")):
+            one_price = estimate_cache_entry_bytes("history:AAPL", [price])
+            two_prices = estimate_cache_entry_bytes("history:AAPL", [price, second_price])
+
+        assert two_prices > one_price
+
+
 class TestDataCache:
     def test_info_serves_from_cache(self, client, mock_ticker):
         mock_ticker(info={"longName": "Apple Inc."})
@@ -728,7 +839,8 @@ class TestDataCache:
         client.get("/info/AAPL")
         client.get("/info/AAPL")
 
-        assert "info:AAPL" in _data_cache
+        assert _metadata_cache.contains("info:AAPL")
+        assert not _history_cache.contains("info:AAPL")
 
     def test_history_serves_from_cache(self, client):
         with patch("app.yf.Ticker") as mock_class:
@@ -740,6 +852,8 @@ class TestDataCache:
             client.get("/history/AAPL/1y")
 
             assert mock_class.call_count == 1
+            assert _history_cache.contains("history:AAPL:1y:1d")
+            assert not _metadata_cache.contains("history:AAPL:1y:1d")
 
     def test_does_not_cache_errors(self, client):
         with patch("app.yf.Ticker") as mock_class:
@@ -756,20 +870,17 @@ class TestDataCache:
             assert r2.status_code == 200
             assert r2.get_json()["name"] == "Apple Inc."
 
-    def test_cache_expires(self, client):
-        with patch("app.yf.Ticker") as mock_class:
-            instance = mock_class.return_value
-            type(instance).info = PropertyMock(return_value={"longName": "Apple Inc."})
+    def test_cache_failure_does_not_mask_successful_upstream_data(self, client, mock_ticker):
+        mock_ticker(info={"longName": "Apple Inc."})
 
-            client.get("/info/AAPL")
-            assert mock_class.call_count == 1
+        with (
+            patch.object(_metadata_cache, "get", side_effect=RuntimeError("read failed")),
+            patch.object(_metadata_cache, "set", side_effect=RuntimeError("write failed")),
+        ):
+            response = client.get("/info/AAPL")
 
-            # Backdate the cache entry to simulate expiry
-            value, _expiry = _data_cache["info:AAPL"]
-            _data_cache["info:AAPL"] = (value, time.time() - 1)
-
-            client.get("/info/AAPL")
-            assert mock_class.call_count == 2
+        assert response.status_code == 200
+        assert response.get_json()["name"] == "Apple Inc."
 
 
 class TestHealthEndpoint:

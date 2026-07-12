@@ -1,6 +1,6 @@
 import logging
 import math
-import threading
+import os
 import time
 import traceback
 from dataclasses import asdict, dataclass
@@ -9,6 +9,7 @@ import pandas as pd
 import yfinance as yf
 from flask import Flask, g, jsonify, request
 from flask.json.provider import DefaultJSONProvider
+from memory_cache import ByteBoundedTTLCache
 from yfinance.exceptions import YFPricesMissingError, YFRateLimitError, YFTzMissingError
 
 
@@ -51,13 +52,44 @@ INTRADAY_CACHE_SECONDS = 30
 
 INFO_CACHE_SECONDS = 300
 SEARCH_CACHE_SECONDS = 300
-MAX_CACHE_ENTRIES = 2048
 RATE_LIMIT_RETRY_AFTER_SECONDS = 60
 SYMBOL_IDENTITY_FIELDS = ("symbol", "shortName", "longName", "quoteType", "exchange")
 
+DEFAULT_HISTORY_CACHE_MAX_BYTES = 64 * 1024 * 1024
+DEFAULT_HISTORY_CACHE_MAX_ENTRIES = 512
+DEFAULT_METADATA_CACHE_MAX_BYTES = 8 * 1024 * 1024
+DEFAULT_METADATA_CACHE_MAX_ENTRIES = 2048
 
-_data_cache = {}
-_data_cache_lock = threading.Lock()
+
+def _non_negative_env_int(name, default):
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    try:
+        value = int(raw_value)
+    except ValueError as error:
+        raise RuntimeError(f"{name} must be a non-negative integer") from error
+    if value < 0:
+        raise RuntimeError(f"{name} must be a non-negative integer")
+    return value
+
+
+HISTORY_CACHE_MAX_BYTES = _non_negative_env_int(
+    "YFINANCE_HISTORY_CACHE_MAX_BYTES", DEFAULT_HISTORY_CACHE_MAX_BYTES
+)
+HISTORY_CACHE_MAX_ENTRIES = _non_negative_env_int(
+    "YFINANCE_HISTORY_CACHE_MAX_ENTRIES", DEFAULT_HISTORY_CACHE_MAX_ENTRIES
+)
+METADATA_CACHE_MAX_BYTES = _non_negative_env_int(
+    "YFINANCE_METADATA_CACHE_MAX_BYTES", DEFAULT_METADATA_CACHE_MAX_BYTES
+)
+METADATA_CACHE_MAX_ENTRIES = _non_negative_env_int(
+    "YFINANCE_METADATA_CACHE_MAX_ENTRIES", DEFAULT_METADATA_CACHE_MAX_ENTRIES
+)
+
+
+_history_cache = ByteBoundedTTLCache(HISTORY_CACHE_MAX_BYTES, HISTORY_CACHE_MAX_ENTRIES)
+_metadata_cache = ByteBoundedTTLCache(METADATA_CACHE_MAX_BYTES, METADATA_CACHE_MAX_ENTRIES)
 
 
 class ApiError(Exception):
@@ -109,37 +141,27 @@ def _empty_history_for_known_symbol(ticker, symbol):
     return []
 
 
-def _cache_cleanup(now=None):
-    current_time = now or time.time()
-    expired_keys = [key for key, (_value, expiry) in _data_cache.items() if current_time >= expiry]
-    for key in expired_keys:
-        _data_cache.pop(key, None)
-
-    overflow = len(_data_cache) - MAX_CACHE_ENTRIES
-    if overflow > 0:
-        for key, _entry in sorted(_data_cache.items(), key=lambda item: item[1][1])[:overflow]:
-            _data_cache.pop(key, None)
-
-
 def _cache_get(key):
-    with _data_cache_lock:
-        _cache_cleanup()
-        entry = _data_cache.get(key)
-        if entry and time.time() < entry[1]:
-            return entry[0]
-        if entry:
-            _data_cache.pop(key, None)
+    try:
+        return _cache_for_key(key).get(key)
+    except Exception:
+        logger.warning("Cache read failed for %s; treating it as a miss", key, exc_info=True)
         return None
 
 
 def _cache_set(key, value, ttl):
-    with _data_cache_lock:
-        _cache_cleanup()
-        _data_cache[key] = (value, time.time() + ttl)
-        _cache_cleanup()
+    try:
+        return _cache_for_key(key).set(key, value, ttl)
+    except Exception:
+        logger.warning("Cache write failed for %s; returning uncached data", key, exc_info=True)
+        return False
 
 
-@dataclass
+def _cache_for_key(key):
+    return _history_cache if key.startswith("history:") else _metadata_cache
+
+
+@dataclass(frozen=True)
 class HistoricalPrice:
     date: str
     open: float
@@ -152,7 +174,7 @@ class HistoricalPrice:
     splitRatio: float | None = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class SearchResult:
     symbol: str
     name: str
@@ -160,7 +182,7 @@ class SearchResult:
     quoteType: str
 
 
-@dataclass
+@dataclass(frozen=True)
 class BasicInfo:
     name: str | None
     price: float | None
@@ -234,6 +256,10 @@ def get_history(symbol, period, interval="1d"):
         if any(value is None for value in (open_price, close_price, low_price, high_price)):
             logger.warning("Skipping history row with non-finite OHLC for %s on %s", symbol, date)
             continue
+        timestamp = None
+        if intraday:
+            utc_index = index.tz_localize("UTC") if index.tzinfo is None else index.tz_convert("UTC")
+            timestamp = int(utc_index.timestamp())
         price = HistoricalPrice(
             date=date,
             open=open_price,
@@ -242,11 +268,9 @@ def get_history(symbol, period, interval="1d"):
             high=high_price,
             volume=_finite_int(row.get("Volume")),
             dividend=_resolve_dividend(row, date, dividends_by_date),
+            timestamp=timestamp,
             splitRatio=_resolve_split_ratio(row),
         )
-        if intraday:
-            utc_index = index.tz_localize("UTC") if index.tzinfo is None else index.tz_convert("UTC")
-            price.timestamp = int(utc_index.timestamp())
         result.append(price)
 
     if result:

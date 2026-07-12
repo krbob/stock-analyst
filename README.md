@@ -310,7 +310,24 @@ The `/compare` endpoint fetches each symbol independently. If one symbol fails (
 
 ### Backend caching
 
-The yfinance backend caches successful history, info, and search responses in a bounded in-memory TTL cache to reduce Yahoo Finance API calls. The Kotlin API coalesces identical in-flight backend requests instead of maintaining a second response cache.
+The yfinance backend caches only successful responses in two thread-safe, access-order LRU/TTL
+pools. Historical series (including FX series) use the history pool; smaller info and search
+responses (including FX info) use the metadata pool. Each pool enforces both an entry limit and an
+estimated retained-byte limit. The estimator walks the cached Python dataclasses and containers
+without JSON serialisation. An entry larger than its pool budget is returned to the caller but is
+not cached. Set either limit to `0` to disable that pool.
+
+| Environment variable | Default | Purpose |
+|----------------------|---------|---------|
+| `YFINANCE_HISTORY_CACHE_MAX_BYTES` | `67108864` (64 MiB) | Maximum estimated bytes retained by history entries |
+| `YFINANCE_HISTORY_CACHE_MAX_ENTRIES` | `512` | Maximum number of history entries |
+| `YFINANCE_METADATA_CACHE_MAX_BYTES` | `8388608` (8 MiB) | Maximum estimated bytes retained by info/search entries |
+| `YFINANCE_METADATA_CACHE_MAX_ENTRIES` | `2048` | Maximum number of info/search entries |
+
+All limits must be non-negative integers. TTL expiry uses a monotonic clock, and reads promote an
+entry in LRU order independently of its expiry time. The Kotlin API coalesces identical in-flight
+backend requests instead of maintaining a second response cache. `docker-compose.yml` forwards
+these settings from the shell or a local `.env` file.
 
 ## Error Codes
 
