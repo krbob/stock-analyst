@@ -191,16 +191,31 @@ class GetQuoteUseCaseTest {
 
     @Test
     fun `falls back to historical fx rate when spot conversion info fails`() = runTest {
-        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
-        every { stockDataProvider.resolveConversionSymbol("USD", "EUR") } returns "EUR=X"
-        coEvery { stockDataProvider.getInfo("EUR=X") } throws BackendDataException.backendError("EUR=X")
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.").copy(
+            price = 10.0,
+            previousClose = 8.0,
+            fiftyTwoWeekHigh = 12.0,
+            fiftyTwoWeekLow = 7.0,
+            eps = 2.0,
+            marketCap = 1_000_000.0
+        )
+        every { stockDataProvider.resolveConversionSymbol("USD", "PLN") } returns "PLN=X"
+        coEvery { stockDataProvider.getInfo("PLN=X") } throws BackendDataException.backendError("PLN=X")
         coEvery { stockDataProvider.getHistory("AAPL", Period._5y) } returns priceHistory(500)
-        coEvery { stockDataProvider.getHistory("EUR=X", Period._5y) } returns priceHistory(500)
+        coEvery { stockDataProvider.getHistory("PLN=X", Period._5y) } returns listOf(
+            conversionPrice(LocalDate(2024, 6, 14), 4.0),
+            conversionPrice(LocalDate(2024, 6, 15), 4.25)
+        )
 
-        val result = useCase("AAPL", "EUR")
+        val result = useCase("AAPL", "PLN")
 
-        assertEquals("EUR", result.currency)
-        assertTrue(result.lastPrice > 0)
+        assertEquals("PLN", result.currency)
+        assertEquals(42.5, result.lastPrice)
+        assertEquals(34.0, result.previousClose)
+        assertEquals(51.0, result.fiftyTwoWeekHigh)
+        assertEquals(29.75, result.fiftyTwoWeekLow)
+        assertEquals(8.5, result.eps)
+        assertEquals(4_250_000.0, result.marketCap)
     }
 
     @Test
@@ -272,5 +287,15 @@ class GetQuoteUseCaseTest {
         date = LocalDate(2024, 6, 15),
         open = 100.0, close = 100.0, low = 99.0, high = 101.0,
         volume = 1000L, dividend = 0.0
+    )
+
+    private fun conversionPrice(date: LocalDate, rate: Double) = HistoricalPrice(
+        date = date,
+        open = rate,
+        close = rate,
+        low = rate,
+        high = rate,
+        volume = 0L,
+        dividend = 0.0
     )
 }

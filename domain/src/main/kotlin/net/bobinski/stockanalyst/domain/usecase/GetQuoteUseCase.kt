@@ -86,7 +86,7 @@ class GetQuoteUseCase(
                 date = currentTimeProvider.localDate(),
                 lastPrice = (info.price?.let(conversionPlan::normalizeNativePrice)
                     ?: CalculateLastPrice(history, null))
-                    .applyConversion(conversionPrice),
+                    .applyConversion(convRate),
                 gain = Quote.Gain(
                     daily = Double.NaN,
                     weekly = Double.NaN,
@@ -129,7 +129,7 @@ class GetQuoteUseCase(
                 earningsDate = info.earningsDate,
                 previousClose = info.previousClose
                     ?.let(conversionPlan::normalizeNativePrice)
-                    ?.let { conversionPrice?.times(it) ?: it }
+                    ?.let { convRate?.times(it) ?: it }
             ).roundValues()
         }
 
