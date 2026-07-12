@@ -24,7 +24,13 @@ stock-analyst/
 
 ## API Endpoints
 
-### `GET /quote/{symbol}`
+The canonical API is versioned under `/v1`. The previous unversioned paths remain compatibility
+aliases during migration. The bundled OpenAPI 3.0 contract is available at
+`GET /openapi/v1.json` and in
+`src/main/resources/openapi/stock-analyst-v1.json`; generate consumers from that document rather
+than copying response types by hand.
+
+### `GET /v1/quote/{symbol}`
 
 Returns fundamental data, gains, and dividend metrics for a stock.
 
@@ -34,8 +40,8 @@ Returns fundamental data, gains, and dividend metrics for a stock.
 | `currency` | query | no       | Target currency ISO code (e.g., `EUR`, `PLN`)    |
 
 ```bash
-curl http://localhost:8080/quote/AAPL
-curl http://localhost:8080/quote/AAPL?currency=EUR
+curl http://localhost:8080/v1/quote/AAPL
+curl http://localhost:8080/v1/quote/AAPL?currency=EUR
 ```
 
 **Example response:**
@@ -84,7 +90,7 @@ the snapshot remains anchored to the latest applicable market session.
 
 ---
 
-### `GET /indicators/{symbol}`
+### `GET /v1/indicators/{symbol}`
 
 Returns the latest values of technical indicators for a stock. Computes indicators from historical data and returns only the most recent value of each.
 
@@ -97,10 +103,10 @@ Returns the latest values of technical indicators for a stock. Computes indicato
 | `currency`   | query | no       | Target currency ISO code (e.g., `EUR`, `PLN`)                     |
 
 ```bash
-curl http://localhost:8080/indicators/AAPL
-curl "http://localhost:8080/indicators/AAPL?indicators=rsi,macd&currency=EUR"
-curl "http://localhost:8080/indicators/AAPL?indicators=rsi&period=5y&interval=1wk"   # weekly RSI
-curl "http://localhost:8080/indicators/AAPL?indicators=rsi&period=max&interval=1mo"  # monthly RSI
+curl http://localhost:8080/v1/indicators/AAPL
+curl "http://localhost:8080/v1/indicators/AAPL?indicators=rsi,macd&currency=EUR"
+curl "http://localhost:8080/v1/indicators/AAPL?indicators=rsi&period=5y&interval=1wk"   # weekly RSI
+curl "http://localhost:8080/v1/indicators/AAPL?indicators=rsi&period=max&interval=1mo"  # monthly RSI
 ```
 
 **Example response:**
@@ -131,7 +137,7 @@ Only requested indicators are included in the response. When `indicators` is omi
 
 ---
 
-### `GET /history/{symbol}`
+### `GET /v1/history/{symbol}`
 
 Returns historical OHLCV price data with optional technical indicator series and dividends.
 
@@ -147,11 +153,11 @@ Returns historical OHLCV price data with optional technical indicator series and
 | `to`         | query | no       | Exact history end date in `YYYY-MM-DD`. Must be used together with `from`. |
 
 ```bash
-curl http://localhost:8080/history/AAPL
-curl "http://localhost:8080/history/AAPL?period=1y&indicators=sma50,sma200,rsi,macd"
-curl "http://localhost:8080/history/AAPL?period=1y&currency=EUR&dividends=true"
-curl "http://localhost:8080/history/AAPL?period=1d&interval=5m"
-curl "http://localhost:8080/history/AAPL?from=2024-01-01&to=2024-06-30"
+curl http://localhost:8080/v1/history/AAPL
+curl "http://localhost:8080/v1/history/AAPL?period=1y&indicators=sma50,sma200,rsi,macd"
+curl "http://localhost:8080/v1/history/AAPL?period=1y&currency=EUR&dividends=true"
+curl "http://localhost:8080/v1/history/AAPL?period=1d&interval=5m"
+curl "http://localhost:8080/v1/history/AAPL?from=2024-01-01&to=2024-06-30"
 ```
 
 **Example response:**
@@ -200,7 +206,7 @@ When `indicators` is provided, extra historical data is fetched for indicator wa
 
 ---
 
-### `GET /compare?symbols=...`
+### `GET /v1/compare?symbols=...`
 
 Compares multiple stocks in a single request. Returns partial results -- individual symbols can fail without failing the whole request.
 
@@ -210,8 +216,8 @@ Compares multiple stocks in a single request. Returns partial results -- individ
 | `currency` | query | no       | Target currency ISO code (e.g., `EUR`, `PLN`)       |
 
 ```bash
-curl "http://localhost:8080/compare?symbols=AAPL,MSFT,INVALID"
-curl "http://localhost:8080/compare?symbols=AAPL,MSFT&currency=EUR"
+curl "http://localhost:8080/v1/compare?symbols=AAPL,MSFT,INVALID"
+curl "http://localhost:8080/v1/compare?symbols=AAPL,MSFT&currency=EUR"
 ```
 
 **Example response:**
@@ -243,11 +249,11 @@ curl "http://localhost:8080/compare?symbols=AAPL,MSFT&currency=EUR"
 ]
 ```
 
-Each `data` object has the same schema as the `/quote/{symbol}` response.
+Each `data` object has the same schema as the `/v1/quote/{symbol}` response.
 
 ---
 
-### `GET /search/{query}`
+### `GET /v1/search/{query}`
 
 Searches for stocks, ETFs, and indices by name or ticker. Results are cached for 5 minutes.
 
@@ -256,7 +262,7 @@ Searches for stocks, ETFs, and indices by name or ticker. Results are cached for
 | `query`   | path | yes      | Search term (e.g., `apple`, `AAPL`). Max 50 chars. |
 
 ```bash
-curl http://localhost:8080/search/apple
+curl http://localhost:8080/v1/search/apple
 ```
 
 **Example response:**
@@ -277,14 +283,14 @@ Results are filtered to equities, ETFs, and indices. Returns an empty array when
 Add `?currency=PLN` (or any ISO 4217 code) to convert monetary values using exchange rates.
 
 ```bash
-curl http://localhost:8080/quote/AAPL?currency=PLN
-curl http://localhost:8080/quote/VOW3.DE?currency=USD
-curl "http://localhost:8080/history/AAPL?period=1y&currency=EUR"
+curl http://localhost:8080/v1/quote/AAPL?currency=PLN
+curl http://localhost:8080/v1/quote/VOW3.DE?currency=USD
+curl "http://localhost:8080/v1/history/AAPL?period=1y&currency=EUR"
 ```
 
-**Converted fields (`/quote`):** `lastPrice`, `previousClose`, `eps`, `marketCap`, `fiftyTwoWeekHigh`, `fiftyTwoWeekLow` (current rate), `gain` (historical rates), `dividendYield`, `dividendGrowth` (historical rates on dividend dates).
+**Converted fields (`/v1/quote`):** `lastPrice`, `previousClose`, `eps`, `marketCap`, `fiftyTwoWeekHigh`, `fiftyTwoWeekLow` (current rate), `gain` (historical rates), `dividendYield`, `dividendGrowth` (historical rates on dividend dates).
 
-**Converted fields (`/history`):** OHLCV prices, dividends, and all indicator values -- each at historical exchange rates for the respective date.
+**Converted fields (`/v1/history`):** OHLCV prices, dividends, and all indicator values -- each at historical exchange rates for the respective date.
 
 **Not converted** (dimensionless): `peRatio`, `pbRatio`, `roe`, `beta`.
 
@@ -292,7 +298,7 @@ The `currency` field in the response reflects the target currency only after a s
 
 ### Technical indicators
 
-Available via `/indicators/{symbol}` (latest values) and `/history/{symbol}?indicators=...` (time series):
+Available via `/v1/indicators/{symbol}` (latest values) and `/v1/history/{symbol}?indicators=...` (time series):
 
 | Indicator        | Key      | Output fields                            |
 |------------------|----------|------------------------------------------|
@@ -306,7 +312,7 @@ Available via `/indicators/{symbol}` (latest values) and `/history/{symbol}?indi
 
 ### Partial compare results
 
-The `/compare` endpoint fetches each symbol independently. If one symbol fails (e.g., unknown ticker), the others still return data. Failed symbols include an `error` string instead of `data`. An upstream rate limit aborts the whole comparison with `429`, because retrying individual entries would amplify the limit.
+The `/v1/compare` endpoint fetches each symbol independently. If one symbol fails (e.g., unknown ticker), the others still return data. Failed symbols include an `error` string instead of `data`. An upstream rate limit aborts the whole comparison with `429`, because retrying individual entries would amplify the limit.
 
 ### Backend caching
 
@@ -394,7 +400,8 @@ services:
 
 ### Development
 
-Requires the Python backend to be running (either via Docker or directly).
+Requires JDK 25 because TA4J 0.22.x is compiled for Java 25, and the Python backend must be
+running either via Docker or directly.
 
 ```bash
 ./gradlew run

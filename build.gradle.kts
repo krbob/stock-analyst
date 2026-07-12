@@ -51,4 +51,5 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
+    inputs.file(layout.projectDirectory.file("src/main/resources/openapi/stock-analyst-v1.json"))
 }
