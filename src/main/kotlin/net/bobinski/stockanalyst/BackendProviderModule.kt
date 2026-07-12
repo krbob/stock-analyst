@@ -5,6 +5,7 @@ import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.plugins.HttpRequestRetry
+import io.ktor.client.plugins.HttpRequestRetryConfig
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logging
@@ -29,14 +30,7 @@ val BackendProviderModule = module {
                 socketTimeoutMillis = 15_000
             }
             install(HttpRequestRetry) {
-                maxRetries = 2
-                retryIf { _, response ->
-                    response.status.value == 429 || response.status.value >= 500
-                }
-                retryOnExceptionIf { _, cause ->
-                    cause is IOException
-                }
-                exponentialDelay()
+                configureBackendTransportRetries()
             }
             install(Logging) {
                 level = LogLevel.INFO
@@ -59,4 +53,11 @@ val BackendProviderModule = module {
     single<StockDataProvider> {
         get<BackendProvider>()
     }
+}
+
+internal fun HttpRequestRetryConfig.configureBackendTransportRetries() {
+    maxRetries = 2
+    retryIf { _, _ -> false }
+    retryOnExceptionIf { _, cause -> cause is IOException }
+    exponentialDelay()
 }

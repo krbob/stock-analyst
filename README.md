@@ -348,7 +348,9 @@ consecutive `502` failures within 30 seconds open it for 30 seconds. Healthy res
 `404` responses reset the series. While open it returns `503` with a dynamic `Retry-After`, then
 permits exactly one half-open probe. Cache limits and the bulkhead timeout may be zero;
 active-loader, retry-after, circuit-breaker and worker values must be positive integers, with
-workers greater than loaders.
+workers greater than loaders. The Kotlin API forwards every received HTTP status without an
+immediate retry, preserving `429`/`503` and `Retry-After`; its two retries are reserved for
+transport-level `IOException`s where the backend returned no response.
 
 ## Error Codes
 
