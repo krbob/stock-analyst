@@ -192,6 +192,10 @@ adjusted for dividends. `splitRatio` is present only on a corporate-action candl
 the new-to-old share ratio (for example, `10.0` for a 10-for-1 split). This keeps gains and
 technical indicators continuous across splits without double-counting dividends.
 
+yfinance repair also standardises histories quoted in subunits: GBp, ZAc and ILA candles and
+dividends arrive in GBP, ZAR and ILS respectively. The service applies the `0.01` subunit scale
+only to spot/info price fields, which yfinance still reports in the original exchange unit.
+
 When `indicators` is provided, extra historical data is fetched for indicator warmup (e.g., 200 extra bars for SMA200) and trimmed to the requested period. When `from` and `to` are supplied, the response is trimmed to that exact date window and echoes it back via `requestedFrom` / `requestedTo`; the `period` field then reflects the internal fetch window chosen by the server. Intraday intervals (`1m`, `5m`, etc.) include a `timestamp` field with UTC epoch seconds alongside `date`. Intraday responses are cached for 30 seconds.
 
 ---

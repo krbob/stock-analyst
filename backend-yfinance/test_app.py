@@ -158,6 +158,39 @@ class TestHistoryEndpoint:
             "dividend": 0.25,
         }]
 
+    def test_emits_repaired_subunit_history_in_major_currency_without_second_scale(self, client, mock_ticker):
+        # yfinance repair metadata for this frame is currency=GBP, currencyRepaired=True even
+        # though the separate info payload still reports GBp and a spot price around 1023.6.
+        history = pd.DataFrame(
+            {
+                "Open": [10.20, 10.21],
+                "Close": [10.212, 10.236],
+                "Low": [10.19, 10.20],
+                "High": [10.22, 10.24],
+                "Volume": [1_000_000, 1_100_000],
+                "Dividends": [0.04, 0.0],
+                "Stock Splits": [0.0, 0.0],
+            },
+            index=pd.DatetimeIndex([pd.Timestamp("2024-06-14"), pd.Timestamp("2024-06-15")]),
+        )
+        ticker = mock_ticker(history_df=history)
+        ticker.history_metadata = {"currency": "GBP", "currencyRepaired": True}
+
+        response = client.get("/history/ISF.L/1y")
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert [row["close"] for row in data] == [10.212, 10.236]
+        assert data[0]["dividend"] == 0.04
+        ticker.history.assert_called_once_with(
+            period="1y",
+            interval="1d",
+            auto_adjust=False,
+            actions=True,
+            repair=True,
+            raise_errors=True,
+        )
+
     @pytest.mark.parametrize("interval", ["1wk", "1mo"])
     def test_weekly_and_monthly_keep_repaired_split_basis(self, client, mock_ticker, interval):
         mock_ticker(history_df=_split_adjusted_history())

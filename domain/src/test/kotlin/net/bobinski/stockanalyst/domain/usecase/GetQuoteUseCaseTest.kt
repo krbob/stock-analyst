@@ -190,6 +190,79 @@ class GetQuoteUseCaseTest {
     }
 
     @Test
+    fun `uses major-unit repaired history with GBp spot for quote gains`() = runTest {
+        coEvery { stockDataProvider.getInfo("ISF.L") } returns basicInfo("iShares Core FTSE 100").copy(
+            currency = "GBp",
+            price = 1_023.6,
+            marketDate = LocalDate(2024, 6, 15)
+        )
+        coEvery { stockDataProvider.getHistory("ISF.L", Period._5y) } returns listOf(
+            conversionPrice(LocalDate(2024, 6, 13), 10.214),
+            conversionPrice(LocalDate(2024, 6, 14), 10.212)
+        )
+
+        val result = useCase("ISF.L")
+
+        assertEquals("GBP", result.currency)
+        assertEquals(10.24, result.lastPrice)
+        assertEquals(0.002, result.gain.daily)
+    }
+
+    @Test
+    fun `converts repaired GBp history and subunit spot to PLN on one scale`() = runTest {
+        coEvery { stockDataProvider.getInfo("ISF.L") } returns basicInfo("iShares Core FTSE 100").copy(
+            currency = "GBp",
+            price = 1_023.6,
+            marketDate = LocalDate(2024, 6, 15)
+        )
+        every { stockDataProvider.resolveConversionSymbol("GBP", "PLN") } returns "GBPPLN=X"
+        coEvery { stockDataProvider.getInfo("GBPPLN=X") } returns basicInfo("GBP/PLN").copy(
+            price = 5.0,
+            marketDate = LocalDate(2024, 6, 15)
+        )
+        coEvery { stockDataProvider.getHistory("ISF.L", Period._5y) } returns listOf(
+            conversionPrice(LocalDate(2024, 6, 13), 10.214),
+            conversionPrice(LocalDate(2024, 6, 14), 10.212)
+        )
+        coEvery { stockDataProvider.getHistory("GBPPLN=X", Period._5y) } returns listOf(
+            conversionPrice(LocalDate(2024, 6, 13), 5.0),
+            conversionPrice(LocalDate(2024, 6, 14), 5.0)
+        )
+
+        val result = useCase("ISF.L", "PLN")
+
+        assertEquals("PLN", result.currency)
+        assertEquals(51.18, result.lastPrice)
+        assertEquals(0.002, result.gain.daily)
+    }
+
+    @Test
+    fun `normalizes South African and Israeli subunit spot currencies`() = runTest {
+        val cases = listOf(
+            Triple("SOLJ.J", "ZAc", "ZAR"),
+            Triple("TEVA.TA", "ILA", "ILS")
+        )
+        cases.forEach { (symbol, nativeCurrency, expectedCurrency) ->
+            coEvery { stockDataProvider.getInfo(symbol) } returns basicInfo(symbol).copy(
+                currency = nativeCurrency,
+                price = 12_345.0,
+                previousClose = 12_300.0,
+                marketDate = LocalDate(2024, 6, 15)
+            )
+            coEvery { stockDataProvider.getHistory(symbol, Period._5y) } returns listOf(
+                conversionPrice(LocalDate(2024, 6, 14), 120.0),
+                conversionPrice(LocalDate(2024, 6, 15), 123.0)
+            )
+
+            val result = useCase(symbol)
+
+            assertEquals(expectedCurrency, result.currency)
+            assertEquals(123.45, result.lastPrice)
+            assertEquals(123.0, result.previousClose)
+        }
+    }
+
+    @Test
     fun `falls back to historical fx rate when spot conversion info fails`() = runTest {
         coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.").copy(
             price = 10.0,

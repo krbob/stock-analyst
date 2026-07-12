@@ -180,6 +180,8 @@ def get_history(symbol, period, interval="1d"):
         # Yahoo normally returns OHLC, volume and dividends already expressed on the latest
         # split basis, even when dividend auto-adjustment is disabled. `repair=True` makes
         # yfinance use the Stock Splits actions to repair missing or double split adjustments.
+        # The same repair pipeline standardises GBp/ZAc/ILA history (including dividends) to
+        # GBP/ZAR/ILS. Downstream consumers must therefore scale only info-derived spot fields.
         # Keep `auto_adjust=False`: enabling it would additionally adjust for dividends and
         # would make the explicit dividend stream unsuitable for yield/total-return logic.
         history = ticker.history(

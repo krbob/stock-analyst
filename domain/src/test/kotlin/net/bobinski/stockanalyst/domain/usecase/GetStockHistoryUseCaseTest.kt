@@ -218,24 +218,32 @@ class GetStockHistoryUseCaseTest {
     }
 
     @Test
-    fun `normalizes GBX candles and dividends to GBP`() = runTest {
+    fun `keeps yfinance repaired GBX candles and dividends in major GBP units`() = runTest {
         coEvery { stockDataProvider.getInfo("LSEG.L") } returns basicInfo(
             "London Stock Exchange Group",
             currency = "GBX"
         )
         coEvery { stockDataProvider.getHistory("LSEG.L", Period._1y, Interval.DAILY) } returns listOf(
-            historicalPrice(LocalDate(2024, 6, 15), 8_908.0, dividend = 103.0)
+            HistoricalPrice(
+                date = LocalDate(2024, 6, 15),
+                open = 89.07,
+                close = 89.08,
+                low = 89.06,
+                high = 89.09,
+                volume = 1_000_000L,
+                dividend = 1.03
+            )
         )
 
         val result = useCase("LSEG.L", Period._1y)
 
         val price = result.prices.single()
         assertEquals("GBP", result.currency)
-        assertEquals(89.07, price.open, 0.0001)
-        assertEquals(89.08, price.close, 0.0001)
-        assertEquals(89.06, price.low, 0.0001)
-        assertEquals(89.09, price.high, 0.0001)
-        assertEquals(1.03, price.dividend, 0.0001)
+        assertEquals(89.07, price.open)
+        assertEquals(89.08, price.close)
+        assertEquals(89.06, price.low)
+        assertEquals(89.09, price.high)
+        assertEquals(1.03, price.dividend)
     }
 
     @Test

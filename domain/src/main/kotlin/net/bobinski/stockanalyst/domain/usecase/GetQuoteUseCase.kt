@@ -65,7 +65,6 @@ class GetQuoteUseCase(
                 history = stockDataProvider.getHistory(symbol, Period._1d)
             }
             if (history.isEmpty()) throw BackendDataException.missingHistory(symbol)
-            history = conversionPlan.normalizeNativePrices(history)
 
             val conversionHistory = conversionSymbol?.let {
                 val convHistory = stockDataProvider.getHistory(it, period)
@@ -79,7 +78,7 @@ class GetQuoteUseCase(
             val priceSnapshot = QuotePriceSnapshot.create(
                 history = history,
                 conversionHistory = conversionHistory,
-                nativeSpotPrice = info.price?.let(conversionPlan::normalizeNativePrice),
+                nativeSpotPrice = info.price?.let(conversionPlan::normalizeSpotPrice),
                 spotConversionRate = conversionInfo?.price,
                 marketDate = info.marketDate,
                 fallbackDate = currentTimeProvider.localDate(),
@@ -114,17 +113,17 @@ class GetQuoteUseCase(
                 recommendation = info.recommendation,
                 analystCount = info.analystCount,
                 fiftyTwoWeekHigh = info.fiftyTwoWeekHigh
-                    ?.let(conversionPlan::normalizeNativePrice)
+                    ?.let(conversionPlan::normalizeSpotPrice)
                     ?.let { convRate?.times(it) ?: it },
                 fiftyTwoWeekLow = info.fiftyTwoWeekLow
-                    ?.let(conversionPlan::normalizeNativePrice)
+                    ?.let(conversionPlan::normalizeSpotPrice)
                     ?.let { convRate?.times(it) ?: it },
                 beta = info.beta,
                 sector = info.sector,
                 industry = info.industry,
                 earningsDate = info.earningsDate,
                 previousClose = info.previousClose
-                    ?.let(conversionPlan::normalizeNativePrice)
+                    ?.let(conversionPlan::normalizeSpotPrice)
                     ?.let { convRate?.times(it) ?: it }
             ).roundValues()
         }

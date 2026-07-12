@@ -1,36 +1,19 @@
 package net.bobinski.stockanalyst.domain.usecase
 
 import net.bobinski.stockanalyst.domain.error.BackendDataException
-import net.bobinski.stockanalyst.domain.model.HistoricalPrice
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider
 
 internal data class CurrencyConversionPlan(
     val responseCurrency: String?,
     val conversionSymbol: String?,
-    val nativePriceScale: Double
+    val spotPriceScale: Double
 ) {
     /**
-     * Yahoo reports exchange-quoted values for some London listings in pence while using GBP for
-     * fundamental amounts such as EPS and market capitalisation. Keep the scale limited to quoted
-     * price fields and historical candles; applying it to every monetary field would understate
-     * those fundamentals by 100x.
+     * Yahoo info reports exchange-quoted spot fields in subunits (GBp/ZAc/ILA), while yfinance's
+     * repair pipeline standardises historical OHLC and dividends to GBP/ZAR/ILS. Keep this scale
+     * strictly on info-derived price fields; historical series must not be scaled a second time.
      */
-    fun normalizeNativePrice(value: Double): Double = value * nativePriceScale
-
-    fun normalizeNativePrices(prices: Collection<HistoricalPrice>): List<HistoricalPrice> =
-        if (nativePriceScale == 1.0) {
-            prices.toList()
-        } else {
-            prices.map { price ->
-                price.copy(
-                    open = normalizeNativePrice(price.open),
-                    close = normalizeNativePrice(price.close),
-                    low = normalizeNativePrice(price.low),
-                    high = normalizeNativePrice(price.high),
-                    dividend = normalizeNativePrice(price.dividend)
-                )
-            }
-        }
+    fun normalizeSpotPrice(value: Double): Double = value * spotPriceScale
 }
 
 private data class NativeCurrencyUnit(
@@ -50,7 +33,7 @@ internal fun StockDataProvider.planCurrencyConversion(
         return CurrencyConversionPlan(
             responseCurrency = native?.currency ?: target,
             conversionSymbol = null,
-            nativePriceScale = native?.priceScale ?: 1.0
+            spotPriceScale = native?.priceScale ?: 1.0
         )
     }
 
@@ -61,13 +44,21 @@ internal fun StockDataProvider.planCurrencyConversion(
     return CurrencyConversionPlan(
         responseCurrency = target,
         conversionSymbol = resolveConversionSymbol(native.currency, target),
-        nativePriceScale = native.priceScale
+        spotPriceScale = native.priceScale
     )
 }
 
 private fun String.toNativeCurrencyUnit(): NativeCurrencyUnit = when {
     this == "GBp" || equals("GBX", ignoreCase = true) -> NativeCurrencyUnit(
         currency = "GBP",
+        priceScale = 0.01
+    )
+    this == "ZAc" || equals("ZAC", ignoreCase = true) -> NativeCurrencyUnit(
+        currency = "ZAR",
+        priceScale = 0.01
+    )
+    equals("ILA", ignoreCase = true) -> NativeCurrencyUnit(
+        currency = "ILS",
         priceScale = 0.01
     )
     else -> NativeCurrencyUnit(currency = uppercase(), priceScale = 1.0)

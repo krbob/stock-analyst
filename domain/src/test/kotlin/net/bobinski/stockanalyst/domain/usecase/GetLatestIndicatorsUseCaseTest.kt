@@ -116,15 +116,15 @@ class GetLatestIndicatorsUseCaseTest {
     }
 
     @Test
-    fun `normalizes GBp prices before calculating price indicators`() = runTest {
+    fun `does not rescale yfinance repaired GBp history before calculating indicators`() = runTest {
         coEvery { stockDataProvider.getInfo("ULVR.L") } returns basicInfo("Unilever").copy(currency = "GBp")
         coEvery { stockDataProvider.getHistory("ULVR.L", Period._1y) } returns (0 until 50).map { daysAgo ->
             HistoricalPrice(
                 date = LocalDate(2024, 6, 15).minus(daysAgo, DateTimeUnit.DAY),
-                open = 4_599.0,
-                close = 4_599.0,
-                low = 4_599.0,
-                high = 4_599.0,
+                open = 45.99,
+                close = 45.99,
+                low = 45.99,
+                high = 45.99,
                 volume = 1_000L,
                 dividend = 0.0
             )

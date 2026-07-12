@@ -50,7 +50,7 @@ class GetLatestIndicatorsUseCase(
             convHistory
         }
 
-        val sortedPrices = conversionPlan.normalizeNativePrices(history).sortedBy { it.sortKey }
+        val sortedPrices = history.sortedBy { it.sortKey }
 
         val computed = CalculateIndicatorSeries.compute(
             sortedPrices, keys, barDuration, conversionHistory
