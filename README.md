@@ -439,6 +439,10 @@ dependencies, omits a random serial number and normalises its sole timestamp to 
 identical source and locks produce identical bytes. The API JDK/JRE and Python base images are
 pinned by multi-platform OCI digests. The API builder also keeps Gradle downloads in a BuildKit
 cache mount; source changes no longer force the wrapper and dependencies to be fetched from zero.
+CI rejects stale locks, verifies that two SBOM generations are byte-identical, uploads the result
+for 14 days, and scans both JVM runtime dependencies and the two built images with pinned Trivy.
+The gate covers fixed `HIGH` and `CRITICAL` findings. Published multi-platform images include
+BuildKit SBOM and provenance attestations, and every GitHub Action is pinned to a commit SHA.
 
 ## Error Codes
 
@@ -505,10 +509,11 @@ pytest backend-yfinance/test_app.py
 
 ### Dependency updates
 
-Renovate may automerge eligible routine dependency updates after CI, but every `yfinance` update
-is held for manual upstream-contract review and for at least seven days after release. Before
-merging it, run the Python adapter suite (including repair/subunit/split/error fixtures), build the
-backend image, and dispatch the non-blocking `Live Yahoo canary` against the candidate image.
+Renovate groups routine updates into a bounded weekly queue; no dependency, action, scanner or
+image update is automerged. Every `yfinance` update is additionally held for at least seven days
+and labelled for upstream-contract review. Before merging it, run the Python adapter suite
+(including repair/subunit/split/error fixtures), build the backend image, and dispatch the
+non-blocking `Live Yahoo canary` against the candidate image.
 
 ## Tech Stack
 

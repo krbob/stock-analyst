@@ -1,26 +1,58 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended"
+    "config:recommended",
+    "helpers:pinGitHubActionDigests"
   ],
   "timezone": "Europe/Warsaw",
-  "automerge": true,
-  "automergeType": "pr",
-  "platformAutomerge": true,
-  "rebaseWhen": "behind-base-branch",
+  "dependencyDashboard": true,
   "schedule": [
-    "* * 1 * *"
+    "before 6am on monday"
   ],
-  "automergeSchedule": [
-    "at any time"
+  "updateNotScheduled": false,
+  "prConcurrentLimit": 5,
+  "branchConcurrentLimit": 5,
+  "prHourlyLimit": 2,
+  "rebaseWhen": "conflicted",
+  "rangeStrategy": "pin",
+  "pinDigests": true,
+  "automerge": false,
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": [
+      "before 6am on monday"
+    ],
+    "automerge": false
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/ci-build\\.yml$/"
+      ],
+      "matchStrings": [
+        "hadolint/hadolint:(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]+)"
+      ],
+      "depNameTemplate": "hadolint/hadolint",
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/ci-build\\.yml$/"
+      ],
+      "matchStrings": [
+        "version:\\s*(?<currentValue>v[0-9]+\\.[0-9]+\\.[0-9]+)"
+      ],
+      "depNameTemplate": "aquasecurity/trivy",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "semver-coerced"
+    }
   ],
-  "updateNotScheduled": true,
-  "prConcurrentLimit": 0,
-  "branchConcurrentLimit": 0,
-  "prHourlyLimit": 0,
   "packageRules": [
     {
-      "description": "Group non-major Python backend dependency updates, except yfinance",
+      "description": "Group routine Python backend updates",
       "matchManagers": [
         "pip_requirements"
       ],
@@ -46,43 +78,56 @@
       "matchPackageNames": [
         "yfinance"
       ],
-      "schedule": [
-        "at any time"
-      ],
-      "automerge": false,
       "minimumReleaseAge": "7 days",
-      "labels": [
+      "automerge": false,
+      "addLabels": [
         "upstream-contract",
         "manual-review"
       ],
       "prPriority": 10
     },
     {
-      "description": "Group non-major GitHub Actions updates",
+      "description": "Critical runtime and build providers require supply-chain review",
       "matchManagers": [
-        "github-actions"
+        "gradle"
       ],
-      "matchUpdateTypes": [
-        "patch",
-        "minor",
-        "digest",
-        "pin"
+      "matchPackageNames": [
+        "/^org\\.jetbrains\\.kotlin/",
+        "/^io\\.ktor/",
+        "/^io\\.insert-koin/",
+        "/^ch\\.qos\\.logback:/",
+        "/^org\\.ta4j:/",
+        "dev.detekt",
+        "org.cyclonedx.bom"
       ],
-      "groupName": "GitHub Actions"
+      "automerge": false,
+      "addLabels": [
+        "supply-chain-review"
+      ]
     },
     {
-      "description": "Group non-major Docker image updates",
+      "description": "Actions, scanners, wrapper and runtime images require manual review",
       "matchManagers": [
+        "github-actions",
+        "gradle-wrapper",
         "dockerfile",
-        "docker-compose"
+        "docker-compose",
+        "custom.regex"
       ],
+      "automerge": false,
+      "addLabels": [
+        "supply-chain-review"
+      ]
+    },
+    {
+      "description": "Major updates always require manual review",
       "matchUpdateTypes": [
-        "patch",
-        "minor",
-        "digest",
-        "pin"
+        "major"
       ],
-      "groupName": "Docker images"
+      "automerge": false,
+      "addLabels": [
+        "major-update"
+      ]
     }
   ]
 }
