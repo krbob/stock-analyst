@@ -12,7 +12,7 @@ RUN apt-get update \
     && mkdir -p /home/stock-analyst/.cache/py-yfinance \
     && chown -R stock-analyst:stock-analyst /home/stock-analyst/.cache
 
-COPY app.py bulkhead.py memory_cache.py singleflight.py .
+COPY app.py bulkhead.py memory_cache.py singleflight.py ./
 
 USER stock-analyst
 
