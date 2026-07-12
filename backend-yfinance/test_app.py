@@ -21,10 +21,12 @@ from app import (
     UpstreamDataError,
     UpstreamRateLimitError,
     WAITRESS_THREADS,
+    _classify_circuit_error,
     _history_cache,
     _loader_bulkhead,
     _metadata_cache,
     _single_flight,
+    _upstream_circuit,
     app,
     get_basic_info,
     get_history,
@@ -32,6 +34,7 @@ from app import (
     search_tickers,
 )
 from bulkhead import LoaderBulkhead
+from circuit_breaker import CircuitBreaker, CircuitOpenError, CircuitState
 from memory_cache import ByteBoundedTTLCache, estimate_cache_entry_bytes
 from yfinance.exceptions import YFPricesMissingError, YFRateLimitError, YFTzMissingError
 
@@ -47,6 +50,7 @@ def client():
 def clear_data_cache():
     assert _single_flight.active_count == 0
     assert _loader_bulkhead.active_count == 0
+    _upstream_circuit.reset()
     _history_cache.clear()
     _metadata_cache.clear()
     yield
@@ -54,6 +58,7 @@ def clear_data_cache():
     _metadata_cache.clear()
     assert _single_flight.active_count == 0
     assert _loader_bulkhead.active_count == 0
+    _upstream_circuit.reset()
 
 
 @pytest.fixture
@@ -126,6 +131,10 @@ class BlockingUpstream:
 
 class FatalLoaderError(BaseException):
     pass
+
+
+def _raise_error(error):
+    raise error
 
 
 def _run_joined_calls(call, key, blocker, count=6, before_release=None):
@@ -889,6 +898,229 @@ class TestByteBoundedTTLCache:
         assert two_prices > one_price
 
 
+class TestCircuitBreaker:
+    @staticmethod
+    def breaker(clock, threshold=4, window=30, open_seconds=30):
+        return CircuitBreaker(
+            failure_threshold=threshold,
+            failure_window_seconds=window,
+            open_seconds=open_seconds,
+            forced_open_seconds=RATE_LIMIT_RETRY_AFTER_SECONDS,
+            clock=clock,
+        )
+
+    @staticmethod
+    def fail(circuit, error):
+        with pytest.raises(type(error)):
+            circuit.call(lambda: _raise_error(error), _classify_circuit_error)
+
+    def test_opens_after_threshold_502_failures_and_reports_dynamic_retry_after(self):
+        clock = FakeClock()
+        circuit = self.breaker(clock)
+
+        for _ in range(3):
+            self.fail(circuit, UpstreamDataError())
+        assert circuit.state == CircuitState.CLOSED
+        assert circuit.failure_count == 3
+
+        self.fail(circuit, UpstreamDataError())
+
+        assert circuit.state == CircuitState.OPEN
+        with pytest.raises(CircuitOpenError) as opened:
+            circuit.call(
+                lambda: pytest.fail("Open circuit called its loader"),
+                _classify_circuit_error,
+            )
+        assert opened.value.retry_after_seconds == 30
+
+        clock.advance(11)
+        with pytest.raises(CircuitOpenError) as later:
+            circuit.call(
+                lambda: pytest.fail("Open circuit called its loader"),
+                _classify_circuit_error,
+            )
+        assert later.value.retry_after_seconds == 19
+
+    def test_rate_limit_forces_immediate_open_for_provider_retry_period(self):
+        clock = FakeClock()
+        circuit = self.breaker(clock)
+
+        with pytest.raises(UpstreamRateLimitError) as original:
+            circuit.call(lambda: _raise_error(UpstreamRateLimitError()), _classify_circuit_error)
+
+        assert original.value.status_code == 429
+        assert circuit.state == CircuitState.OPEN
+        with pytest.raises(CircuitOpenError) as opened:
+            circuit.call(
+                lambda: pytest.fail("Open circuit called its loader"),
+                _classify_circuit_error,
+            )
+        assert opened.value.retry_after_seconds == RATE_LIMIT_RETRY_AFTER_SECONDS
+
+        clock.advance(17)
+        with pytest.raises(CircuitOpenError) as later:
+            circuit.call(
+                lambda: pytest.fail("Open circuit called its loader"),
+                _classify_circuit_error,
+            )
+        assert later.value.retry_after_seconds == RATE_LIMIT_RETRY_AFTER_SECONDS - 17
+
+    def test_failure_window_expiry_and_healthy_result_reset_the_series(self):
+        clock = FakeClock()
+        circuit = self.breaker(clock)
+
+        for _ in range(3):
+            self.fail(circuit, UpstreamDataError())
+        clock.advance(30)
+        self.fail(circuit, UpstreamDataError())
+        assert circuit.failure_count == 1
+
+        self.fail(circuit, UpstreamDataError())
+        assert circuit.call(lambda: "healthy", _classify_circuit_error) == "healthy"
+        assert circuit.failure_count == 0
+
+        self.fail(circuit, UpstreamDataError())
+        self.fail(circuit, UpstreamDataError())
+        self.fail(circuit, SymbolNotFoundError("INVALID"))
+        assert circuit.failure_count == 0
+
+        for _ in range(3):
+            self.fail(circuit, UpstreamDataError())
+        assert circuit.state == CircuitState.CLOSED
+
+    def test_half_open_allows_one_concurrent_probe_and_success_closes(self):
+        clock = FakeClock()
+        circuit = self.breaker(clock, threshold=1)
+        self.fail(circuit, UpstreamDataError())
+        clock.advance(30)
+        probe = BlockingUpstream(value="recovered")
+
+        with ThreadPoolExecutor(max_workers=6) as executor:
+            probe_future = executor.submit(circuit.call, probe, _classify_circuit_error)
+            assert probe.started.wait(timeout=5)
+            assert circuit.state == CircuitState.HALF_OPEN
+
+            def rejected_call():
+                try:
+                    circuit.call(
+                        lambda: pytest.fail("Second half-open probe ran"),
+                        _classify_circuit_error,
+                    )
+                except CircuitOpenError as error:
+                    return error.retry_after_seconds
+                pytest.fail("Concurrent half-open call was not rejected")
+
+            rejected = [executor.submit(rejected_call) for _ in range(5)]
+            assert [future.result(timeout=5) for future in rejected] == [1] * 5
+            probe.release.set()
+            assert probe_future.result(timeout=5) == "recovered"
+
+        assert probe.calls == 1
+        assert circuit.state == CircuitState.CLOSED
+
+    def test_verified_404_half_open_probe_closes_circuit_but_keeps_404(self):
+        clock = FakeClock()
+        circuit = self.breaker(clock, threshold=1)
+        self.fail(circuit, UpstreamDataError())
+        clock.advance(30)
+
+        with pytest.raises(SymbolNotFoundError) as missing:
+            circuit.call(
+                lambda: _raise_error(SymbolNotFoundError("INVALID")),
+                _classify_circuit_error,
+            )
+
+        assert missing.value.status_code == 404
+        assert circuit.state == CircuitState.CLOSED
+
+    @pytest.mark.parametrize(
+        ("probe_error", "expected_retry_after"),
+        [
+            (UpstreamRateLimitError(), RATE_LIMIT_RETRY_AFTER_SECONDS),
+            (UpstreamDataError(), 10),
+        ],
+    )
+    def test_failed_half_open_probe_reopens_circuit(self, probe_error, expected_retry_after):
+        clock = FakeClock()
+        circuit = self.breaker(clock, threshold=1, open_seconds=10)
+        self.fail(circuit, UpstreamDataError())
+        clock.advance(10)
+
+        self.fail(circuit, probe_error)
+
+        assert circuit.state == CircuitState.OPEN
+        with pytest.raises(CircuitOpenError) as opened:
+            circuit.call(
+                lambda: pytest.fail("Reopened circuit called loader"),
+                _classify_circuit_error,
+            )
+        assert opened.value.retry_after_seconds == expected_retry_after
+
+    @pytest.mark.parametrize("probe_error", [RuntimeError("neutral"), FatalLoaderError("fatal")])
+    def test_base_exception_always_releases_half_open_probe(self, probe_error):
+        clock = FakeClock()
+        circuit = self.breaker(clock, threshold=1, open_seconds=10)
+        self.fail(circuit, UpstreamDataError())
+        clock.advance(10)
+
+        self.fail(circuit, probe_error)
+
+        assert circuit.state == CircuitState.OPEN
+        with pytest.raises(CircuitOpenError) as opened:
+            circuit.call(
+                lambda: pytest.fail("Inconclusive probe left circuit usable"),
+                _classify_circuit_error,
+            )
+        assert opened.value.retry_after_seconds == 10
+
+    def test_stale_success_cannot_close_circuit_opened_by_newer_completions(self):
+        clock = FakeClock()
+        circuit = self.breaker(clock, threshold=2)
+        stale_success = BlockingUpstream(value="late success")
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            stale_future = executor.submit(
+                circuit.call,
+                stale_success,
+                _classify_circuit_error,
+            )
+            assert stale_success.started.wait(timeout=5)
+
+            self.fail(circuit, UpstreamDataError())
+            self.fail(circuit, UpstreamDataError())
+            opened_generation = circuit.generation
+            assert circuit.state == CircuitState.OPEN
+
+            stale_success.release.set()
+            assert stale_future.result(timeout=5) == "late success"
+
+        assert circuit.state == CircuitState.OPEN
+        assert circuit.generation == opened_generation
+
+    def test_stale_rate_limit_completion_restarts_the_forced_open_period(self):
+        clock = FakeClock()
+        circuit = self.breaker(clock, threshold=1)
+        late_rate_limit = BlockingUpstream(error=UpstreamRateLimitError())
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            late_future = executor.submit(
+                circuit.call,
+                late_rate_limit,
+                _classify_circuit_error,
+            )
+            assert late_rate_limit.started.wait(timeout=5)
+
+            self.fail(circuit, UpstreamDataError())
+            clock.advance(20)
+            late_rate_limit.release.set()
+            with pytest.raises(UpstreamRateLimitError):
+                late_future.result(timeout=5)
+
+        with pytest.raises(CircuitOpenError) as opened:
+            circuit.call(lambda: pytest.fail("Open circuit called loader"), _classify_circuit_error)
+        assert opened.value.retry_after_seconds == RATE_LIMIT_RETRY_AFTER_SECONDS
+
+
 class TestSingleFlight:
     @pytest.mark.parametrize("symbol", ["AAPL", "GBPPLN=X"])
     def test_coalesces_identical_info_and_fx_loads(self, symbol):
@@ -959,6 +1191,14 @@ class TestSingleFlight:
         expected_status,
         expected_retry_after,
     ):
+        clock = FakeClock()
+        circuit = CircuitBreaker(
+            failure_threshold=4,
+            failure_window_seconds=30,
+            open_seconds=30,
+            forced_open_seconds=RATE_LIMIT_RETRY_AFTER_SECONDS,
+            clock=clock,
+        )
         blocker = BlockingUpstream(error=upstream_error)
 
         def classified_outcome():
@@ -968,7 +1208,10 @@ class TestSingleFlight:
                 return error.status_code, error.headers.get("Retry-After")
             pytest.fail("Expected classified upstream failure")
 
-        with patch("app.yf.Ticker") as ticker_class:
+        with (
+            patch("app._upstream_circuit", circuit),
+            patch("app.yf.Ticker") as ticker_class,
+        ):
             ticker = ticker_class.return_value
             type(ticker).info = PropertyMock(side_effect=blocker)
 
@@ -980,6 +1223,22 @@ class TestSingleFlight:
             assert outcomes == [(expected_status, expected_retry_after)] * len(outcomes)
             assert blocker.calls == 1
             assert _single_flight.active_count == 0
+            if expected_status == 429:
+                assert circuit.state == CircuitState.OPEN
+                with pytest.raises(ApiError) as rejected:
+                    get_basic_info("BLOCKED")
+                assert rejected.value.status_code == 503
+                assert rejected.value.headers["Retry-After"] == str(
+                    RATE_LIMIT_RETRY_AFTER_SECONDS
+                )
+                assert ticker_class.call_count == 1
+                clock.advance(RATE_LIMIT_RETRY_AFTER_SECONDS)
+            elif expected_status == 502:
+                assert circuit.state == CircuitState.CLOSED
+                assert circuit.failure_count == 1
+            else:
+                assert circuit.state == CircuitState.CLOSED
+                assert circuit.failure_count == 0
 
             blocker.error = None
             blocker.value = {"longName": "Recovered"}
@@ -988,6 +1247,7 @@ class TestSingleFlight:
         assert recovered.name == "Recovered"
         assert blocker.calls == 2
         assert ticker_class.call_count == 2
+        assert circuit.state == CircuitState.CLOSED
 
     def test_different_keys_load_in_parallel_without_holding_registry_lock(self):
         symbols = ("AAPL", "MSFT")
@@ -1042,6 +1302,86 @@ class TestSingleFlight:
         assert ticker_class.call_count == 2
 
 
+class TestCircuitBreakerIntegration:
+    def test_is_global_across_operation_keys_and_recovers_with_one_probe(self):
+        clock = FakeClock()
+        circuit = CircuitBreaker(
+            failure_threshold=2,
+            failure_window_seconds=30,
+            open_seconds=10,
+            forced_open_seconds=RATE_LIMIT_RETRY_AFTER_SECONDS,
+            clock=clock,
+        )
+        failing_ticker = MagicMock()
+        type(failing_ticker).info = PropertyMock(side_effect=RuntimeError("info failed"))
+        recovered_ticker = MagicMock()
+        type(recovered_ticker).info = PropertyMock(return_value={"longName": "Recovered"})
+
+        with (
+            patch("app._upstream_circuit", circuit),
+            patch("app.yf.Ticker", side_effect=[failing_ticker, recovered_ticker]) as ticker_class,
+            patch("app.yf.Search", side_effect=RuntimeError("search failed")) as search,
+        ):
+            with pytest.raises(UpstreamDataError):
+                get_basic_info("AAPL")
+            with pytest.raises(UpstreamDataError):
+                search_tickers("apple")
+
+            assert circuit.state == CircuitState.OPEN
+            assert ticker_class.call_count == 1
+            assert search.call_count == 1
+
+            with pytest.raises(ApiError) as rejected:
+                get_basic_info("MSFT")
+            assert rejected.value.status_code == 503
+            assert rejected.value.headers["Retry-After"] == "10"
+            assert ticker_class.call_count == 1
+
+            with app.test_client() as test_client:
+                health = test_client.get("/health")
+            assert health.status_code == 200
+
+            clock.advance(10)
+            recovered = get_basic_info("RECOVERED")
+
+        assert recovered.name == "Recovered"
+        assert ticker_class.call_count == 2
+        assert circuit.state == CircuitState.CLOSED
+        assert circuit.failure_count == 0
+
+    def test_completed_cache_bypasses_an_open_circuit(self):
+        clock = FakeClock()
+        circuit = CircuitBreaker(
+            failure_threshold=1,
+            failure_window_seconds=30,
+            open_seconds=30,
+            forced_open_seconds=RATE_LIMIT_RETRY_AFTER_SECONDS,
+            clock=clock,
+        )
+
+        with (
+            patch("app._upstream_circuit", circuit),
+            patch("app.yf.Ticker") as ticker_class,
+        ):
+            ticker = ticker_class.return_value
+            type(ticker).info = PropertyMock(return_value={"longName": "Cached"})
+            populated = get_basic_info("AAPL")
+
+            with pytest.raises(UpstreamDataError):
+                circuit.call(
+                    lambda: _raise_error(UpstreamDataError()),
+                    _classify_circuit_error,
+                )
+            assert circuit.state == CircuitState.OPEN
+
+            cached = get_basic_info("AAPL")
+
+        assert populated.name == "Cached"
+        assert cached.name == "Cached"
+        assert ticker_class.call_count == 1
+        assert circuit.state == CircuitState.OPEN
+
+
 class TestLoaderBulkhead:
     def test_http_worker_pool_has_headroom_above_loader_limit(self):
         assert WAITRESS_THREADS > BULKHEAD_MAX_ACTIVE_LOADERS
@@ -1054,6 +1394,12 @@ class TestLoaderBulkhead:
 
     def test_limits_unique_keys_and_returns_retryable_503_while_health_stays_available(self):
         bulkhead = LoaderBulkhead(max_active=2, acquire_timeout_seconds=0.01)
+        circuit = CircuitBreaker(
+            failure_threshold=1,
+            failure_window_seconds=30,
+            open_seconds=30,
+            forced_open_seconds=RATE_LIMIT_RETRY_AFTER_SECONDS,
+        )
         info_blocker = BlockingUpstream(value={"longName": "AAPL"})
         history_blocker = BlockingUpstream(value=_sample_history())
         blockers = (info_blocker, history_blocker)
@@ -1071,6 +1417,7 @@ class TestLoaderBulkhead:
 
         with (
             patch("app._loader_bulkhead", bulkhead),
+            patch("app._upstream_circuit", circuit),
             patch("app.yf.Ticker", side_effect=ticker_for) as ticker_class,
             patch("app.yf.Search") as search,
             ThreadPoolExecutor(max_workers=2) as executor,
@@ -1093,6 +1440,8 @@ class TestLoaderBulkhead:
                 assert saturated.get_json()["error"] == "Data backend is busy; retry shortly"
                 assert search.call_count == 0
                 assert ticker_class.call_count == 2
+                assert circuit.state == CircuitState.CLOSED
+                assert circuit.failure_count == 0
             finally:
                 for blocker in blockers:
                     blocker.release.set()
@@ -1101,6 +1450,8 @@ class TestLoaderBulkhead:
         assert results[0].name == "AAPL"
         assert len(results[1]) == 1
         assert bulkhead.active_count == 0
+        assert circuit.state == CircuitState.CLOSED
+        assert circuit.failure_count == 0
 
     def test_same_key_single_flight_uses_one_bulkhead_permit(self):
         bulkhead = LoaderBulkhead(max_active=1, acquire_timeout_seconds=0)

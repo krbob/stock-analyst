@@ -326,6 +326,9 @@ not cached. Set either limit to `0` to disable that pool.
 | `YFINANCE_BULKHEAD_MAX_ACTIVE_LOADERS` | `4` | Maximum concurrent unique-key yfinance loaders |
 | `YFINANCE_BULKHEAD_ACQUIRE_TIMEOUT_MS` | `250` | Maximum wait for a loader permit before returning `503` |
 | `YFINANCE_BULKHEAD_RETRY_AFTER_SECONDS` | `1` | `Retry-After` sent for local bulkhead saturation |
+| `YFINANCE_CIRCUIT_BREAKER_FAILURE_THRESHOLD` | `4` | Consecutive upstream failures required to open the circuit |
+| `YFINANCE_CIRCUIT_BREAKER_FAILURE_WINDOW_SECONDS` | `30` | Window in which consecutive failures accumulate |
+| `YFINANCE_CIRCUIT_BREAKER_OPEN_SECONDS` | `30` | Cooldown before one half-open recovery probe |
 | `YFINANCE_WAITRESS_THREADS` | `8` | HTTP worker threads; must exceed the loader limit |
 
 TTL expiry uses a monotonic clock, and reads promote an entry in LRU order independently of its
@@ -338,8 +341,14 @@ while unique keys consume separate permits. Saturation is reported as retryable 
 of Yahoo's `429` rate limit. Waitress has more HTTP workers than loader permits (`8 > 4` by
 default), allowing saturated requests to reach the `503` path and health checks to bypass the
 bulkhead instead of all workers blocking inside yfinance. The `docker-compose.yml` file forwards
-these settings from the shell or a local `.env` file. Cache limits and the bulkhead timeout may be zero; active-loader,
-retry-after and worker values must be positive integers, with workers greater than loaders.
+these settings from the shell or a local `.env` file. Inside each acquired bulkhead permit, one
+global per-process circuit breaker tracks only final Yahoo rate-limit (`429`) and upstream (`502`)
+failures. A provider rate limit opens it immediately for Yahoo's 60-second retry period; four
+consecutive `502` failures within 30 seconds open it for 30 seconds. Healthy results and verified
+`404` responses reset the series. While open it returns `503` with a dynamic `Retry-After`, then
+permits exactly one half-open probe. Cache limits and the bulkhead timeout may be zero;
+active-loader, retry-after, circuit-breaker and worker values must be positive integers, with
+workers greater than loaders.
 
 ## Error Codes
 
@@ -350,7 +359,7 @@ retry-after and worker values must be positive integers, with workers greater th
 | 422  | Insufficient conversion data or conversion unavailable for the requested symbol/date range |
 | 429  | Upstream rate limit; retry according to `Retry-After` |
 | 502  | Upstream Yahoo Finance/backend error                 |
-| 503  | Local data-backend bulkhead saturated; retry according to `Retry-After` |
+| 503  | Local data-backend bulkhead saturated or upstream circuit open; retry according to `Retry-After` |
 
 ## Running
 

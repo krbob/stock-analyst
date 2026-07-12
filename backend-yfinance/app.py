@@ -8,6 +8,7 @@ from dataclasses import asdict, dataclass
 import pandas as pd
 import yfinance as yf
 from bulkhead import BulkheadSaturatedError, LoaderBulkhead
+from circuit_breaker import CircuitBreaker, CircuitOpenError, CircuitOutcome
 from flask import Flask, g, jsonify, request
 from flask.json.provider import DefaultJSONProvider
 from memory_cache import ByteBoundedTTLCache
@@ -65,6 +66,9 @@ DEFAULT_BULKHEAD_MAX_ACTIVE_LOADERS = 4
 DEFAULT_BULKHEAD_ACQUIRE_TIMEOUT_MS = 250
 DEFAULT_BULKHEAD_RETRY_AFTER_SECONDS = 1
 DEFAULT_WAITRESS_THREADS = 8
+DEFAULT_CIRCUIT_BREAKER_FAILURE_THRESHOLD = 4
+DEFAULT_CIRCUIT_BREAKER_FAILURE_WINDOW_SECONDS = 30
+DEFAULT_CIRCUIT_BREAKER_OPEN_SECONDS = 30
 
 
 def _non_negative_env_int(name, default):
@@ -108,6 +112,17 @@ BULKHEAD_ACQUIRE_TIMEOUT_MS = _non_negative_env_int(
 BULKHEAD_RETRY_AFTER_SECONDS = _positive_env_int(
     "YFINANCE_BULKHEAD_RETRY_AFTER_SECONDS", DEFAULT_BULKHEAD_RETRY_AFTER_SECONDS
 )
+CIRCUIT_BREAKER_FAILURE_THRESHOLD = _positive_env_int(
+    "YFINANCE_CIRCUIT_BREAKER_FAILURE_THRESHOLD",
+    DEFAULT_CIRCUIT_BREAKER_FAILURE_THRESHOLD,
+)
+CIRCUIT_BREAKER_FAILURE_WINDOW_SECONDS = _positive_env_int(
+    "YFINANCE_CIRCUIT_BREAKER_FAILURE_WINDOW_SECONDS",
+    DEFAULT_CIRCUIT_BREAKER_FAILURE_WINDOW_SECONDS,
+)
+CIRCUIT_BREAKER_OPEN_SECONDS = _positive_env_int(
+    "YFINANCE_CIRCUIT_BREAKER_OPEN_SECONDS", DEFAULT_CIRCUIT_BREAKER_OPEN_SECONDS
+)
 WAITRESS_THREADS = _positive_env_int("YFINANCE_WAITRESS_THREADS", DEFAULT_WAITRESS_THREADS)
 if WAITRESS_THREADS <= BULKHEAD_MAX_ACTIVE_LOADERS:
     raise RuntimeError(
@@ -121,6 +136,12 @@ _single_flight = SingleFlight()
 _loader_bulkhead = LoaderBulkhead(
     BULKHEAD_MAX_ACTIVE_LOADERS,
     acquire_timeout_seconds=BULKHEAD_ACQUIRE_TIMEOUT_MS / 1000,
+)
+_upstream_circuit = CircuitBreaker(
+    failure_threshold=CIRCUIT_BREAKER_FAILURE_THRESHOLD,
+    failure_window_seconds=CIRCUIT_BREAKER_FAILURE_WINDOW_SECONDS,
+    open_seconds=CIRCUIT_BREAKER_OPEN_SECONDS,
+    forced_open_seconds=RATE_LIMIT_RETRY_AFTER_SECONDS,
 )
 
 
@@ -155,6 +176,15 @@ class BackendBusyError(ApiError):
         )
 
 
+class UpstreamCircuitOpenError(ApiError):
+    def __init__(self, retry_after_seconds):
+        super().__init__(
+            "Upstream provider is temporarily unavailable",
+            503,
+            headers={"Retry-After": str(retry_after_seconds)},
+        )
+
+
 class SymbolNotFoundError(ApiError):
     def __init__(self, symbol):
         super().__init__(f"Symbol not found: {symbol}", 404)
@@ -166,6 +196,16 @@ def _raise_classified_upstream_error(error, symbol=None):
     if symbol is not None and isinstance(error, YFTzMissingError):
         raise SymbolNotFoundError(symbol) from error
     raise UpstreamDataError() from error
+
+
+def _classify_circuit_error(error):
+    if isinstance(error, UpstreamRateLimitError):
+        return CircuitOutcome.FORCE_OPEN
+    if isinstance(error, UpstreamDataError):
+        return CircuitOutcome.FAILURE
+    if isinstance(error, SymbolNotFoundError):
+        return CircuitOutcome.HEALTHY
+    return CircuitOutcome.NEUTRAL
 
 
 def _has_symbol_identity(info):
@@ -212,9 +252,13 @@ def _coalesced_cached_load(key, loader):
         if cached_after_join is not None:
             return cached_after_join
         try:
-            return _loader_bulkhead.call(loader)
+            return _loader_bulkhead.call(
+                lambda: _upstream_circuit.call(loader, _classify_circuit_error)
+            )
         except BulkheadSaturatedError as error:
             raise BackendBusyError() from error
+        except CircuitOpenError as error:
+            raise UpstreamCircuitOpenError(error.retry_after_seconds) from error
 
     return _single_flight.call(key, load_after_second_cache_check)
 
