@@ -66,10 +66,29 @@ jobs:
         with:
           python-version: '3.13.14'
 
+      - name: Verify backend dependency locks
+        working-directory: backend-yfinance
+        run: |
+          set -euo pipefail
+          python -m pip install --require-hashes -r requirements-tooling.lock
+          pip-compile --quiet --generate-hashes --strip-extras --resolver=backtracking \
+            --output-file=requirements.lock requirements.txt
+          pip-compile --quiet --generate-hashes --strip-extras --resolver=backtracking \
+            --output-file=requirements-dev.lock requirements-dev.txt
+          pip-compile --quiet --generate-hashes --strip-extras --allow-unsafe --resolver=backtracking \
+            --output-file=requirements-tooling.lock requirements-tooling.txt
+          lock_changes="$(git status --porcelain -- requirements.lock requirements-dev.lock requirements-tooling.lock)"
+          if [[ -n "$lock_changes" ]]; then
+            echo "Python dependency lockfiles are stale:"
+            echo "$lock_changes"
+            exit 1
+          fi
+
       - name: Run backend tests
         working-directory: backend-yfinance
         run: |
-          pip install -r requirements-dev.txt
+          python -m pip install --require-hashes -r requirements-dev.lock
+          python -m pip check
           pytest test_app.py
 
       - name: Generate reproducible CycloneDX SBOM

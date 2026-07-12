@@ -443,6 +443,8 @@ CI rejects stale locks, verifies that two SBOM generations are byte-identical, u
 for 14 days, and scans both JVM runtime dependencies and the two built images with pinned Trivy.
 The gate covers fixed `HIGH` and `CRITICAL` findings. Published multi-platform images include
 BuildKit SBOM and provenance attestations, and every GitHub Action is pinned to a commit SHA.
+The Python backend installs a complete transitive lock in `--require-hashes` mode. CI recreates
+the runtime, development and lock-tooling files with Python 3.13.14 and rejects any drift.
 
 ## Error Codes
 
@@ -503,7 +505,7 @@ run directly. Docker uses the same language families and pinned runtime contents
 ./gradlew test
 
 # Python
-pip install -r backend-yfinance/requirements-dev.txt
+pip install --require-hashes -r backend-yfinance/requirements-dev.lock
 pytest backend-yfinance/test_app.py
 ```
 
@@ -514,6 +516,11 @@ image update is automerged. Every `yfinance` update is additionally held for at 
 and labelled for upstream-contract review. Before merging it, run the Python adapter suite
 (including repair/subunit/split/error fixtures), build the backend image, and dispatch the
 non-blocking `Live Yahoo canary` against the candidate image.
+
+Python dependency updates start in `backend-yfinance/requirements.txt`,
+`requirements-dev.txt` or `requirements-tooling.txt`. Recreate the corresponding locks with the
+pinned `pip-compile` from `requirements-tooling.lock`; CI verifies that the generated files are
+unchanged.
 
 ## Tech Stack
 
