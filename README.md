@@ -304,6 +304,12 @@ and bulkhead loaders, bulkhead/circuit rejections, the current circuit state and
 transition counters (`failure_threshold`, `force_open`, `cooldown_elapsed`, `probe_success` and
 `probe_failure`). These labels likewise never contain ticker symbols or search values.
 
+Pull requests run a deterministic container smoke against liveness, readiness, OpenAPI, metrics
+and typed error/request-ID contracts; it does not call Yahoo. The separate `Live Yahoo canary`
+workflow runs on weekdays and on manual dispatch against the published `main` images. It validates
+an AAPL quote/history, provenance semantics and an upstream 404, but is intentionally non-blocking
+so an external outage cannot reject an otherwise reproducible build.
+
 ## Key Features
 
 ### Market-data provenance

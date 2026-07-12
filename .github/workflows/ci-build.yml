@@ -111,61 +111,30 @@ jobs:
             fi
           done
 
-          echo "🔍 Sending test requests..."
-          if ! curl --fail -X GET http://localhost:8080/quote/aapl; then
-            echo "❌ quote endpoint did not respond properly"
-            exit 1
-          fi
+          echo "🔍 Checking deterministic runtime contracts..."
+          curl --fail --silent --show-error http://localhost:8080/healthz >/dev/null
+          curl --fail --silent --show-error http://localhost:8080/openapi/v1.json \
+            | jq --exit-status '.openapi == "3.0.3" and (.paths["/v1/quote/{stock}"] != null)' >/dev/null
+          curl --fail --silent --show-error http://localhost:8080/metrics \
+            | grep --quiet '^stock_analyst_http_requests_total'
+          docker compose exec -T stock-analyst-backend-yfinance \
+            curl --fail --silent --show-error http://localhost:8081/metrics \
+            | grep --quiet '^yfinance_http_requests_total'
 
-          if ! curl --fail -X GET "http://localhost:8080/quote/aapl?currency=EUR"; then
-            echo "❌ quote with currency conversion did not respond properly"
-            exit 1
-          fi
+          status=$(curl --silent --show-error --output /tmp/api-error.json \
+            --write-out '%{http_code}' \
+            --header 'X-Request-ID: deterministic-container-smoke' \
+            'http://localhost:8080/v1/quote/AAPL?currency=INVALID')
+          test "$status" = "400"
+          jq --exit-status \
+            '.errorCode == "INVALID_REQUEST" and .retryable == false and .requestId == "deterministic-container-smoke"' \
+            /tmp/api-error.json >/dev/null
 
-          if ! curl --fail -X GET "http://localhost:8080/compare?symbols=AAPL,MSFT"; then
-            echo "❌ compare endpoint did not respond properly"
-            exit 1
-          fi
-
-          if ! curl --fail -X GET http://localhost:8080/history/aapl; then
-            echo "❌ history endpoint did not respond properly"
-            exit 1
-          fi
-
-          if ! curl --fail -X GET "http://localhost:8080/history/aapl?period=1y&indicators=sma50,rsi,macd"; then
-            echo "❌ history with indicators endpoint did not respond properly"
-            exit 1
-          fi
-
-          if ! curl --fail -X GET "http://localhost:8080/history/aapl?period=1d&interval=5m"; then
-            echo "❌ history intraday endpoint did not respond properly"
-            exit 1
-          fi
-
-          if ! curl --fail -X GET "http://localhost:8080/history/aapl?currency=EUR"; then
-            echo "❌ history with currency conversion did not respond properly"
-            exit 1
-          fi
-
-          if ! curl --fail -X GET "http://localhost:8080/history/aapl?period=5y&dividends=true"; then
-            echo "❌ history with dividends did not respond properly"
-            exit 1
-          fi
-
-          if ! curl --fail -X GET "http://localhost:8080/history/aapl?from=2024-01-01&to=2024-06-30"; then
-            echo "❌ history with explicit range did not respond properly"
-            exit 1
-          fi
-
-          if ! curl --fail -X GET "http://localhost:8080/indicators/aapl?indicators=rsi"; then
-            echo "❌ indicators endpoint did not respond properly"
-            exit 1
-          fi
-
-          if ! curl --fail -X GET "http://localhost:8080/indicators/aapl?indicators=rsi&period=5y&interval=1wk"; then
-            echo "❌ indicators with weekly interval did not respond properly"
-            exit 1
-          fi
+          status=$(curl --silent --show-error --output /tmp/not-found.json \
+            --write-out '%{http_code}' http://localhost:8080/v1/not-a-route)
+          test "$status" = "404"
+          jq --exit-status '.errorCode == "NOT_FOUND" and .retryable == false' \
+            /tmp/not-found.json >/dev/null
       - name: Clean up test containers
         if: always()
         run: docker compose down

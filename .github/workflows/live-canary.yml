@@ -1,0 +1,62 @@
+name: Live Yahoo canary
+
+on:
+  schedule:
+    - cron: '17 5 * * 1-5'
+  workflow_dispatch:
+
+concurrency:
+  group: live-yahoo-canary
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  live-canary:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 12
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Log in to the container registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Start the published ecosystem slice
+        env:
+          STOCK_ANALYST_IMAGE: ghcr.io/${{ github.repository }}:main
+          STOCK_ANALYST_BACKEND_YFINANCE_IMAGE: ghcr.io/${{ github.repository }}-backend-yfinance:main
+        run: |
+          docker compose pull
+          docker compose up --detach --no-build
+          for attempt in {1..60}; do
+            if curl --fail --silent --show-error http://localhost:8080/readyz >/dev/null; then
+              exit 0
+            fi
+            if [ "$attempt" = "60" ]; then
+              docker compose ps
+              docker compose logs
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Validate live Yahoo semantics
+        run: bash scripts/live-canary.sh
+
+      - name: Collect diagnostics
+        if: failure()
+        run: |
+          docker compose ps
+          docker compose logs
+
+      - name: Clean up
+        if: always()
+        run: docker compose down
