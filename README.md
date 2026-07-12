@@ -157,6 +157,7 @@ curl "http://localhost:8080/history/AAPL?from=2024-01-01&to=2024-06-30"
   "currency": "USD",
   "period": "1y",
   "interval": "1d",
+  "adjustment": "split-adjusted",
   "requestedFrom": "2024-01-01",
   "requestedTo": "2024-06-30",
   "prices": [
@@ -179,6 +180,11 @@ curl "http://localhost:8080/history/AAPL?from=2024-01-01&to=2024-06-30"
   }
 }
 ```
+
+OHLC, volume and dividends use the latest split-adjusted share basis, while prices are not
+adjusted for dividends. `splitRatio` is present only on a corporate-action candle and expresses
+the new-to-old share ratio (for example, `10.0` for a 10-for-1 split). This keeps gains and
+technical indicators continuous across splits without double-counting dividends.
 
 When `indicators` is provided, extra historical data is fetched for indicator warmup (e.g., 200 extra bars for SMA200) and trimmed to the requested period. When `from` and `to` are supplied, the response is trimmed to that exact date window and echoes it back via `requestedFrom` / `requestedTo`; the `period` field then reflects the internal fetch window chosen by the server. Intraday intervals (`1m`, `5m`, etc.) include a `timestamp` field with UTC epoch seconds alongside `date`. Intraday responses are cached for 30 seconds.
 

@@ -18,6 +18,7 @@ import kotlinx.serialization.json.Json
 import net.bobinski.stockanalyst.core.dependency.CoreModule
 import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
+import net.bobinski.stockanalyst.domain.model.PriceAdjustment
 import net.bobinski.stockanalyst.domain.model.StockHistory
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider.Interval
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider.Period
@@ -45,6 +46,19 @@ class HistoryRouteTest {
         assertTrue(body.contains("\"prices\""))
         assertTrue(body.contains("\"period\":\"1y\""))
         assertTrue(body.contains("\"interval\":\"1d\""))
+        assertTrue(body.contains("\"adjustment\":\"split-adjusted\""))
+    }
+
+    @Test
+    fun `exposes split ratio on the corporate action candle`() = testApplication {
+        val useCase = mockk<GetStockHistoryUseCase>()
+        coEvery { useCase.invoke("NVDA", Period._1y) } returns testHistory(splitRatio = 10.0)
+        configureApp(useCase)
+
+        val response = client.get("/history/NVDA")
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertTrue(response.bodyAsText().contains("\"splitRatio\":10.0"))
     }
 
     @Test
@@ -314,7 +328,11 @@ class HistoryRouteTest {
         }
     }
 
-    private fun testHistory(period: String = "1y", interval: String = "1d") = StockHistory(
+    private fun testHistory(
+        period: String = "1y",
+        interval: String = "1d",
+        splitRatio: Double? = null
+    ) = StockHistory(
         symbol = "AAPL",
         name = "Apple Inc.",
         period = period,
@@ -326,8 +344,10 @@ class HistoryRouteTest {
             ),
             HistoricalPrice(
                 date = LocalDate(2024, 6, 15), open = 209.0, close = 210.0,
-                low = 208.0, high = 211.0, volume = 1_500_000L, dividend = 0.0
+                low = 208.0, high = 211.0, volume = 1_500_000L, dividend = 0.0,
+                splitRatio = splitRatio
             )
-        )
+        ),
+        adjustment = PriceAdjustment.SPLIT_ADJUSTED
     )
 }

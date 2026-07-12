@@ -95,6 +95,7 @@ class HistoricalPrice:
     volume: int
     dividend: float
     timestamp: int = None
+    splitRatio: float = None
 
 
 @dataclass
@@ -135,7 +136,18 @@ def get_history(symbol, period, interval="1d"):
 
     ticker = yf.Ticker(symbol)
     try:
-        history = ticker.history(period=period, interval=interval, auto_adjust=False, actions=True)
+        # Yahoo normally returns OHLC, volume and dividends already expressed on the latest
+        # split basis, even when dividend auto-adjustment is disabled. `repair=True` makes
+        # yfinance use the Stock Splits actions to repair missing or double split adjustments.
+        # Keep `auto_adjust=False`: enabling it would additionally adjust for dividends and
+        # would make the explicit dividend stream unsuitable for yield/total-return logic.
+        history = ticker.history(
+            period=period,
+            interval=interval,
+            auto_adjust=False,
+            actions=True,
+            repair=True,
+        )
     except Exception:
         logger.warning("Failed to fetch history for %s (%s)", symbol, period, exc_info=True)
         raise UpstreamDataError()
@@ -160,6 +172,7 @@ def get_history(symbol, period, interval="1d"):
             high=row["High"],
             volume=_finite_int(row.get("Volume")),
             dividend=_resolve_dividend(row, date, dividends_by_date),
+            splitRatio=_resolve_split_ratio(row),
         )
         if intraday:
             utc_index = index.tz_localize("UTC") if index.tzinfo is None else index.tz_convert("UTC")
@@ -217,6 +230,11 @@ def _resolve_dividend(row, date, dividends_by_date):
     if fallback is not None:
         return fallback
     return row_dividend if row_dividend is not None else 0.0
+
+
+def _resolve_split_ratio(row):
+    split_ratio = _finite_float(row.get("Stock Splits"))
+    return split_ratio if split_ratio is not None and split_ratio > 0.0 else None
 
 
 def get_basic_info(symbol):

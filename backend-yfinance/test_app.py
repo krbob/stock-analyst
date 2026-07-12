@@ -52,6 +52,33 @@ def _sample_history(date="2024-06-15"):
     )
 
 
+def _split_adjusted_history(index=None):
+    """A repaired 10:1 split fixture expressed entirely on the post-split share basis.
+
+    Before repair, the first row would contain OHLC around 1,000, volume 10,000 and a
+    dividend of 0.40. yfinance's split repair changes those to roughly 100, 100,000 and
+    0.04 respectively, without applying dividend/total-return adjustment to prices.
+    """
+    if index is None:
+        index = pd.DatetimeIndex([
+            pd.Timestamp("2024-06-07"),
+            pd.Timestamp("2024-06-10"),
+            pd.Timestamp("2024-06-11"),
+        ])
+    return pd.DataFrame(
+        {
+            "Open": [99.0, 100.0, 101.0],
+            "Close": [100.0, 101.0, 102.0],
+            "Low": [98.0, 99.0, 100.0],
+            "High": [101.0, 102.0, 103.0],
+            "Volume": [100_000, 120_000, 110_000],
+            "Dividends": [0.04, 0.0, 0.01],
+            "Stock Splits": [0.0, 10.0, 0.0],
+        },
+        index=index,
+    )
+
+
 class TestHistoryEndpoint:
     def test_returns_prices(self, client, mock_ticker):
         index = pd.DatetimeIndex([pd.Timestamp("2024-06-15")])
@@ -78,6 +105,89 @@ class TestHistoryEndpoint:
             interval="1d",
             auto_adjust=False,
             actions=True,
+            repair=True,
+        )
+
+    def test_preserves_repaired_10_for_1_split_basis_without_double_adjustment(self, client, mock_ticker):
+        ticker = mock_ticker(history_df=_split_adjusted_history())
+
+        response = client.get("/history/NVDA/1y")
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data[0] == {
+            "date": "2024-06-07",
+            "open": 99.0,
+            "close": 100.0,
+            "low": 98.0,
+            "high": 101.0,
+            "volume": 100_000,
+            "dividend": 0.04,
+        }
+        assert data[1]["splitRatio"] == 10.0
+        assert data[1]["close"] == 101.0
+        assert data[1]["volume"] == 120_000
+        assert data[2]["dividend"] == 0.01
+        ticker.history.assert_called_once_with(
+            period="1y",
+            interval="1d",
+            auto_adjust=False,
+            actions=True,
+            repair=True,
+        )
+
+    def test_keeps_history_without_splits_unchanged(self, client, mock_ticker):
+        history = _sample_history()
+        history["Dividends"] = [0.25]
+        history["Stock Splits"] = [0.0]
+        mock_ticker(history_df=history)
+
+        response = client.get("/history/AAPL/1y")
+
+        assert response.status_code == 200
+        assert response.get_json() == [{
+            "date": "2024-06-15",
+            "open": 100.0,
+            "close": 101.0,
+            "low": 99.0,
+            "high": 102.0,
+            "volume": 1000,
+            "dividend": 0.25,
+        }]
+
+    @pytest.mark.parametrize("interval", ["1wk", "1mo"])
+    def test_weekly_and_monthly_keep_repaired_split_basis(self, client, mock_ticker, interval):
+        mock_ticker(history_df=_split_adjusted_history())
+
+        response = client.get(f"/history/NVDA/1y?interval={interval}")
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert [row["close"] for row in data] == [100.0, 101.0, 102.0]
+        assert [row["volume"] for row in data] == [100_000, 120_000, 110_000]
+        assert data[1]["splitRatio"] == 10.0
+
+    def test_intraday_keeps_provider_split_basis_and_event_timestamp(self, client, mock_ticker):
+        index = pd.DatetimeIndex([
+            pd.Timestamp("2024-06-07 15:55:00", tz="America/New_York"),
+            pd.Timestamp("2024-06-10 09:30:00", tz="America/New_York"),
+            pd.Timestamp("2024-06-10 09:35:00", tz="America/New_York"),
+        ])
+        ticker = mock_ticker(history_df=_split_adjusted_history(index))
+
+        response = client.get("/history/NVDA/5d?interval=5m")
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert [row["close"] for row in data] == [100.0, 101.0, 102.0]
+        assert data[1]["splitRatio"] == 10.0
+        assert data[1]["timestamp"] == int(index[1].tz_convert("UTC").timestamp())
+        ticker.history.assert_called_once_with(
+            period="5d",
+            interval="5m",
+            auto_adjust=False,
+            actions=True,
+            repair=True,
         )
 
     def test_uses_dividends_from_history_actions_column(self, client, mock_ticker):

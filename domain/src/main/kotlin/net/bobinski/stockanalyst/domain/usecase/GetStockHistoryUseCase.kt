@@ -8,6 +8,7 @@ import kotlinx.datetime.minus
 import net.bobinski.stockanalyst.core.time.CurrentTimeProvider
 import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
+import net.bobinski.stockanalyst.domain.model.PriceAdjustment
 import net.bobinski.stockanalyst.domain.model.StockHistory
 import net.bobinski.stockanalyst.domain.model.convertPrices
 import net.bobinski.stockanalyst.domain.model.trimTo
@@ -113,6 +114,7 @@ class GetStockHistoryUseCase(
                 period = fetchPeriod.value,
                 interval = interval.value,
                 prices = finalPrices,
+                adjustment = PriceAdjustment.SPLIT_ADJUSTED,
                 indicators = computed,
                 currency = conversionPlan.responseCurrency,
                 requestedFrom = range?.first,

@@ -23,7 +23,8 @@ data class HistoricalPrice(
     val high: Double,
     val volume: Long,
     val dividend: Double,
-    val timestamp: Long? = null
+    val timestamp: Long? = null,
+    val splitRatio: Double? = null
 ) {
     val sortKey: Long get() = timestamp ?: date.atStartOfDayIn(TimeZone.UTC).epochSeconds
 }

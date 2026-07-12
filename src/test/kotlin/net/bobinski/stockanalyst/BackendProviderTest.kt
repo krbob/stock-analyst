@@ -67,7 +67,8 @@ class BackendProviderTest {
         val prices = listOf(
             HistoricalPrice(
                 kotlinx.datetime.LocalDate(2024, 6, 15),
-                100.0, 101.0, 99.0, 102.0, 1000L, 0.0
+                100.0, 101.0, 99.0, 102.0, 1000L, 0.0,
+                splitRatio = 10.0
             )
         )
         val provider = providerWith(json.encodeToString(prices), HttpStatusCode.OK)
@@ -75,6 +76,7 @@ class BackendProviderTest {
         val result = provider.getHistory("AAPL", StockDataProvider.Period._1y)
 
         assertEquals(1, result.size)
+        assertEquals(10.0, result.single().splitRatio)
     }
 
     @Test
