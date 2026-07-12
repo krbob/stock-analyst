@@ -4,7 +4,6 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
-import kotlinx.coroutines.CancellationException
 import kotlinx.datetime.LocalDate
 import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.usecase.GetStockHistoryUseCase
@@ -111,13 +110,6 @@ fun Route.historyRoute() {
             )
         } catch (e: BackendDataException) {
             return@get call.respondError(e)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            return@get call.respondError(
-                HttpStatusCode.InternalServerError,
-                e.message ?: "Unexpected error occurred."
-            )
         }
 
         call.respond(result)

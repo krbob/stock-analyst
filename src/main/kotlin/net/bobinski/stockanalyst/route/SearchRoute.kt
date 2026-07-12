@@ -4,7 +4,6 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
-import kotlinx.coroutines.CancellationException
 import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.usecase.SearchTickerUseCase
 import org.koin.ktor.ext.inject
@@ -24,13 +23,6 @@ fun Route.searchRoute() {
             searchTickerUseCase(query)
         } catch (e: BackendDataException) {
             return@get call.respondError(e)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            return@get call.respondError(
-                HttpStatusCode.InternalServerError,
-                e.message ?: "Unexpected error occurred."
-            )
         }
 
         call.respond(results)
