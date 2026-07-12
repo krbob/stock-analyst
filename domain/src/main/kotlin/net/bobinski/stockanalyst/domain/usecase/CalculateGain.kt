@@ -10,34 +10,58 @@ import net.bobinski.stockanalyst.domain.model.priceFor
 
 class CalculateGain(private val currentTimeProvider: CurrentTimeProvider) {
 
-    fun daily(data: Collection<HistoricalPrice>, conversion: Collection<HistoricalPrice>?) =
-        calculateFor(data, conversion, currentTimeProvider.localDate().minus(1, DateTimeUnit.DAY))
+    fun daily(
+        data: Collection<HistoricalPrice>,
+        conversion: Collection<HistoricalPrice>?,
+        asOfDate: LocalDate = currentTimeProvider.localDate()
+    ) = calculateFor(data, conversion, asOfDate.minus(1, DateTimeUnit.DAY))
 
-    fun weekly(data: Collection<HistoricalPrice>, conversion: Collection<HistoricalPrice>?) =
-        calculateFor(data, conversion, currentTimeProvider.localDate().minus(1, DateTimeUnit.WEEK))
+    fun weekly(
+        data: Collection<HistoricalPrice>,
+        conversion: Collection<HistoricalPrice>?,
+        asOfDate: LocalDate = currentTimeProvider.localDate()
+    ) = calculateFor(data, conversion, asOfDate.minus(1, DateTimeUnit.WEEK))
 
-    fun monthly(data: Collection<HistoricalPrice>, conversion: Collection<HistoricalPrice>?) =
-        calculateFor(data, conversion, currentTimeProvider.localDate().minus(1, DateTimeUnit.MONTH))
+    fun monthly(
+        data: Collection<HistoricalPrice>,
+        conversion: Collection<HistoricalPrice>?,
+        asOfDate: LocalDate = currentTimeProvider.localDate()
+    ) = calculateFor(data, conversion, asOfDate.minus(1, DateTimeUnit.MONTH))
 
-    fun quarterly(data: Collection<HistoricalPrice>, conversion: Collection<HistoricalPrice>?) =
-        calculateFor(data, conversion, currentTimeProvider.localDate().minus(3, DateTimeUnit.MONTH))
+    fun quarterly(
+        data: Collection<HistoricalPrice>,
+        conversion: Collection<HistoricalPrice>?,
+        asOfDate: LocalDate = currentTimeProvider.localDate()
+    ) = calculateFor(data, conversion, asOfDate.minus(3, DateTimeUnit.MONTH))
 
-    fun halfYearly(data: Collection<HistoricalPrice>, conversion: Collection<HistoricalPrice>?) =
-        calculateFor(data, conversion, currentTimeProvider.localDate().minus(6, DateTimeUnit.MONTH))
+    fun halfYearly(
+        data: Collection<HistoricalPrice>,
+        conversion: Collection<HistoricalPrice>?,
+        asOfDate: LocalDate = currentTimeProvider.localDate()
+    ) = calculateFor(data, conversion, asOfDate.minus(6, DateTimeUnit.MONTH))
 
-    fun ytd(data: Collection<HistoricalPrice>, conversion: Collection<HistoricalPrice>?) =
-        calculateFor(data, conversion, LocalDate(currentTimeProvider.localDate().year, 1, 1))
+    fun ytd(
+        data: Collection<HistoricalPrice>,
+        conversion: Collection<HistoricalPrice>?,
+        asOfDate: LocalDate = currentTimeProvider.localDate()
+    ) = calculateFor(data, conversion, LocalDate(asOfDate.year, 1, 1))
 
-    fun yearly(data: Collection<HistoricalPrice>, conversion: Collection<HistoricalPrice>?) =
-        calculateFor(data, conversion, currentTimeProvider.localDate().minus(1, DateTimeUnit.YEAR))
+    fun yearly(
+        data: Collection<HistoricalPrice>,
+        conversion: Collection<HistoricalPrice>?,
+        asOfDate: LocalDate = currentTimeProvider.localDate()
+    ) = calculateFor(data, conversion, asOfDate.minus(1, DateTimeUnit.YEAR))
 
-    fun fiveYear(data: Collection<HistoricalPrice>, conversion: Collection<HistoricalPrice>?) =
-        calculateFor(data, conversion, currentTimeProvider.localDate().minus(5, DateTimeUnit.YEAR))
+    fun fiveYear(
+        data: Collection<HistoricalPrice>,
+        conversion: Collection<HistoricalPrice>?,
+        asOfDate: LocalDate = currentTimeProvider.localDate()
+    ) = calculateFor(data, conversion, asOfDate.minus(5, DateTimeUnit.YEAR))
 
     private fun calculateFor(
         data: Collection<HistoricalPrice>,
         conversion: Collection<HistoricalPrice>?,
-        targetDate: kotlinx.datetime.LocalDate
+        targetDate: LocalDate
     ): Double {
         val currentPrice = CalculateLastPrice(data, conversion)
         val oldPrice = data.priceFor(targetDate)

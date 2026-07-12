@@ -297,7 +297,10 @@ class BackendProviderTest {
     private fun basicInfo() = BasicInfo(
         "Apple Inc.", 195.0, 30.0, 45.0, 6.5, 1.5, 3e9,
         "buy", 40, 210.0, 150.0, 1.2, "Technology", "Consumer Electronics",
-        kotlinx.datetime.LocalDate(2024, 7, 25), 1.0, 0.96
+        kotlinx.datetime.LocalDate(2024, 7, 25), 1.0, 0.96,
+        currency = "USD",
+        previousClose = 193.5,
+        marketDate = kotlinx.datetime.LocalDate(2024, 6, 15)
     )
 
     private fun providerWith(responseBody: String, status: HttpStatusCode): BackendProvider {

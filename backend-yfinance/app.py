@@ -127,6 +127,7 @@ class BasicInfo:
     dividend_rate: float
     trailing_annual_dividend_rate: float
     previous_close: float
+    market_date: str
 
 
 def get_history(symbol, period, interval="1d"):
@@ -282,6 +283,7 @@ def get_basic_info(symbol):
         dividend_rate=info.get("dividendRate"),
         trailing_annual_dividend_rate=info.get("trailingAnnualDividendRate"),
         previous_close=_resolve_previous_close(info),
+        market_date=_resolve_market_date(info),
     )
 
     _cache_set(f"info:{symbol}", result, INFO_CACHE_SECONDS)
@@ -302,6 +304,26 @@ def _resolve_previous_close(info):
         if market_date < today:
             return price
     return prev
+
+
+def _resolve_market_date(info):
+    market_time = info.get("regularMarketTime")
+    if market_time is None:
+        return None
+
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+    exchange_timezone = info.get("exchangeTimezoneName")
+    try:
+        timezone_info = ZoneInfo(exchange_timezone) if exchange_timezone else timezone.utc
+    except (TypeError, ValueError, ZoneInfoNotFoundError):
+        timezone_info = timezone.utc
+
+    try:
+        return datetime.fromtimestamp(market_time, tz=timezone_info).date().isoformat()
+    except (OverflowError, OSError, TypeError, ValueError):
+        return None
 
 
 def search_tickers(query):

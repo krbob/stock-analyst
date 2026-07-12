@@ -34,5 +34,7 @@ data class BasicInfo(
     val trailingAnnualDividendRate: Double?,
     val currency: String? = null,
     @SerialName("previous_close")
-    val previousClose: Double? = null
+    val previousClose: Double? = null,
+    @SerialName("market_date")
+    val marketDate: LocalDate? = null
 )

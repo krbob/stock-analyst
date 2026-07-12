@@ -10,7 +10,6 @@ import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
 import net.bobinski.stockanalyst.domain.model.Quote
 import net.bobinski.stockanalyst.domain.model.applyConversion
-import net.bobinski.stockanalyst.domain.model.latestPrice
 import net.bobinski.stockanalyst.domain.model.priceFor
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider.Period
@@ -75,41 +74,36 @@ class GetQuoteUseCase(
                 convHistory
             }
             val conversionInfo = convInfoDeferred?.await()
-            val conversionPrice = conversionInfo?.price
-            val latestConvRate = conversionHistory?.latestPrice()
-            val convRate = conversionPrice ?: latestConvRate
+            val priceSnapshot = QuotePriceSnapshot.create(
+                history = history,
+                conversionHistory = conversionHistory,
+                nativeSpotPrice = info.price?.let(conversionPlan::normalizeNativePrice),
+                spotConversionRate = conversionInfo?.price,
+                marketDate = info.marketDate,
+                fallbackDate = currentTimeProvider.localDate(),
+                conversionMarketDate = conversionInfo?.marketDate
+            )
+            val convRate = priceSnapshot.effectiveConversionRate
 
             Quote(
                 symbol = symbol,
                 name = name,
                 currency = conversionPlan.responseCurrency,
-                date = currentTimeProvider.localDate(),
-                lastPrice = (info.price?.let(conversionPlan::normalizeNativePrice)
-                    ?: CalculateLastPrice(history, null))
-                    .applyConversion(convRate),
-                gain = Quote.Gain(
-                    daily = Double.NaN,
-                    weekly = Double.NaN,
-                    monthly = Double.NaN,
-                    quarterly = Double.NaN,
-                    halfYearly = Double.NaN,
-                    ytd = Double.NaN,
-                    yearly = Double.NaN,
-                    fiveYear = Double.NaN
-                ).takeIf { lacking } ?: Quote.Gain(
-                    daily = calculateGain.daily(history, conversionHistory),
-                    weekly = calculateGain.weekly(history, conversionHistory),
-                    monthly = calculateGain.monthly(history, conversionHistory),
-                    quarterly = calculateGain.quarterly(history, conversionHistory),
-                    halfYearly = calculateGain.halfYearly(history, conversionHistory),
-                    ytd = calculateGain.ytd(history, conversionHistory),
-                    yearly = calculateGain.yearly(history, conversionHistory),
-                    fiveYear = calculateGain.fiveYear(history, conversionHistory)
-                ),
+                date = priceSnapshot.terminalDate,
+                lastPrice = priceSnapshot.effectiveSpotPrice,
+                gain = if (lacking) unavailableGains() else calculateGains(priceSnapshot),
                 dividendYield = Double.NaN.takeIf { lacking }
-                    ?: calculateYield.yearly(history, conversionHistory),
+                    ?: calculateYield.yearly(
+                        priceSnapshot.history,
+                        priceSnapshot.conversionHistory,
+                        priceSnapshot.terminalDate
+                    ),
                 dividendGrowth = if (lacking) null
-                    else calculateDividendGrowth(history, conversionHistory),
+                    else calculateDividendGrowth(
+                        priceSnapshot.history,
+                        priceSnapshot.conversionHistory,
+                        priceSnapshot.terminalDate
+                    ),
                 peRatio = info.peRatio,
                 pbRatio = info.pbRatio,
                 eps = info.eps?.let { convRate?.times(it) ?: it },
@@ -133,20 +127,42 @@ class GetQuoteUseCase(
             ).roundValues()
         }
 
+    private fun calculateGains(snapshot: QuotePriceSnapshot) = Quote.Gain(
+        daily = calculateGain.daily(snapshot.history, snapshot.conversionHistory, snapshot.terminalDate),
+        weekly = calculateGain.weekly(snapshot.history, snapshot.conversionHistory, snapshot.terminalDate),
+        monthly = calculateGain.monthly(snapshot.history, snapshot.conversionHistory, snapshot.terminalDate),
+        quarterly = calculateGain.quarterly(snapshot.history, snapshot.conversionHistory, snapshot.terminalDate),
+        halfYearly = calculateGain.halfYearly(snapshot.history, snapshot.conversionHistory, snapshot.terminalDate),
+        ytd = calculateGain.ytd(snapshot.history, snapshot.conversionHistory, snapshot.terminalDate),
+        yearly = calculateGain.yearly(snapshot.history, snapshot.conversionHistory, snapshot.terminalDate),
+        fiveYear = calculateGain.fiveYear(snapshot.history, snapshot.conversionHistory, snapshot.terminalDate)
+    )
+
+    private fun unavailableGains() = Quote.Gain(
+        daily = Double.NaN,
+        weekly = Double.NaN,
+        monthly = Double.NaN,
+        quarterly = Double.NaN,
+        halfYearly = Double.NaN,
+        ytd = Double.NaN,
+        yearly = Double.NaN,
+        fiveYear = Double.NaN
+    )
+
     private fun calculateDividendGrowth(
         history: Collection<HistoricalPrice>,
-        conversionHistory: Collection<HistoricalPrice>?
+        conversionHistory: Collection<HistoricalPrice>?,
+        asOfDate: LocalDate
     ): Double? {
-        val today = currentTimeProvider.localDate()
-        val oneYearAgo = today.minus(1, DateTimeUnit.YEAR)
-        val twoYearsAgo = today.minus(2, DateTimeUnit.YEAR)
+        val oneYearAgo = asOfDate.minus(1, DateTimeUnit.YEAR)
+        val twoYearsAgo = asOfDate.minus(2, DateTimeUnit.YEAR)
 
         fun dividendSum(from: LocalDate, to: LocalDate): Double =
             history.filter { it.date > from && it.date <= to }.sumOf { hp ->
                 hp.dividend.applyConversion(conversionHistory?.priceFor(hp.date))
             }
 
-        val recent = dividendSum(oneYearAgo, today)
+        val recent = dividendSum(oneYearAgo, asOfDate)
         val previous = dividendSum(twoYearsAgo, oneYearAgo)
 
         if (previous == 0.0) return null

@@ -219,6 +219,95 @@ class GetQuoteUseCaseTest {
     }
 
     @Test
+    fun `uses effective spot as terminal point for every gain period when history is stale`() = runTest {
+        coEvery { stockDataProvider.getInfo("STALE") } returns basicInfo("Stale History Corp").copy(
+            price = 120.0,
+            marketDate = LocalDate(2024, 6, 15)
+        )
+        coEvery { stockDataProvider.getHistory("STALE", Period._5y) } returns listOf(
+            conversionPrice(LocalDate(2019, 6, 15), 20.0),
+            conversionPrice(LocalDate(2023, 6, 15), 40.0),
+            conversionPrice(LocalDate(2023, 12, 15), 50.0),
+            conversionPrice(LocalDate(2024, 1, 1), 60.0),
+            conversionPrice(LocalDate(2024, 3, 15), 70.0),
+            conversionPrice(LocalDate(2024, 5, 15), 80.0),
+            conversionPrice(LocalDate(2024, 6, 8), 90.0),
+            conversionPrice(LocalDate(2024, 6, 14), 100.0)
+        )
+
+        val result = useCase("STALE")
+
+        assertEquals(120.0, result.lastPrice)
+        assertEquals(0.2, result.gain.daily)
+        assertEquals(0.333, result.gain.weekly)
+        assertEquals(0.5, result.gain.monthly)
+        assertEquals(0.714, result.gain.quarterly)
+        assertEquals(1.4, result.gain.halfYearly)
+        assertEquals(1.0, result.gain.ytd)
+        assertEquals(2.0, result.gain.yearly)
+        assertEquals(5.0, result.gain.fiveYear)
+    }
+
+    @Test
+    fun `replaces stale same-day close with spot before calculating gains`() = runTest {
+        coEvery { stockDataProvider.getInfo("SAME") } returns basicInfo("Same Day Corp").copy(
+            price = 120.0,
+            marketDate = LocalDate(2024, 6, 15)
+        )
+        coEvery { stockDataProvider.getHistory("SAME", Period._5y) } returns listOf(
+            conversionPrice(LocalDate(2024, 6, 14), 80.0),
+            conversionPrice(LocalDate(2024, 6, 15), 100.0)
+        )
+
+        val result = useCase("SAME")
+
+        assertEquals(120.0, result.lastPrice)
+        assertEquals(0.5, result.gain.daily)
+    }
+
+    @Test
+    fun `anchors closed-market gains to last market session`() = runTest {
+        timeProvider.setDate(LocalDate(2024, 6, 17))
+        coEvery { stockDataProvider.getInfo("WEEKEND") } returns basicInfo("Weekend Corp").copy(
+            price = 110.0,
+            marketDate = LocalDate(2024, 6, 14)
+        )
+        coEvery { stockDataProvider.getHistory("WEEKEND", Period._5y) } returns listOf(
+            conversionPrice(LocalDate(2024, 6, 13), 80.0),
+            conversionPrice(LocalDate(2024, 6, 14), 100.0)
+        )
+
+        val result = useCase("WEEKEND")
+
+        assertEquals(LocalDate(2024, 6, 14), result.date)
+        assertEquals(110.0, result.lastPrice)
+        assertEquals(0.375, result.gain.daily)
+    }
+
+    @Test
+    fun `uses fallback history FX for both spot price and terminal gain point`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.").copy(
+            price = 120.0,
+            marketDate = LocalDate(2024, 6, 15)
+        )
+        every { stockDataProvider.resolveConversionSymbol("USD", "PLN") } returns "PLN=X"
+        coEvery { stockDataProvider.getInfo("PLN=X") } throws BackendDataException.backendError("PLN=X")
+        coEvery { stockDataProvider.getHistory("AAPL", Period._5y) } returns listOf(
+            conversionPrice(LocalDate(2024, 6, 13), 80.0),
+            conversionPrice(LocalDate(2024, 6, 14), 100.0)
+        )
+        coEvery { stockDataProvider.getHistory("PLN=X", Period._5y) } returns listOf(
+            conversionPrice(LocalDate(2024, 6, 13), 3.5),
+            conversionPrice(LocalDate(2024, 6, 14), 4.0)
+        )
+
+        val result = useCase("AAPL", "PLN")
+
+        assertEquals(480.0, result.lastPrice)
+        assertEquals(0.2, result.gain.daily)
+    }
+
+    @Test
     fun `throws when requested currency cannot be resolved without native currency`() = runTest {
         coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.").copy(currency = null)
         coEvery { stockDataProvider.getHistory("AAPL", Period._5y) } returns priceHistory(500)

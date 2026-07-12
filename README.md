@@ -76,6 +76,12 @@ curl http://localhost:8080/quote/AAPL?currency=EUR
 }
 ```
 
+`date` is the effective valuation date of `lastPrice`, not the API server's calendar date. It is
+the latest applicable stock or FX market session. Every gain uses `lastPrice` and the same
+effective spot FX rate as its terminal point; if cached history does not yet contain that session,
+the endpoint adds it only to an immutable calculation snapshot. On weekends and market holidays
+the snapshot remains anchored to the latest applicable market session.
+
 ---
 
 ### `GET /indicators/{symbol}`
