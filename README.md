@@ -416,6 +416,30 @@ attempt has a six-second request/socket deadline (two seconds to connect) and re
 250 ms. Consequently, even the worst permitted three-attempt transport path is bounded at 18.5 s;
 callers must use a strictly larger total deadline and must not retry classified HTTP responses.
 
+## Supply chain and reproducible builds
+
+All Kotlin modules declare the JDK 25 toolchain. Python development and production use 3.13.14
+(`.python-version` and the digest-pinned runtime image), and the Gradle wrapper verifies the 9.6.1
+distribution SHA-256. Every resolvable Gradle configuration is locked. After an intentional
+dependency change, regenerate and commit the lock state rather than editing it manually:
+
+```bash
+./gradlew resolveAndLockAll --write-locks
+git status --short -- '*gradle.lockfile'
+```
+
+Generate the aggregate production-runtime CycloneDX 1.6 SBOM with:
+
+```bash
+./gradlew cyclonedxBom
+```
+
+The ignored output is `build/reports/cyclonedx/stock-analyst.cdx.json`. It excludes test and build
+dependencies, omits a random serial number and normalises its sole timestamp to the Unix epoch, so
+identical source and locks produce identical bytes. The API JDK/JRE and Python base images are
+pinned by multi-platform OCI digests. The API builder also keeps Gradle downloads in a BuildKit
+cache mount; source changes no longer force the wrapper and dependencies to be fetched from zero.
+
 ## Error Codes
 
 | Code | Reason                                               |
@@ -437,7 +461,7 @@ docker compose up -d
 
 This starts both the Kotlin API (port 8080) and the Python backend (port 8081, internal).
 
-For production with pre-built images:
+For local evaluation with pre-built branch images:
 
 ```yaml
 services:
@@ -456,10 +480,13 @@ services:
     restart: unless-stopped
 ```
 
+Production deployments must replace floating `main` tags with image digests from the tested
+ecosystem compatibility manifest.
+
 ### Development
 
-Requires JDK 25 because TA4J 0.22.x is compiled for Java 25, and the Python backend must be
-running either via Docker or directly.
+Requires JDK 25 because TA4J 0.22.x is compiled for Java 25 and Python 3.13.14 when the backend is
+run directly. Docker uses the same language families and pinned runtime contents.
 
 ```bash
 ./gradlew run

@@ -7,6 +7,7 @@ junit-version = "6.1.1"
 koin-version = "4.2.2"
 ta4j-version = "0.22.8"
 detekt-version = "2.0.0-alpha.5"
+cyclonedx-version = "3.2.4"
 
 [libraries]
 # Server
@@ -57,3 +58,4 @@ kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin-version" }
 ktor = { id = "io.ktor.plugin", version.ref = "ktor-version" }
 kotlin-plugin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin-version" }
 detekt = { id = "dev.detekt", version.ref = "detekt-version" }
+cyclonedx = { id = "org.cyclonedx.bom", version.ref = "cyclonedx-version" }

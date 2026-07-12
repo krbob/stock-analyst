@@ -1,0 +1,10 @@
+.git
+.github
+.gradle
+.idea
+**/build
+backend-yfinance/.pytest_cache
+backend-yfinance/.venv
+backend-yfinance/__pycache__
+*.iml
+*.log
