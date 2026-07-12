@@ -7,10 +7,13 @@ import io.ktor.server.plugins.callid.CallId
 import io.ktor.server.plugins.callid.callIdMdc
 import io.ktor.server.plugins.calllogging.CallLogging
 import io.ktor.server.request.path
+import org.koin.ktor.ext.inject
 import org.slf4j.event.Level
 import java.util.UUID
 
 fun Application.configureMonitoring() {
+    val metricsRegistry: RequestMetricsRegistry by inject()
+
     install(CallId) {
         header(HttpHeaders.XRequestId)
         generate { UUID.randomUUID().toString() }
@@ -22,7 +25,11 @@ fun Application.configureMonitoring() {
         callIdMdc("requestId")
         filter { call -> call.request.path() !in PROBE_PATHS }
     }
+
+    install(RequestMetricsPlugin) {
+        registry = metricsRegistry
+    }
 }
 
 private val REQUEST_ID_PATTERN = Regex("[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
-private val PROBE_PATHS = setOf("/health", "/healthz", "/readyz")
+private val PROBE_PATHS = setOf("/health", "/healthz", "/readyz", "/metrics")

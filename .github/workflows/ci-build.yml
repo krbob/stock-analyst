@@ -87,7 +87,7 @@ jobs:
 
           echo "⏳ Waiting for API health..."
           for attempt in {1..60}; do
-            if curl --fail --silent --show-error http://localhost:8080/health >/dev/null; then
+            if curl --fail --silent --show-error http://localhost:8080/readyz >/dev/null; then
               break
             fi
             if [ "$attempt" = "60" ]; then

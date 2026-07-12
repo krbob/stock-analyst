@@ -12,7 +12,7 @@ services:
     environment:
       - BACKEND_URL=http://stock-analyst-backend-yfinance:8081
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/readyz"]
       interval: 10s
       timeout: 3s
       retries: 12

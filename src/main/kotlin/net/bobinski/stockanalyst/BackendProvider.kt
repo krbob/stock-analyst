@@ -122,6 +122,15 @@ internal class BackendProvider(
         if (from.equals("USD", ignoreCase = true)) "${to.uppercase()}=X"
         else "${from.uppercase()}${to.uppercase()}=X"
 
+    internal suspend fun isReady(): Boolean = try {
+        client.get("$backendUrl/health").status.isSuccess()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        logger.warn("Data backend readiness probe failed", e)
+        false
+    }
+
     override suspend fun getInfo(symbol: String): BasicInfo? = coalesce("info:$symbol") {
         val encodedSymbol = symbol.encodeURLPathPart()
         val response = try {

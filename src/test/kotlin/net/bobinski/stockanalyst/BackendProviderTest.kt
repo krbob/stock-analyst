@@ -26,6 +26,7 @@ import net.bobinski.stockanalyst.domain.model.HistoricalPrice
 import net.bobinski.stockanalyst.domain.model.SearchResult
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -35,6 +36,20 @@ class BackendProviderTest {
 
     private val json = Json { ignoreUnknownKeys = true }
     private val jsonHeaders = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
+
+    @Test
+    fun `readiness reflects backend health status`() = runTest {
+        assertTrue(providerWith("ok", HttpStatusCode.OK).isReady())
+        assertFalse(providerWith("busy", HttpStatusCode.ServiceUnavailable).isReady())
+    }
+
+    @Test
+    fun `readiness propagates cancellation`() = runTest {
+        val engine = MockEngine { throw CancellationException("cancelled") }
+        val provider = BackendProvider(HttpClient(engine), "http://localhost:8081")
+
+        assertThrows<CancellationException> { provider.isReady() }
+    }
 
     @Test
     fun `getInfo returns BasicInfo on success`() = runTest {

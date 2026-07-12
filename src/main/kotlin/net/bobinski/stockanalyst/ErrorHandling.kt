@@ -47,7 +47,12 @@ fun Application.configureErrorHandling() {
 
 private fun isKnownGetRoute(path: String): Boolean =
     path == "/health" ||
+        path == "/healthz" ||
+        path == "/readyz" ||
+        path == "/metrics" ||
+        path == "/openapi/v1.json" ||
         path == "/compare" ||
+        path == "/v1/compare" ||
         PARAMETERIZED_GET_ROUTE.matches(path)
 
 private val PARAMETERIZED_GET_ROUTE =

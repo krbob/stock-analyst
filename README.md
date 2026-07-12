@@ -276,6 +276,16 @@ curl http://localhost:8080/v1/search/apple
 
 Results are filtered to equities, ETFs, and indices. Returns an empty array when no matches are found.
 
+### Operational endpoints
+
+- `GET /health` is the legacy liveness response.
+- `GET /healthz` checks only that the Kotlin process can serve requests.
+- `GET /readyz` checks the internal yfinance adapter with a one-second total deadline and returns
+  `503` while that required dependency is unavailable.
+- `GET /metrics` exposes Prometheus text metrics for bounded route templates, status codes and
+  request latency. Health, readiness, metrics and OpenAPI traffic are excluded, and labels never
+  contain symbols, query values or request IDs.
+
 ## Key Features
 
 ### Currency conversion

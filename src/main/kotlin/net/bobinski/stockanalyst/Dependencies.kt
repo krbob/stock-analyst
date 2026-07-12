@@ -10,6 +10,6 @@ import org.koin.logger.slf4jLogger
 fun Application.configureDependencies() {
     install(Koin) {
         slf4jLogger()
-        modules(CoreModule, DomainModule, BackendProviderModule)
+        modules(CoreModule, DomainModule, BackendProviderModule, ObservabilityModule)
     }
 }
