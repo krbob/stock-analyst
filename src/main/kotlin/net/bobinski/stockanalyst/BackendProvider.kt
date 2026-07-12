@@ -69,6 +69,10 @@ internal class BackendProvider(
             logger.warn("Backend rate limited history of {} ({})", symbol, period.value)
             throw BackendDataException.rateLimited(symbol, response.headers[HttpHeaders.RetryAfter])
         }
+        if (response.status == HttpStatusCode.ServiceUnavailable) {
+            logger.warn("Backend saturated while loading history of {} ({})", symbol, period.value)
+            throw BackendDataException.serviceUnavailable(symbol, response.headers[HttpHeaders.RetryAfter])
+        }
         if (!response.status.isSuccess()) {
             logger.error("Backend returned {} for history of {} ({})", response.status, symbol, period.value)
             throw BackendDataException.backendError(symbol)
@@ -95,6 +99,10 @@ internal class BackendProvider(
         if (response.status == HttpStatusCode.TooManyRequests) {
             logger.warn("Backend rate limited search query: {}", query)
             throw BackendDataException.rateLimited(query, response.headers[HttpHeaders.RetryAfter])
+        }
+        if (response.status == HttpStatusCode.ServiceUnavailable) {
+            logger.warn("Backend saturated while searching for {}", query)
+            throw BackendDataException.serviceUnavailable(query, response.headers[HttpHeaders.RetryAfter])
         }
         if (!response.status.isSuccess()) {
             logger.error("Backend returned {} for search query: {}", response.status, query)
@@ -131,6 +139,10 @@ internal class BackendProvider(
         if (response.status == HttpStatusCode.TooManyRequests) {
             logger.warn("Backend rate limited info of {}", symbol)
             throw BackendDataException.rateLimited(symbol, response.headers[HttpHeaders.RetryAfter])
+        }
+        if (response.status == HttpStatusCode.ServiceUnavailable) {
+            logger.warn("Backend saturated while loading info of {}", symbol)
+            throw BackendDataException.serviceUnavailable(symbol, response.headers[HttpHeaders.RetryAfter])
         }
         if (!response.status.isSuccess()) {
             logger.error("Backend returned {} for info of {}", response.status, symbol)

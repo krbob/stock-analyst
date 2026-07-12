@@ -21,5 +21,6 @@ fun BackendDataException.toHttpStatusCode(): HttpStatusCode = when (reason) {
     Reason.NOT_FOUND -> HttpStatusCode.NotFound
     Reason.INSUFFICIENT_DATA -> HttpStatusCode.UnprocessableEntity
     Reason.RATE_LIMITED -> HttpStatusCode.TooManyRequests
+    Reason.SERVICE_UNAVAILABLE -> HttpStatusCode.ServiceUnavailable
     Reason.BACKEND_ERROR -> HttpStatusCode.BadGateway
 }

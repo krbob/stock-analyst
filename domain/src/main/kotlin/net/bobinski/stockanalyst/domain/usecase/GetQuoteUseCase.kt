@@ -41,7 +41,7 @@ class GetQuoteUseCase(
                     try {
                         stockDataProvider.getInfo(conversion)
                     } catch (e: BackendDataException) {
-                        if (e.reason == Reason.RATE_LIMITED) throw e
+                        if (e.reason == Reason.RATE_LIMITED || e.reason == Reason.SERVICE_UNAVAILABLE) throw e
                         logger.warn("Failed to fetch spot conversion info for {}", conversion, e)
                         null
                     }

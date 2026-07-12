@@ -323,13 +323,23 @@ not cached. Set either limit to `0` to disable that pool.
 | `YFINANCE_HISTORY_CACHE_MAX_ENTRIES` | `512` | Maximum number of history entries |
 | `YFINANCE_METADATA_CACHE_MAX_BYTES` | `8388608` (8 MiB) | Maximum estimated bytes retained by info/search entries |
 | `YFINANCE_METADATA_CACHE_MAX_ENTRIES` | `2048` | Maximum number of info/search entries |
+| `YFINANCE_BULKHEAD_MAX_ACTIVE_LOADERS` | `4` | Maximum concurrent unique-key yfinance loaders |
+| `YFINANCE_BULKHEAD_ACQUIRE_TIMEOUT_MS` | `250` | Maximum wait for a loader permit before returning `503` |
+| `YFINANCE_BULKHEAD_RETRY_AFTER_SECONDS` | `1` | `Retry-After` sent for local bulkhead saturation |
+| `YFINANCE_WAITRESS_THREADS` | `8` | HTTP worker threads; must exceed the loader limit |
 
-All limits must be non-negative integers. TTL expiry uses a monotonic clock, and reads promote an
-entry in LRU order independently of its expiry time. The Kotlin API coalesces identical in-flight
+TTL expiry uses a monotonic clock, and reads promote an entry in LRU order independently of its
+expiry time. The Kotlin API coalesces identical in-flight
 backend requests instead of maintaining a second response cache. The Python adapter also
 single-flights overlapping misses for the same history/info/search key, even when its completed
 cache is disabled; different keys load independently, and failures are never retained. The
-`docker-compose.yml` file forwards cache settings from the shell or a local `.env` file.
+per-process global bulkhead is applied after single-flight, so waiters for one key share a permit
+while unique keys consume separate permits. Saturation is reported as retryable `503`, independently
+of Yahoo's `429` rate limit. Waitress has more HTTP workers than loader permits (`8 > 4` by
+default), allowing saturated requests to reach the `503` path and health checks to bypass the
+bulkhead instead of all workers blocking inside yfinance. The `docker-compose.yml` file forwards
+these settings from the shell or a local `.env` file. Cache limits and the bulkhead timeout may be zero; active-loader,
+retry-after and worker values must be positive integers, with workers greater than loaders.
 
 ## Error Codes
 
@@ -337,9 +347,10 @@ cache is disabled; different keys load independently, and failures are never ret
 |------|------------------------------------------------------|
 | 400  | Invalid symbol format, missing parameters, invalid indicator keys, invalid boolean flags, or too many symbols (max 10) |
 | 404  | Unknown symbol or no history available               |
-| 429  | Upstream rate limit; retry according to `Retry-After` |
 | 422  | Insufficient conversion data or conversion unavailable for the requested symbol/date range |
+| 429  | Upstream rate limit; retry according to `Retry-After` |
 | 502  | Upstream Yahoo Finance/backend error                 |
+| 503  | Local data-backend bulkhead saturated; retry according to `Retry-After` |
 
 ## Running
 

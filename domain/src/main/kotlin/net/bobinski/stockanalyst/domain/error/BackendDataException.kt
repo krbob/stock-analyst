@@ -6,7 +6,7 @@ class BackendDataException(
     val retryAfter: String? = null
 ) : RuntimeException(message) {
 
-    enum class Reason { NOT_FOUND, INSUFFICIENT_DATA, RATE_LIMITED, BACKEND_ERROR }
+    enum class Reason { NOT_FOUND, INSUFFICIENT_DATA, RATE_LIMITED, SERVICE_UNAVAILABLE, BACKEND_ERROR }
 
     companion object {
         fun unknownSymbol(symbol: String) =
@@ -25,6 +25,13 @@ class BackendDataException(
             BackendDataException(
                 message = "Upstream rate limit for $resource",
                 reason = Reason.RATE_LIMITED,
+                retryAfter = retryAfter
+            )
+
+        fun serviceUnavailable(resource: String, retryAfter: String?) =
+            BackendDataException(
+                message = "Data backend is busy for $resource",
+                reason = Reason.SERVICE_UNAVAILABLE,
                 retryAfter = retryAfter
             )
 

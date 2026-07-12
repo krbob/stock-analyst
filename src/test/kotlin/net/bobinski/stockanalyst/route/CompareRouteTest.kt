@@ -114,6 +114,19 @@ class CompareRouteTest {
     }
 
     @Test
+    fun `propagates compare backend saturation with Retry-After`() = testApplication {
+        val useCase = mockk<CompareStocksUseCase>()
+        coEvery { useCase.invoke(listOf("AAPL", "MSFT"), null) } throws
+            BackendDataException.serviceUnavailable("AAPL", "1")
+        configureApp(useCase)
+
+        val response = client.get("/compare?symbols=AAPL,MSFT")
+
+        assertEquals(HttpStatusCode.ServiceUnavailable, response.status)
+        assertEquals("1", response.headers[HttpHeaders.RetryAfter])
+    }
+
+    @Test
     fun `passes currency parameter to use case`() = testApplication {
         val useCase = mockk<CompareStocksUseCase>()
         coEvery { useCase.invoke(listOf("AAPL"), "EUR") } returns

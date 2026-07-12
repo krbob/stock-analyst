@@ -75,6 +75,17 @@ class CompareStocksUseCaseTest {
         assertEquals("120", exception.retryAfter)
     }
 
+    @Test
+    fun `does not turn backend saturation into a partial compare error`() = runTest {
+        coEvery { getQuoteUseCase("AAPL", null) } throws
+            BackendDataException.serviceUnavailable("AAPL", "1")
+
+        val exception = assertThrows<BackendDataException> { useCase(listOf("AAPL")) }
+
+        assertEquals(BackendDataException.Reason.SERVICE_UNAVAILABLE, exception.reason)
+        assertEquals("1", exception.retryAfter)
+    }
+
     private fun testQuote(symbol: String) = Quote(
         symbol = symbol,
         name = "Test",

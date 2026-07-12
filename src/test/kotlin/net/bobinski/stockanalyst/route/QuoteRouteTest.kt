@@ -82,6 +82,20 @@ class QuoteRouteTest {
     }
 
     @Test
+    fun `responds with retryable 503 and Retry-After when data backend is saturated`() = testApplication {
+        val useCase = mockk<GetQuoteUseCase>()
+        coEvery { useCase.invoke("AAPL", null) } throws
+            BackendDataException.serviceUnavailable("AAPL", "1")
+        configureApp(useCase)
+
+        val response = client.get("/quote/AAPL")
+
+        assertEquals(HttpStatusCode.ServiceUnavailable, response.status)
+        assertEquals("1", response.headers[HttpHeaders.RetryAfter])
+        assertTrue(response.bodyAsText().contains("Data backend is busy"))
+    }
+
+    @Test
     fun `responds with 422 when conversion data is insufficient`() = testApplication {
         val useCase = mockk<GetQuoteUseCase>()
         coEvery { useCase.invoke("AAPL", "EUR") } throws

@@ -23,7 +23,7 @@ class CompareStocksUseCase(
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: BackendDataException) {
-                    if (e.reason == Reason.RATE_LIMITED) throw e
+                    if (e.reason == Reason.RATE_LIMITED || e.reason == Reason.SERVICE_UNAVAILABLE) throw e
                     CompareResult(symbol = symbol, error = e.message ?: "Unknown error")
                 } catch (e: Exception) {
                     CompareResult(symbol = symbol, error = e.message ?: "Unknown error")

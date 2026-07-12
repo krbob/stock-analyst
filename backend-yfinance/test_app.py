@@ -12,17 +12,26 @@ import pytest
 
 from app import (
     ApiError,
+    BULKHEAD_MAX_ACTIVE_LOADERS,
+    BULKHEAD_RETRY_AFTER_SECONDS,
     HistoricalPrice,
     RATE_LIMIT_RETRY_AFTER_SECONDS,
     SEARCH_CACHE_SECONDS,
+    SymbolNotFoundError,
+    UpstreamDataError,
+    UpstreamRateLimitError,
+    WAITRESS_THREADS,
     _history_cache,
+    _loader_bulkhead,
     _metadata_cache,
     _single_flight,
     app,
     get_basic_info,
     get_history,
+    run_server,
     search_tickers,
 )
+from bulkhead import LoaderBulkhead
 from memory_cache import ByteBoundedTTLCache, estimate_cache_entry_bytes
 from yfinance.exceptions import YFPricesMissingError, YFRateLimitError, YFTzMissingError
 
@@ -37,12 +46,14 @@ def client():
 @pytest.fixture(autouse=True)
 def clear_data_cache():
     assert _single_flight.active_count == 0
+    assert _loader_bulkhead.active_count == 0
     _history_cache.clear()
     _metadata_cache.clear()
     yield
     _history_cache.clear()
     _metadata_cache.clear()
     assert _single_flight.active_count == 0
+    assert _loader_bulkhead.active_count == 0
 
 
 @pytest.fixture
@@ -113,12 +124,18 @@ class BlockingUpstream:
         return self.value
 
 
-def _run_joined_calls(call, key, blocker, count=6):
+class FatalLoaderError(BaseException):
+    pass
+
+
+def _run_joined_calls(call, key, blocker, count=6, before_release=None):
     with ThreadPoolExecutor(max_workers=count) as executor:
         futures = [executor.submit(call) for _ in range(count)]
         try:
             assert blocker.started.wait(timeout=5)
             assert _single_flight.wait_for_participants(key, count, timeout=5)
+            if before_release is not None:
+                before_release()
         finally:
             blocker.release.set()
         return [future.result(timeout=5) for future in futures]
@@ -1023,6 +1040,123 @@ class TestSingleFlight:
         assert sequential_retry.name == "No cache"
         assert blocker.calls == 2
         assert ticker_class.call_count == 2
+
+
+class TestLoaderBulkhead:
+    def test_http_worker_pool_has_headroom_above_loader_limit(self):
+        assert WAITRESS_THREADS > BULKHEAD_MAX_ACTIVE_LOADERS
+
+    def test_server_uses_configured_worker_pool(self):
+        with patch("waitress.serve") as serve:
+            run_server()
+
+        serve.assert_called_once_with(app, host="0.0.0.0", port=8081, threads=WAITRESS_THREADS)
+
+    def test_limits_unique_keys_and_returns_retryable_503_while_health_stays_available(self):
+        bulkhead = LoaderBulkhead(max_active=2, acquire_timeout_seconds=0.01)
+        info_blocker = BlockingUpstream(value={"longName": "AAPL"})
+        history_blocker = BlockingUpstream(value=_sample_history())
+        blockers = (info_blocker, history_blocker)
+
+        def ticker_for(symbol):
+            ticker = MagicMock()
+            if symbol == "AAPL":
+                type(ticker).info = PropertyMock(side_effect=info_blocker)
+            elif symbol == "MSFT":
+                ticker.history.side_effect = history_blocker
+                type(ticker).dividends = PropertyMock(return_value=pd.Series(dtype=float))
+            else:
+                raise AssertionError(f"Unexpected ticker load: {symbol}")
+            return ticker
+
+        with (
+            patch("app._loader_bulkhead", bulkhead),
+            patch("app.yf.Ticker", side_effect=ticker_for) as ticker_class,
+            patch("app.yf.Search") as search,
+            ThreadPoolExecutor(max_workers=2) as executor,
+        ):
+            futures = [
+                executor.submit(get_basic_info, "AAPL"),
+                executor.submit(get_history, "MSFT", "1y"),
+            ]
+            try:
+                assert all(blocker.started.wait(timeout=5) for blocker in blockers)
+                assert bulkhead.active_count == 2
+
+                with app.test_client() as test_client:
+                    health = test_client.get("/health")
+                    saturated = test_client.get("/search/google")
+
+                assert health.status_code == 200
+                assert saturated.status_code == 503
+                assert saturated.headers["Retry-After"] == str(BULKHEAD_RETRY_AFTER_SECONDS)
+                assert saturated.get_json()["error"] == "Data backend is busy; retry shortly"
+                assert search.call_count == 0
+                assert ticker_class.call_count == 2
+            finally:
+                for blocker in blockers:
+                    blocker.release.set()
+            results = [future.result(timeout=5) for future in futures]
+
+        assert results[0].name == "AAPL"
+        assert len(results[1]) == 1
+        assert bulkhead.active_count == 0
+
+    def test_same_key_single_flight_uses_one_bulkhead_permit(self):
+        bulkhead = LoaderBulkhead(max_active=1, acquire_timeout_seconds=0)
+        blocker = BlockingUpstream(value={"longName": "Apple Inc."})
+        observed_active_counts = []
+        with (
+            patch("app._loader_bulkhead", bulkhead),
+            patch("app.yf.Ticker") as ticker_class,
+        ):
+            ticker = ticker_class.return_value
+            type(ticker).info = PropertyMock(side_effect=blocker)
+
+            results = _run_joined_calls(
+                lambda: get_basic_info("AAPL"),
+                "info:AAPL",
+                blocker,
+                before_release=lambda: observed_active_counts.append(bulkhead.active_count),
+            )
+
+        assert observed_active_counts == [1]
+        assert blocker.calls == 1
+        assert ticker_class.call_count == 1
+        assert [result.name for result in results] == ["Apple Inc."] * len(results)
+        assert bulkhead.active_count == 0
+
+    @pytest.mark.parametrize(
+        ("error", "expected_status"),
+        [
+            (None, None),
+            (SymbolNotFoundError("INVALID"), 404),
+            (UpstreamRateLimitError(), 429),
+            (UpstreamDataError(), 502),
+            (FatalLoaderError("fatal"), None),
+        ],
+    )
+    def test_releases_permit_after_success_classified_errors_and_base_exception(
+        self,
+        error,
+        expected_status,
+    ):
+        bulkhead = LoaderBulkhead(max_active=1, acquire_timeout_seconds=0)
+
+        if error is None:
+            assert bulkhead.call(lambda: "ok") == "ok"
+        else:
+            def fail():
+                raise error
+
+            with pytest.raises(type(error)) as raised:
+                bulkhead.call(fail)
+            if expected_status is not None:
+                assert raised.value.status_code == expected_status
+
+        assert bulkhead.active_count == 0
+        assert bulkhead.call(lambda: "recovered") == "recovered"
+        assert bulkhead.active_count == 0
 
 
 class TestDataCache:

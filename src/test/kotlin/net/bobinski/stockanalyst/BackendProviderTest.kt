@@ -246,6 +246,50 @@ class BackendProviderTest {
     }
 
     @Test
+    fun `getHistory preserves backend saturation and Retry-After`() = runTest {
+        val provider = providerWith(
+            responseBody = "{}",
+            status = HttpStatusCode.ServiceUnavailable,
+            headers = headersOf(HttpHeaders.RetryAfter, "1")
+        )
+
+        val exception = assertThrows<BackendDataException> {
+            provider.getHistory("AAPL", StockDataProvider.Period._1y)
+        }
+
+        assertEquals(BackendDataException.Reason.SERVICE_UNAVAILABLE, exception.reason)
+        assertEquals("1", exception.retryAfter)
+    }
+
+    @Test
+    fun `getInfo preserves backend saturation`() = runTest {
+        val provider = providerWith(
+            responseBody = "{}",
+            status = HttpStatusCode.ServiceUnavailable,
+            headers = headersOf(HttpHeaders.RetryAfter, "1")
+        )
+
+        val exception = assertThrows<BackendDataException> { provider.getInfo("AAPL") }
+
+        assertEquals(BackendDataException.Reason.SERVICE_UNAVAILABLE, exception.reason)
+        assertEquals("1", exception.retryAfter)
+    }
+
+    @Test
+    fun `search preserves backend saturation`() = runTest {
+        val provider = providerWith(
+            responseBody = "{}",
+            status = HttpStatusCode.ServiceUnavailable,
+            headers = headersOf(HttpHeaders.RetryAfter, "1")
+        )
+
+        val exception = assertThrows<BackendDataException> { provider.search("apple") }
+
+        assertEquals(BackendDataException.Reason.SERVICE_UNAVAILABLE, exception.reason)
+        assertEquals("1", exception.retryAfter)
+    }
+
+    @Test
     fun `getHistory treats upstream 403 as backend failure`() = runTest {
         val provider = providerWith("{}", HttpStatusCode.Forbidden)
 

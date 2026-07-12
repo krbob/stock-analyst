@@ -12,10 +12,10 @@ RUN apt-get update \
     && mkdir -p /home/stock-analyst/.cache/py-yfinance \
     && chown -R stock-analyst:stock-analyst /home/stock-analyst/.cache
 
-COPY app.py memory_cache.py singleflight.py .
+COPY app.py bulkhead.py memory_cache.py singleflight.py .
 
 USER stock-analyst
 
 EXPOSE 8081
 
-CMD ["waitress-serve", "--host=0.0.0.0", "--port=8081", "app:app"]
+CMD ["python", "app.py"]

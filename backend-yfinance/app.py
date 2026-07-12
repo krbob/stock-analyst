@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass
 
 import pandas as pd
 import yfinance as yf
+from bulkhead import BulkheadSaturatedError, LoaderBulkhead
 from flask import Flask, g, jsonify, request
 from flask.json.provider import DefaultJSONProvider
 from memory_cache import ByteBoundedTTLCache
@@ -60,6 +61,10 @@ DEFAULT_HISTORY_CACHE_MAX_BYTES = 64 * 1024 * 1024
 DEFAULT_HISTORY_CACHE_MAX_ENTRIES = 512
 DEFAULT_METADATA_CACHE_MAX_BYTES = 8 * 1024 * 1024
 DEFAULT_METADATA_CACHE_MAX_ENTRIES = 2048
+DEFAULT_BULKHEAD_MAX_ACTIVE_LOADERS = 4
+DEFAULT_BULKHEAD_ACQUIRE_TIMEOUT_MS = 250
+DEFAULT_BULKHEAD_RETRY_AFTER_SECONDS = 1
+DEFAULT_WAITRESS_THREADS = 8
 
 
 def _non_negative_env_int(name, default):
@@ -75,6 +80,13 @@ def _non_negative_env_int(name, default):
     return value
 
 
+def _positive_env_int(name, default):
+    value = _non_negative_env_int(name, default)
+    if value == 0:
+        raise RuntimeError(f"{name} must be a positive integer")
+    return value
+
+
 HISTORY_CACHE_MAX_BYTES = _non_negative_env_int(
     "YFINANCE_HISTORY_CACHE_MAX_BYTES", DEFAULT_HISTORY_CACHE_MAX_BYTES
 )
@@ -87,11 +99,29 @@ METADATA_CACHE_MAX_BYTES = _non_negative_env_int(
 METADATA_CACHE_MAX_ENTRIES = _non_negative_env_int(
     "YFINANCE_METADATA_CACHE_MAX_ENTRIES", DEFAULT_METADATA_CACHE_MAX_ENTRIES
 )
+BULKHEAD_MAX_ACTIVE_LOADERS = _positive_env_int(
+    "YFINANCE_BULKHEAD_MAX_ACTIVE_LOADERS", DEFAULT_BULKHEAD_MAX_ACTIVE_LOADERS
+)
+BULKHEAD_ACQUIRE_TIMEOUT_MS = _non_negative_env_int(
+    "YFINANCE_BULKHEAD_ACQUIRE_TIMEOUT_MS", DEFAULT_BULKHEAD_ACQUIRE_TIMEOUT_MS
+)
+BULKHEAD_RETRY_AFTER_SECONDS = _positive_env_int(
+    "YFINANCE_BULKHEAD_RETRY_AFTER_SECONDS", DEFAULT_BULKHEAD_RETRY_AFTER_SECONDS
+)
+WAITRESS_THREADS = _positive_env_int("YFINANCE_WAITRESS_THREADS", DEFAULT_WAITRESS_THREADS)
+if WAITRESS_THREADS <= BULKHEAD_MAX_ACTIVE_LOADERS:
+    raise RuntimeError(
+        "YFINANCE_WAITRESS_THREADS must be greater than YFINANCE_BULKHEAD_MAX_ACTIVE_LOADERS"
+    )
 
 
 _history_cache = ByteBoundedTTLCache(HISTORY_CACHE_MAX_BYTES, HISTORY_CACHE_MAX_ENTRIES)
 _metadata_cache = ByteBoundedTTLCache(METADATA_CACHE_MAX_BYTES, METADATA_CACHE_MAX_ENTRIES)
 _single_flight = SingleFlight()
+_loader_bulkhead = LoaderBulkhead(
+    BULKHEAD_MAX_ACTIVE_LOADERS,
+    acquire_timeout_seconds=BULKHEAD_ACQUIRE_TIMEOUT_MS / 1000,
+)
 
 
 class ApiError(Exception):
@@ -113,6 +143,15 @@ class UpstreamRateLimitError(ApiError):
             "Upstream provider rate limit exceeded",
             429,
             headers={"Retry-After": str(RATE_LIMIT_RETRY_AFTER_SECONDS)},
+        )
+
+
+class BackendBusyError(ApiError):
+    def __init__(self):
+        super().__init__(
+            "Data backend is busy; retry shortly",
+            503,
+            headers={"Retry-After": str(BULKHEAD_RETRY_AFTER_SECONDS)},
         )
 
 
@@ -170,7 +209,12 @@ def _coalesced_cached_load(key, loader):
 
     def load_after_second_cache_check():
         cached_after_join = _cache_get(key)
-        return cached_after_join if cached_after_join is not None else loader()
+        if cached_after_join is not None:
+            return cached_after_join
+        try:
+            return _loader_bulkhead.call(loader)
+        except BulkheadSaturatedError as error:
+            raise BackendBusyError() from error
 
     return _single_flight.call(key, load_after_second_cache_check)
 
@@ -567,7 +611,11 @@ def search_endpoint(query):
     return response
 
 
-if __name__ == "__main__":
+def run_server():
     from waitress import serve
 
-    serve(app, host="0.0.0.0", port=8081)
+    serve(app, host="0.0.0.0", port=8081, threads=WAITRESS_THREADS)
+
+
+if __name__ == "__main__":
+    run_server()
