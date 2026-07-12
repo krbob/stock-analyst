@@ -64,6 +64,7 @@ class GetQuoteUseCase(
                 history = stockDataProvider.getHistory(symbol, Period._1d)
             }
             if (history.isEmpty()) throw BackendDataException.missingHistory(symbol)
+            history = conversionPlan.normalizeNativePrices(history)
 
             val conversionHistory = conversionSymbol?.let {
                 val convHistory = stockDataProvider.getHistory(it, period)
@@ -83,7 +84,8 @@ class GetQuoteUseCase(
                 name = name,
                 currency = conversionPlan.responseCurrency,
                 date = currentTimeProvider.localDate(),
-                lastPrice = (info.price ?: CalculateLastPrice(history, null))
+                lastPrice = (info.price?.let(conversionPlan::normalizeNativePrice)
+                    ?: CalculateLastPrice(history, null))
                     .applyConversion(conversionPrice),
                 gain = Quote.Gain(
                     daily = Double.NaN,
@@ -115,13 +117,19 @@ class GetQuoteUseCase(
                 marketCap = info.marketCap?.let { convRate?.times(it) ?: it },
                 recommendation = info.recommendation,
                 analystCount = info.analystCount,
-                fiftyTwoWeekHigh = info.fiftyTwoWeekHigh?.let { convRate?.times(it) ?: it },
-                fiftyTwoWeekLow = info.fiftyTwoWeekLow?.let { convRate?.times(it) ?: it },
+                fiftyTwoWeekHigh = info.fiftyTwoWeekHigh
+                    ?.let(conversionPlan::normalizeNativePrice)
+                    ?.let { convRate?.times(it) ?: it },
+                fiftyTwoWeekLow = info.fiftyTwoWeekLow
+                    ?.let(conversionPlan::normalizeNativePrice)
+                    ?.let { convRate?.times(it) ?: it },
                 beta = info.beta,
                 sector = info.sector,
                 industry = info.industry,
                 earningsDate = info.earningsDate,
-                previousClose = info.previousClose?.let { conversionPrice?.times(it) ?: it }
+                previousClose = info.previousClose
+                    ?.let(conversionPlan::normalizeNativePrice)
+                    ?.let { conversionPrice?.times(it) ?: it }
             ).roundValues()
         }
 

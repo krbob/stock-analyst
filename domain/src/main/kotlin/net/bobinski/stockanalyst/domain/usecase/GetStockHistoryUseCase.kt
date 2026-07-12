@@ -83,7 +83,8 @@ class GetStockHistoryUseCase(
                 injectDividends(history, dailyPrices)
             } else history
 
-            val sortedPrices = pricesWithDividends.sortedBy { it.sortKey }
+            val sortedPrices = conversionPlan.normalizeNativePrices(pricesWithDividends)
+                .sortedBy { it.sortKey }
 
             val periodCutoff = if (!rangeRequested && fetchPeriod != period) periodStartDate(period) else null
 

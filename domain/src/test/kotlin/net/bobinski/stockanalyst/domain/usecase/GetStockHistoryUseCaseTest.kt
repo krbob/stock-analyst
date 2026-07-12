@@ -218,6 +218,27 @@ class GetStockHistoryUseCaseTest {
     }
 
     @Test
+    fun `normalizes GBX candles and dividends to GBP`() = runTest {
+        coEvery { stockDataProvider.getInfo("LSEG.L") } returns basicInfo(
+            "London Stock Exchange Group",
+            currency = "GBX"
+        )
+        coEvery { stockDataProvider.getHistory("LSEG.L", Period._1y, Interval.DAILY) } returns listOf(
+            historicalPrice(LocalDate(2024, 6, 15), 8_908.0, dividend = 103.0)
+        )
+
+        val result = useCase("LSEG.L", Period._1y)
+
+        val price = result.prices.single()
+        assertEquals("GBP", result.currency)
+        assertEquals(89.07, price.open, 0.0001)
+        assertEquals(89.08, price.close, 0.0001)
+        assertEquals(89.06, price.low, 0.0001)
+        assertEquals(89.09, price.high, 0.0001)
+        assertEquals(1.03, price.dividend, 0.0001)
+    }
+
+    @Test
     fun `throws when requested currency cannot be resolved without native currency`() = runTest {
         coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.", currency = null)
         coEvery { stockDataProvider.getHistory("AAPL", Period._1y, Interval.DAILY) } returns listOf(

@@ -139,6 +139,57 @@ class GetQuoteUseCaseTest {
     }
 
     @Test
+    fun `normalizes GBp quoted prices without scaling GBP fundamentals`() = runTest {
+        coEvery { stockDataProvider.getInfo("ULVR.L") } returns basicInfo("Unilever").copy(
+            currency = "GBp",
+            price = 4_599.0,
+            previousClose = 4_551.0,
+            fiftyTwoWeekHigh = 5_542.11,
+            fiftyTwoWeekLow = 3_644.0,
+            eps = 2.24,
+            marketCap = 99_025_641_472.0
+        )
+        coEvery { stockDataProvider.getHistory("ULVR.L", Period._5y) } returns priceHistory(500)
+
+        val result = useCase("ULVR.L")
+
+        assertEquals("GBP", result.currency)
+        assertEquals(45.99, result.lastPrice)
+        assertEquals(45.51, result.previousClose)
+        assertEquals(55.42, result.fiftyTwoWeekHigh)
+        assertEquals(36.44, result.fiftyTwoWeekLow)
+        assertEquals(2.24, result.eps)
+        assertEquals(99_025_641_472.0, result.marketCap)
+    }
+
+    @Test
+    fun `combines GBp price scale with requested currency conversion`() = runTest {
+        coEvery { stockDataProvider.getInfo("LSEG.L") } returns basicInfo("London Stock Exchange Group").copy(
+            currency = "GBp",
+            price = 5_000.0,
+            previousClose = 4_900.0,
+            fiftyTwoWeekHigh = 6_000.0,
+            fiftyTwoWeekLow = 4_000.0,
+            eps = 2.0,
+            marketCap = 1_000_000_000.0
+        )
+        every { stockDataProvider.resolveConversionSymbol("GBP", "PLN") } returns "GBPPLN=X"
+        coEvery { stockDataProvider.getInfo("GBPPLN=X") } returns basicInfo("GBP/PLN").copy(price = 5.0)
+        coEvery { stockDataProvider.getHistory("LSEG.L", Period._5y) } returns priceHistory(500)
+        coEvery { stockDataProvider.getHistory("GBPPLN=X", Period._5y) } returns priceHistory(500)
+
+        val result = useCase("LSEG.L", "PLN")
+
+        assertEquals("PLN", result.currency)
+        assertEquals(250.0, result.lastPrice)
+        assertEquals(245.0, result.previousClose)
+        assertEquals(300.0, result.fiftyTwoWeekHigh)
+        assertEquals(200.0, result.fiftyTwoWeekLow)
+        assertEquals(10.0, result.eps)
+        assertEquals(5_000_000_000.0, result.marketCap)
+    }
+
+    @Test
     fun `falls back to historical fx rate when spot conversion info fails`() = runTest {
         coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
         every { stockDataProvider.resolveConversionSymbol("USD", "EUR") } returns "EUR=X"

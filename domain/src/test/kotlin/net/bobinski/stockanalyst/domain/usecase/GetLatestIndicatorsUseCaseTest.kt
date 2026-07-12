@@ -116,6 +116,26 @@ class GetLatestIndicatorsUseCaseTest {
     }
 
     @Test
+    fun `normalizes GBp prices before calculating price indicators`() = runTest {
+        coEvery { stockDataProvider.getInfo("ULVR.L") } returns basicInfo("Unilever").copy(currency = "GBp")
+        coEvery { stockDataProvider.getHistory("ULVR.L", Period._1y) } returns (0 until 50).map { daysAgo ->
+            HistoricalPrice(
+                date = LocalDate(2024, 6, 15).minus(daysAgo, DateTimeUnit.DAY),
+                open = 4_599.0,
+                close = 4_599.0,
+                low = 4_599.0,
+                high = 4_599.0,
+                volume = 1_000L,
+                dividend = 0.0
+            )
+        }
+
+        val result = useCase("ULVR.L", setOf("sma50"))
+
+        assertEquals(45.99, result.sma50!!, 0.0001)
+    }
+
+    @Test
     fun `throws when conversion history is empty`() = runTest {
         coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
         every { stockDataProvider.resolveConversionSymbol("USD", "XYZ") } returns "XYZ=X"
