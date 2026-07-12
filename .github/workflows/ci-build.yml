@@ -103,10 +103,10 @@ jobs:
           docker ps -a
 
           for container in $(docker compose ps -q); do
-            status=$(docker inspect --format='{{.State.ExitCode}}' $container)
+            status=$(docker inspect --format='{{.State.ExitCode}}' "$container")
             if [ "$status" != "0" ]; then
               echo "❌ Container $container exited with code $status"
-              docker logs $container
+              docker logs "$container"
               exit 1
             fi
           done
@@ -184,7 +184,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
