@@ -1,5 +1,7 @@
 import json
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, PropertyMock, patch
@@ -9,12 +11,17 @@ import pandas as pd
 import pytest
 
 from app import (
+    ApiError,
     HistoricalPrice,
     RATE_LIMIT_RETRY_AFTER_SECONDS,
     SEARCH_CACHE_SECONDS,
     _history_cache,
     _metadata_cache,
+    _single_flight,
     app,
+    get_basic_info,
+    get_history,
+    search_tickers,
 )
 from memory_cache import ByteBoundedTTLCache, estimate_cache_entry_bytes
 from yfinance.exceptions import YFPricesMissingError, YFRateLimitError, YFTzMissingError
@@ -29,11 +36,13 @@ def client():
 
 @pytest.fixture(autouse=True)
 def clear_data_cache():
+    assert _single_flight.active_count == 0
     _history_cache.clear()
     _metadata_cache.clear()
     yield
     _history_cache.clear()
     _metadata_cache.clear()
+    assert _single_flight.active_count == 0
 
 
 @pytest.fixture
@@ -82,6 +91,37 @@ class FakeClock:
 
     def advance(self, seconds):
         self.now += seconds
+
+
+class BlockingUpstream:
+    def __init__(self, value=None, error=None):
+        self.value = value
+        self.error = error
+        self.started = threading.Event()
+        self.release = threading.Event()
+        self._lock = threading.Lock()
+        self.calls = 0
+
+    def __call__(self, *_args, **_kwargs):
+        with self._lock:
+            self.calls += 1
+        self.started.set()
+        if not self.release.wait(timeout=5):
+            raise TimeoutError("Test did not release blocked upstream call")
+        if self.error is not None:
+            raise self.error
+        return self.value
+
+
+def _run_joined_calls(call, key, blocker, count=6):
+    with ThreadPoolExecutor(max_workers=count) as executor:
+        futures = [executor.submit(call) for _ in range(count)]
+        try:
+            assert blocker.started.wait(timeout=5)
+            assert _single_flight.wait_for_participants(key, count, timeout=5)
+        finally:
+            blocker.release.set()
+        return [future.result(timeout=5) for future in futures]
 
 
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
@@ -830,6 +870,159 @@ class TestByteBoundedTTLCache:
             two_prices = estimate_cache_entry_bytes("history:AAPL", [price, second_price])
 
         assert two_prices > one_price
+
+
+class TestSingleFlight:
+    @pytest.mark.parametrize("symbol", ["AAPL", "GBPPLN=X"])
+    def test_coalesces_identical_info_and_fx_loads(self, symbol):
+        blocker = BlockingUpstream(value={"longName": symbol, "regularMarketPrice": 100.0})
+        with patch("app.yf.Ticker") as ticker_class:
+            ticker = ticker_class.return_value
+            type(ticker).info = PropertyMock(side_effect=blocker)
+
+            results = _run_joined_calls(
+                lambda: get_basic_info(symbol),
+                f"info:{symbol}",
+                blocker,
+            )
+
+        assert blocker.calls == 1
+        assert ticker_class.call_count == 1
+        assert [result.name for result in results] == [symbol] * len(results)
+
+    def test_coalesces_identical_history_loads(self):
+        blocker = BlockingUpstream(value=_sample_history())
+        with patch("app.yf.Ticker") as ticker_class:
+            ticker = ticker_class.return_value
+            ticker.history.side_effect = blocker
+            type(ticker).dividends = PropertyMock(return_value=pd.Series(dtype=float))
+
+            results = _run_joined_calls(
+                lambda: get_history("AAPL", "1y"),
+                "history:AAPL:1y:1d",
+                blocker,
+            )
+
+        assert blocker.calls == 1
+        assert ticker_class.call_count == 1
+        assert all(len(result) == 1 for result in results)
+        assert len({id(result) for result in results}) == len(results)
+
+    def test_coalesces_identical_search_loads(self):
+        search_result = MagicMock()
+        search_result.quotes = [{
+            "symbol": "AAPL",
+            "shortname": "Apple Inc.",
+            "exchange": "NMS",
+            "quoteType": "EQUITY",
+        }]
+        blocker = BlockingUpstream(value=search_result)
+        with patch("app.yf.Search", side_effect=blocker) as search:
+            results = _run_joined_calls(
+                lambda: search_tickers("apple"),
+                "search:apple",
+                blocker,
+            )
+
+        assert blocker.calls == 1
+        assert search.call_count == 1
+        assert [[item.symbol for item in result] for result in results] == [["AAPL"]] * len(results)
+
+    @pytest.mark.parametrize(
+        ("upstream_error", "expected_status", "expected_retry_after"),
+        [
+            (YFTzMissingError("INVALID"), 404, None),
+            (YFRateLimitError(), 429, str(RATE_LIMIT_RETRY_AFTER_SECONDS)),
+            (RuntimeError("upstream failed"), 502, None),
+        ],
+    )
+    def test_shares_classified_failure_and_allows_recovery(
+        self,
+        upstream_error,
+        expected_status,
+        expected_retry_after,
+    ):
+        blocker = BlockingUpstream(error=upstream_error)
+
+        def classified_outcome():
+            try:
+                get_basic_info("RECOVERY")
+            except ApiError as error:
+                return error.status_code, error.headers.get("Retry-After")
+            pytest.fail("Expected classified upstream failure")
+
+        with patch("app.yf.Ticker") as ticker_class:
+            ticker = ticker_class.return_value
+            type(ticker).info = PropertyMock(side_effect=blocker)
+
+            outcomes = _run_joined_calls(
+                classified_outcome,
+                "info:RECOVERY",
+                blocker,
+            )
+            assert outcomes == [(expected_status, expected_retry_after)] * len(outcomes)
+            assert blocker.calls == 1
+            assert _single_flight.active_count == 0
+
+            blocker.error = None
+            blocker.value = {"longName": "Recovered"}
+            recovered = get_basic_info("RECOVERY")
+
+        assert recovered.name == "Recovered"
+        assert blocker.calls == 2
+        assert ticker_class.call_count == 2
+
+    def test_different_keys_load_in_parallel_without_holding_registry_lock(self):
+        symbols = ("AAPL", "MSFT")
+        started = {symbol: threading.Event() for symbol in symbols}
+        release = threading.Event()
+
+        def ticker_for(symbol):
+            ticker = MagicMock()
+
+            def load_info():
+                started[symbol].set()
+                if not release.wait(timeout=5):
+                    raise TimeoutError("Test did not release upstream calls")
+                return {"longName": symbol}
+
+            type(ticker).info = PropertyMock(side_effect=load_info)
+            return ticker
+
+        with patch("app.yf.Ticker", side_effect=ticker_for):
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                futures = [executor.submit(get_basic_info, symbol) for symbol in symbols]
+                try:
+                    assert all(event.wait(timeout=5) for event in started.values())
+                finally:
+                    release.set()
+                results = [future.result(timeout=5) for future in futures]
+
+        assert [result.name for result in results] == list(symbols)
+
+    def test_coalesces_active_load_when_completed_cache_is_disabled(self):
+        blocker = BlockingUpstream(value={"longName": "No cache"})
+        with (
+            patch.object(_metadata_cache, "max_bytes", 0),
+            patch("app.yf.Ticker") as ticker_class,
+        ):
+            ticker = ticker_class.return_value
+            type(ticker).info = PropertyMock(side_effect=blocker)
+
+            results = _run_joined_calls(
+                lambda: get_basic_info("NOCACHE"),
+                "info:NOCACHE",
+                blocker,
+            )
+            assert [result.name for result in results] == ["No cache"] * len(results)
+            assert blocker.calls == 1
+            assert not _metadata_cache.contains("info:NOCACHE")
+
+            sequential_retry = get_basic_info("NOCACHE")
+
+        assert sequential_retry.name == "No cache"
+        assert blocker.calls == 2
+        assert ticker_class.call_count == 2
 
 
 class TestDataCache:

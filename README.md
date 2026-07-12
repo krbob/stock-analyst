@@ -326,8 +326,10 @@ not cached. Set either limit to `0` to disable that pool.
 
 All limits must be non-negative integers. TTL expiry uses a monotonic clock, and reads promote an
 entry in LRU order independently of its expiry time. The Kotlin API coalesces identical in-flight
-backend requests instead of maintaining a second response cache. `docker-compose.yml` forwards
-these settings from the shell or a local `.env` file.
+backend requests instead of maintaining a second response cache. The Python adapter also
+single-flights overlapping misses for the same history/info/search key, even when its completed
+cache is disabled; different keys load independently, and failures are never retained. The
+`docker-compose.yml` file forwards cache settings from the shell or a local `.env` file.
 
 ## Error Codes
 

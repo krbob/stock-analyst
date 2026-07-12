@@ -10,6 +10,7 @@ import yfinance as yf
 from flask import Flask, g, jsonify, request
 from flask.json.provider import DefaultJSONProvider
 from memory_cache import ByteBoundedTTLCache
+from singleflight import SingleFlight
 from yfinance.exceptions import YFPricesMissingError, YFRateLimitError, YFTzMissingError
 
 
@@ -90,6 +91,7 @@ METADATA_CACHE_MAX_ENTRIES = _non_negative_env_int(
 
 _history_cache = ByteBoundedTTLCache(HISTORY_CACHE_MAX_BYTES, HISTORY_CACHE_MAX_ENTRIES)
 _metadata_cache = ByteBoundedTTLCache(METADATA_CACHE_MAX_BYTES, METADATA_CACHE_MAX_ENTRIES)
+_single_flight = SingleFlight()
 
 
 class ApiError(Exception):
@@ -161,6 +163,18 @@ def _cache_for_key(key):
     return _history_cache if key.startswith("history:") else _metadata_cache
 
 
+def _coalesced_cached_load(key, loader):
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+
+    def load_after_second_cache_check():
+        cached_after_join = _cache_get(key)
+        return cached_after_join if cached_after_join is not None else loader()
+
+    return _single_flight.call(key, load_after_second_cache_check)
+
+
 @dataclass(frozen=True)
 class HistoricalPrice:
     date: str
@@ -207,10 +221,11 @@ class BasicInfo:
 
 
 def get_history(symbol, period, interval="1d"):
-    cached = _cache_get(f"history:{symbol}:{period}:{interval}")
-    if cached is not None:
-        return cached
+    key = f"history:{symbol}:{period}:{interval}"
+    return _coalesced_cached_load(key, lambda: _load_history(symbol, period, interval, key))
 
+
+def _load_history(symbol, period, interval, cache_key):
     ticker = yf.Ticker(symbol)
     try:
         # Yahoo normally returns OHLC, volume and dividends already expressed on the latest
@@ -275,7 +290,7 @@ def get_history(symbol, period, interval="1d"):
 
     if result:
         ttl = INTRADAY_CACHE_SECONDS if intraday else HISTORY_CACHE_SECONDS.get(period, 60)
-        _cache_set(f"history:{symbol}:{period}:{interval}", result, ttl)
+        _cache_set(cache_key, result, ttl)
     return result
 
 
@@ -354,10 +369,11 @@ def _resolve_split_ratio(row):
 
 
 def get_basic_info(symbol):
-    cached = _cache_get(f"info:{symbol}")
-    if cached is not None:
-        return cached
+    key = f"info:{symbol}"
+    return _coalesced_cached_load(key, lambda: _load_basic_info(symbol, key))
 
+
+def _load_basic_info(symbol, cache_key):
     try:
         info = yf.Ticker(symbol).info
     except Exception as error:
@@ -389,7 +405,7 @@ def get_basic_info(symbol):
         market_date=_resolve_market_date(info),
     )
 
-    _cache_set(f"info:{symbol}", result, INFO_CACHE_SECONDS)
+    _cache_set(cache_key, result, INFO_CACHE_SECONDS)
     return result
 
 
@@ -454,10 +470,11 @@ def _resolve_market_date(info):
 
 
 def search_tickers(query):
-    cached = _cache_get(f"search:{query}")
-    if cached is not None:
-        return cached
+    key = f"search:{query}"
+    return _coalesced_cached_load(key, lambda: _load_search_results(query, key))
 
+
+def _load_search_results(query, cache_key):
     try:
         results = yf.Search(query, max_results=20).quotes
     except Exception as error:
@@ -474,7 +491,7 @@ def search_tickers(query):
         for q in results
     ]
 
-    _cache_set(f"search:{query}", filtered, SEARCH_CACHE_SECONDS)
+    _cache_set(cache_key, filtered, SEARCH_CACHE_SECONDS)
     return filtered
 
 
