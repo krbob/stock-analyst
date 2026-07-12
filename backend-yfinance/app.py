@@ -8,9 +8,23 @@ from dataclasses import asdict, dataclass
 import pandas as pd
 import yfinance as yf
 from flask import Flask, g, jsonify, request
+from flask.json.provider import DefaultJSONProvider
 from yfinance.exceptions import YFPricesMissingError, YFRateLimitError, YFTzMissingError
 
-app = Flask(__name__)
+
+class StandardJSONProvider(DefaultJSONProvider):
+    """Emit RFC-compliant JSON and fail closed if sanitisation misses a non-finite number."""
+
+    def dumps(self, obj, **kwargs):
+        kwargs["allow_nan"] = False
+        return super().dumps(obj, **kwargs)
+
+
+class StandardJSONFlask(Flask):
+    json_provider_class = StandardJSONProvider
+
+
+app = StandardJSONFlask(__name__)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -134,8 +148,8 @@ class HistoricalPrice:
     high: float
     volume: int
     dividend: float
-    timestamp: int = None
-    splitRatio: float = None
+    timestamp: int | None = None
+    splitRatio: float | None = None
 
 
 @dataclass
@@ -148,26 +162,26 @@ class SearchResult:
 
 @dataclass
 class BasicInfo:
-    name: str
-    price: float
-    currency: str
-    pe_ratio: float
-    pb_ratio: float
-    eps: float
-    roe: float
-    market_cap: float
-    recommendation: str
-    analyst_count: int
-    fifty_two_week_high: float
-    fifty_two_week_low: float
-    beta: float
-    sector: str
-    industry: str
-    earnings_date: str
-    dividend_rate: float
-    trailing_annual_dividend_rate: float
-    previous_close: float
-    market_date: str
+    name: str | None
+    price: float | None
+    currency: str | None
+    pe_ratio: float | None
+    pb_ratio: float | None
+    eps: float | None
+    roe: float | None
+    market_cap: float | None
+    recommendation: str | None
+    analyst_count: int | None
+    fifty_two_week_high: float | None
+    fifty_two_week_low: float | None
+    beta: float | None
+    sector: str | None
+    industry: str | None
+    earnings_date: str | None
+    dividend_rate: float | None
+    trailing_annual_dividend_rate: float | None
+    previous_close: float | None
+    market_date: str | None
 
 
 def get_history(symbol, period, interval="1d"):
@@ -212,15 +226,20 @@ def get_history(symbol, period, interval="1d"):
 
     result = []
     for index, row in history.iterrows():
-        if math.isnan(row["Close"]) or math.isnan(row["Open"]):
-            continue
         date = index.strftime("%Y-%m-%d")
+        open_price = _finite_float(row.get("Open"))
+        close_price = _finite_float(row.get("Close"))
+        low_price = _finite_float(row.get("Low"))
+        high_price = _finite_float(row.get("High"))
+        if any(value is None for value in (open_price, close_price, low_price, high_price)):
+            logger.warning("Skipping history row with non-finite OHLC for %s on %s", symbol, date)
+            continue
         price = HistoricalPrice(
             date=date,
-            open=row["Open"],
-            close=row["Close"],
-            low=row["Low"],
-            high=row["High"],
+            open=open_price,
+            close=close_price,
+            low=low_price,
+            high=high_price,
             volume=_finite_int(row.get("Volume")),
             dividend=_resolve_dividend(row, date, dividends_by_date),
             splitRatio=_resolve_split_ratio(row),
@@ -239,7 +258,7 @@ def get_history(symbol, period, interval="1d"):
 def _finite_float(value):
     try:
         result = float(value)
-    except (TypeError, ValueError):
+    except (OverflowError, TypeError, ValueError):
         return None
     return result if math.isfinite(result) else None
 
@@ -247,6 +266,28 @@ def _finite_float(value):
 def _finite_int(value, default=0):
     value = _finite_float(value)
     return int(value) if value is not None else default
+
+
+def _first_finite_float(*values):
+    for value in values:
+        result = _finite_float(value)
+        if result is not None:
+            return result
+    return None
+
+
+def _optional_string(value):
+    if value is None:
+        return None
+    try:
+        if bool(pd.isna(value)):
+            return None
+    except (TypeError, ValueError):
+        pass
+    try:
+        return str(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _date_key(index):
@@ -301,37 +342,25 @@ def get_basic_info(symbol):
     if not _has_symbol_identity(info):
         return None
 
-    earnings = info.get("earningsDate")
-    if isinstance(earnings, list) and earnings:
-        earnings = earnings[0]
-    earnings_str = None
-    if earnings is not None:
-        try:
-            from datetime import datetime
-
-            earnings_str = datetime.fromtimestamp(earnings).strftime("%Y-%m-%d")
-        except (TypeError, ValueError, OSError):
-            earnings_str = str(earnings) if earnings else None
-
     result = BasicInfo(
-        name=info.get("longName") or info.get("shortName"),
-        price=info.get("regularMarketPrice") or info.get("currentPrice"),
-        currency=info.get("currency"),
-        pe_ratio=info.get("forwardPE"),
-        pb_ratio=info.get("priceToBook"),
-        eps=info.get("trailingEps"),
-        roe=info.get("returnOnEquity"),
-        market_cap=info.get("marketCap"),
-        recommendation=info.get("recommendationKey"),
-        analyst_count=info.get("numberOfAnalystOpinions"),
-        fifty_two_week_high=info.get("fiftyTwoWeekHigh"),
-        fifty_two_week_low=info.get("fiftyTwoWeekLow"),
-        beta=info.get("beta"),
-        sector=info.get("sector"),
-        industry=info.get("industry"),
-        earnings_date=earnings_str,
-        dividend_rate=info.get("dividendRate"),
-        trailing_annual_dividend_rate=info.get("trailingAnnualDividendRate"),
+        name=_optional_string(info.get("longName")) or _optional_string(info.get("shortName")),
+        price=_first_finite_float(info.get("regularMarketPrice"), info.get("currentPrice")),
+        currency=_optional_string(info.get("currency")),
+        pe_ratio=_finite_float(info.get("forwardPE")),
+        pb_ratio=_finite_float(info.get("priceToBook")),
+        eps=_finite_float(info.get("trailingEps")),
+        roe=_finite_float(info.get("returnOnEquity")),
+        market_cap=_finite_float(info.get("marketCap")),
+        recommendation=_optional_string(info.get("recommendationKey")),
+        analyst_count=_finite_int(info.get("numberOfAnalystOpinions"), default=None),
+        fifty_two_week_high=_finite_float(info.get("fiftyTwoWeekHigh")),
+        fifty_two_week_low=_finite_float(info.get("fiftyTwoWeekLow")),
+        beta=_finite_float(info.get("beta")),
+        sector=_optional_string(info.get("sector")),
+        industry=_optional_string(info.get("industry")),
+        earnings_date=_resolve_earnings_date(info.get("earningsDate")),
+        dividend_rate=_finite_float(info.get("dividendRate")),
+        trailing_annual_dividend_rate=_finite_float(info.get("trailingAnnualDividendRate")),
         previous_close=_resolve_previous_close(info),
         market_date=_resolve_market_date(info),
     )
@@ -345,26 +374,50 @@ def _resolve_previous_close(info):
     previous_close == price (both refer to the same last session)."""
     from datetime import datetime, timezone
 
-    price = info.get("regularMarketPrice") or info.get("currentPrice")
-    prev = info.get("previousClose") or info.get("regularMarketPreviousClose")
-    market_time = info.get("regularMarketTime")
-    if market_time and price and prev:
-        market_date = datetime.fromtimestamp(market_time, tz=timezone.utc).date()
-        today = datetime.now(tz=timezone.utc).date()
-        if market_date < today:
-            return price
+    price = _first_finite_float(info.get("regularMarketPrice"), info.get("currentPrice"))
+    prev = _first_finite_float(info.get("previousClose"), info.get("regularMarketPreviousClose"))
+    market_time = _finite_float(info.get("regularMarketTime"))
+    if market_time is not None and price is not None and prev is not None:
+        try:
+            market_date = datetime.fromtimestamp(market_time, tz=timezone.utc).date()
+            today = datetime.now(tz=timezone.utc).date()
+            if market_date < today:
+                return price
+        except (OverflowError, OSError, ValueError):
+            pass
     return prev
 
 
+def _resolve_earnings_date(earnings):
+    from datetime import date, datetime
+
+    if isinstance(earnings, (list, tuple)):
+        earnings = earnings[0] if earnings else None
+    if earnings is None:
+        return None
+    if isinstance(earnings, datetime):
+        return earnings.date().isoformat()
+    if isinstance(earnings, date):
+        return earnings.isoformat()
+
+    timestamp = _finite_float(earnings)
+    if timestamp is not None:
+        try:
+            return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d")
+        except (OverflowError, OSError, ValueError):
+            return None
+    return _optional_string(earnings)
+
+
 def _resolve_market_date(info):
-    market_time = info.get("regularMarketTime")
+    market_time = _finite_float(info.get("regularMarketTime"))
     if market_time is None:
         return None
 
     from datetime import datetime, timezone
     from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-    exchange_timezone = info.get("exchangeTimezoneName")
+    exchange_timezone = _optional_string(info.get("exchangeTimezoneName"))
     try:
         timezone_info = ZoneInfo(exchange_timezone) if exchange_timezone else timezone.utc
     except (TypeError, ValueError, ZoneInfoNotFoundError):

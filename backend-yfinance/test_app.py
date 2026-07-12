@@ -1,7 +1,9 @@
+import json
 import time
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, PropertyMock, patch
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -51,6 +53,19 @@ def _sample_history(date="2024-06-15"):
         {"Open": [100.0], "Close": [101.0], "Low": [99.0], "High": [102.0], "Volume": [1000]},
         index=index,
     )
+
+
+def _standard_json(response):
+    def reject_constant(value):
+        pytest.fail(f"Non-standard JSON numeric constant emitted: {value}")
+
+    return json.loads(response.get_data(as_text=True), parse_constant=reject_constant)
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_flask_json_provider_rejects_non_standard_numbers(value):
+    with pytest.raises(ValueError):
+        app.json.dumps({"value": value})
 
 
 def _split_adjusted_history(index=None):
@@ -300,6 +315,51 @@ class TestHistoryEndpoint:
         assert response.status_code == 200
         assert response.get_json()[0]["volume"] == 0
 
+    @pytest.mark.parametrize(
+        ("field", "invalid_value"),
+        [
+            ("Open", float("nan")),
+            ("Close", float("inf")),
+            ("Low", float("nan")),
+            ("High", float("-inf")),
+        ],
+    )
+    def test_drops_rows_with_non_finite_required_ohlc(self, client, mock_ticker, field, invalid_value):
+        history = _sample_history()
+        history[field] = [invalid_value]
+        mock_ticker(history_df=history)
+
+        response = client.get("/history/AAPL/1y")
+
+        assert response.status_code == 200
+        assert _standard_json(response) == []
+
+    def test_sanitizes_optional_history_values_and_numpy_scalars(self, client, mock_ticker):
+        history = pd.DataFrame(
+            {
+                "Open": [np.float32(100.0), np.float32(101.0)],
+                "Close": [np.float64(100.5), np.float64(101.5)],
+                "Low": [np.float32(99.5), np.float32(100.5)],
+                "High": [np.float64(101.0), np.float64(102.0)],
+                "Volume": [float("inf"), np.int64(1_234)],
+                "Dividends": [float("nan"), np.float32(0.25)],
+                "Stock Splits": [float("inf"), np.float64(10.0)],
+            },
+            index=pd.DatetimeIndex([pd.Timestamp("2024-06-14"), pd.Timestamp("2024-06-15")]),
+        )
+        mock_ticker(history_df=history)
+
+        response = client.get("/history/AAPL/1y")
+
+        assert response.status_code == 200
+        data = _standard_json(response)
+        assert data[0]["volume"] == 0
+        assert data[0]["dividend"] == 0.0
+        assert "splitRatio" not in data[0]
+        assert data[1]["volume"] == 1_234
+        assert data[1]["dividend"] == 0.25
+        assert data[1]["splitRatio"] == 10.0
+
     def test_yfinance_error_returns_502_instead_of_empty_history(self, client, mock_ticker):
         ticker = mock_ticker()
         ticker.history.side_effect = Exception("API secret details")
@@ -536,6 +596,52 @@ class TestInfoEndpoint:
         assert data["recommendation"] is None
         assert data["sector"] is None
         assert data["beta"] is None
+
+    def test_sanitizes_non_finite_info_fields_and_numpy_scalars(self, client, mock_ticker):
+        mock_ticker(info={
+            "longName": np.str_("NumPy Corp"),
+            "regularMarketPrice": np.float64(float("nan")),
+            "currentPrice": np.float32(195.5),
+            "currency": np.str_("USD"),
+            "forwardPE": np.float64(float("nan")),
+            "priceToBook": np.float64(float("inf")),
+            "trailingEps": np.float64(float("-inf")),
+            "returnOnEquity": np.float32(0.25),
+            "marketCap": np.int64(3_000_000_000),
+            "recommendationKey": np.str_("buy"),
+            "numberOfAnalystOpinions": np.int64(12),
+            "fiftyTwoWeekHigh": np.float32(210.0),
+            "fiftyTwoWeekLow": np.float64(150.0),
+            "beta": np.float64(float("nan")),
+            "sector": np.str_("Technology"),
+            "industry": np.str_("Software"),
+            "earningsDate": np.float64(float("nan")),
+            "dividendRate": np.float32(1.25),
+            "trailingAnnualDividendRate": np.float64(float("inf")),
+            "previousClose": np.float64(193.5),
+            "regularMarketTime": np.int64(time.time()),
+        })
+
+        response = client.get("/info/NUMPY")
+
+        assert response.status_code == 200
+        data = _standard_json(response)
+        assert data["name"] == "NumPy Corp"
+        assert data["price"] == 195.5
+        assert data["currency"] == "USD"
+        assert data["pe_ratio"] is None
+        assert data["pb_ratio"] is None
+        assert data["eps"] is None
+        assert data["roe"] == 0.25
+        assert data["market_cap"] == 3_000_000_000.0
+        assert data["analyst_count"] == 12
+        assert data["fifty_two_week_high"] == 210.0
+        assert data["fifty_two_week_low"] == 150.0
+        assert data["beta"] is None
+        assert data["earnings_date"] is None
+        assert data["dividend_rate"] == 1.25
+        assert data["trailing_annual_dividend_rate"] is None
+        assert data["previous_close"] == 193.5
 
     def test_none_info_returns_404(self, client, mock_ticker):
         mock_ticker(info=None)
