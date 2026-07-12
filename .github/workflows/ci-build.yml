@@ -98,6 +98,7 @@ jobs:
       - name: Scan JVM runtime dependencies
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          cache-dir: ${{ runner.temp }}/trivy-cache
           scan-type: sbom
           scan-ref: build/reports/cyclonedx/stock-analyst.cdx.json
           version: v0.72.0
@@ -130,6 +131,7 @@ jobs:
       - name: Scan backend image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          cache-dir: ${{ runner.temp }}/trivy-cache
           scan-type: image
           image-ref: stock-analyst-backend-yfinance:test
           skip-setup-trivy: true
@@ -144,6 +146,7 @@ jobs:
       - name: Scan API image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          cache-dir: ${{ runner.temp }}/trivy-cache
           scan-type: image
           image-ref: stock-analyst:test
           skip-setup-trivy: true
@@ -180,10 +183,11 @@ jobs:
           echo "📦 Checking container status:"
           docker ps -a
 
-          for container in $(docker compose ps -q); do
-            status=$(docker inspect --format='{{.State.ExitCode}}' "$container")
-            if [ "$status" != "0" ]; then
-              echo "❌ Container $container exited with code $status"
+          for container in $(docker compose ps --all --quiet); do
+            running=$(docker inspect --format='{{.State.Running}}' "$container")
+            health=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$container")
+            if [ "$running" != "true" ] || [ "$health" != "healthy" ]; then
+              echo "❌ Container $container is not healthy (running=$running, health=$health)"
               docker logs "$container"
               exit 1
             fi
@@ -194,10 +198,10 @@ jobs:
           curl --fail --silent --show-error http://localhost:8080/openapi/v1.json \
             | jq --exit-status '.openapi == "3.0.3" and (.paths["/v1/quote/{stock}"] != null)' >/dev/null
           curl --fail --silent --show-error http://localhost:8080/metrics \
-            | grep --quiet '^stock_analyst_http_requests_total'
+            | grep --quiet '^# TYPE stock_analyst_http_requests_total counter$'
           docker compose exec -T stock-analyst-backend-yfinance \
             curl --fail --silent --show-error http://localhost:8081/metrics \
-            | grep --quiet '^stock_analyst_yfinance_http_requests_total'
+            | grep --quiet '^# TYPE stock_analyst_yfinance_http_requests_total counter$'
 
           status=$(curl --silent --show-error --output /tmp/api-error.json \
             --write-out '%{http_code}' \
@@ -225,7 +229,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-      attestations: write
 
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7

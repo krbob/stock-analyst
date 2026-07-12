@@ -1,5 +1,6 @@
 .git
 .github
+.cache
 .gradle
 .idea
 **/build

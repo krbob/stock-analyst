@@ -3,7 +3,7 @@ FROM eclipse-temurin:25.0.3_9-jdk@sha256:68868d04fa9cfd5f5c6abec0b5cef86d8de2bf9
 WORKDIR /app
 
 COPY gradle /app/gradle
-COPY build.gradle.kts gradle.properties gradlew settings.gradle.kts /app/
+COPY build.gradle.kts gradle.lockfile gradle.properties gradlew settings.gradle.kts settings-gradle.lockfile /app/
 COPY core /app/core
 COPY domain /app/domain
 COPY src /app/src
