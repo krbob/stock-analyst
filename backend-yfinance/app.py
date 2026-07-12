@@ -8,11 +8,13 @@ from dataclasses import asdict, dataclass
 import pandas as pd
 import yfinance as yf
 from bulkhead import BulkheadSaturatedError, LoaderBulkhead
-from circuit_breaker import CircuitBreaker, CircuitOpenError, CircuitOutcome
-from flask import Flask, g, jsonify, request
+from circuit_breaker import CircuitBreaker, CircuitOpenError, CircuitOutcome, CircuitState
+from flask import Flask, Response, g, jsonify, request
 from flask.json.provider import DefaultJSONProvider
 from memory_cache import ByteBoundedTTLCache
+from metrics import AdapterMetrics
 from singleflight import SingleFlight
+from werkzeug.exceptions import HTTPException
 from yfinance.exceptions import YFPricesMissingError, YFRateLimitError, YFTzMissingError
 
 
@@ -36,6 +38,8 @@ logger = logging.getLogger(__name__)
 VALID_PERIODS = {"1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"}
 VALID_INTERVALS = {"1m", "5m", "15m", "30m", "1h", "1d", "1wk", "1mo"}
 INTRADAY_INTERVALS = {"1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h"}
+METRIC_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"}
+OPERATIONAL_PATHS = {"/health", "/metrics"}
 
 HISTORY_CACHE_SECONDS = {
     "1d": 120,
@@ -133,6 +137,7 @@ if WAITRESS_THREADS <= BULKHEAD_MAX_ACTIVE_LOADERS:
 _history_cache = ByteBoundedTTLCache(HISTORY_CACHE_MAX_BYTES, HISTORY_CACHE_MAX_ENTRIES)
 _metadata_cache = ByteBoundedTTLCache(METADATA_CACHE_MAX_BYTES, METADATA_CACHE_MAX_ENTRIES)
 _single_flight = SingleFlight()
+_metrics = AdapterMetrics()
 _loader_bulkhead = LoaderBulkhead(
     BULKHEAD_MAX_ACTIVE_LOADERS,
     acquire_timeout_seconds=BULKHEAD_ACQUIRE_TIMEOUT_MS / 1000,
@@ -142,6 +147,7 @@ _upstream_circuit = CircuitBreaker(
     failure_window_seconds=CIRCUIT_BREAKER_FAILURE_WINDOW_SECONDS,
     open_seconds=CIRCUIT_BREAKER_OPEN_SECONDS,
     forced_open_seconds=RATE_LIMIT_RETRY_AFTER_SECONDS,
+    on_transition=_metrics.record_circuit_transition,
 )
 
 
@@ -223,11 +229,16 @@ def _empty_history_for_known_symbol(ticker, symbol):
 
 
 def _cache_get(key):
+    cache = _cache_for_key(key)
+    cache_name = "history" if key.startswith("history:") else "metadata"
     try:
-        return _cache_for_key(key).get(key)
+        value = cache.get(key)
     except Exception:
+        _metrics.record_cache_lookup(cache_name, "error")
         logger.warning("Cache read failed for %s; treating it as a miss", key, exc_info=True)
         return None
+    _metrics.record_cache_lookup(cache_name, "hit" if value is not None else "miss")
+    return value
 
 
 def _cache_set(key, value, ttl):
@@ -256,8 +267,10 @@ def _coalesced_cached_load(key, loader):
                 lambda: _upstream_circuit.call(loader, _classify_circuit_error)
             )
         except BulkheadSaturatedError as error:
+            _metrics.record_bulkhead_rejection()
             raise BackendBusyError() from error
         except CircuitOpenError as error:
+            _metrics.record_circuit_rejection()
             raise UpstreamCircuitOpenError(error.retry_after_seconds) from error
 
     return _single_flight.call(key, load_after_second_cache_check)
@@ -585,14 +598,24 @@ def _load_search_results(query, cache_key):
 
 @app.before_request
 def start_timer():
-    g.start_time = time.time()
+    g.start_time = time.monotonic()
 
 
 @app.after_request
 def log_request_info(response):
     if hasattr(g, "start_time"):
-        duration_ms = int((time.time() - g.start_time) * 1000)
-        logger.info("%s %s %s %dms", request.method, request.path, response.status, duration_ms)
+        duration_seconds = max(0.0, time.monotonic() - g.start_time)
+        if request.path not in OPERATIONAL_PATHS:
+            route = _normalized_metric_route(request.path)
+            method = request.method if request.method in METRIC_METHODS else "OTHER"
+            _metrics.record_http(method, route, response.status_code, duration_seconds)
+            logger.info(
+                "%s %s %s %dms",
+                request.method,
+                request.path,
+                response.status,
+                int(duration_seconds * 1000),
+            )
     return response
 
 
@@ -600,6 +623,11 @@ def log_request_info(response):
 def handle_exception(e):
     logger.error("Exception: %s\n%s", e, traceback.format_exc())
     return jsonify({"error": "An internal error occurred"}), 500
+
+
+@app.errorhandler(HTTPException)
+def handle_http_exception(e):
+    return jsonify({"error": e.name}), e.code
 
 
 @app.errorhandler(ApiError)
@@ -613,6 +641,63 @@ def handle_api_error(e):
 @app.route("/health")
 def health_endpoint():
     return jsonify({"status": "ok"})
+
+
+@app.route("/metrics")
+def metrics_endpoint():
+    return Response(
+        _metrics.render() + _render_runtime_gauges(),
+        content_type="text/plain; version=0.0.4; charset=utf-8",
+    )
+
+
+def _normalized_metric_route(path):
+    segments = path.strip("/").split("/")
+    if len(segments) == 3 and segments[0] == "history":
+        return "/history/{symbol}/{period}"
+    if len(segments) == 2 and segments[0] == "info":
+        return "/info/{symbol}"
+    if len(segments) == 2 and segments[0] == "search":
+        return "/search/{query}"
+    return "unmatched"
+
+
+def _render_runtime_gauges():
+    circuit_state = _upstream_circuit.state
+    lines = [
+        "# HELP stock_analyst_yfinance_cache_entries Current cache entries.",
+        "# TYPE stock_analyst_yfinance_cache_entries gauge",
+        f'stock_analyst_yfinance_cache_entries{{cache="history"}} {len(_history_cache)}',
+        f'stock_analyst_yfinance_cache_entries{{cache="metadata"}} {len(_metadata_cache)}',
+        "# HELP stock_analyst_yfinance_cache_bytes Estimated retained cache bytes.",
+        "# TYPE stock_analyst_yfinance_cache_bytes gauge",
+        f'stock_analyst_yfinance_cache_bytes{{cache="history"}} {_history_cache.total_bytes}',
+        f'stock_analyst_yfinance_cache_bytes{{cache="metadata"}} {_metadata_cache.total_bytes}',
+        "# HELP stock_analyst_yfinance_bulkhead_active Active unique upstream loaders.",
+        "# TYPE stock_analyst_yfinance_bulkhead_active gauge",
+        f"stock_analyst_yfinance_bulkhead_active {_loader_bulkhead.active_count}",
+        "# HELP stock_analyst_yfinance_bulkhead_limit Maximum active unique upstream loaders.",
+        "# TYPE stock_analyst_yfinance_bulkhead_limit gauge",
+        f"stock_analyst_yfinance_bulkhead_limit {_loader_bulkhead.max_active}",
+        "# HELP stock_analyst_yfinance_singleflight_active Active coalesced keys.",
+        "# TYPE stock_analyst_yfinance_singleflight_active gauge",
+        f"stock_analyst_yfinance_singleflight_active {_single_flight.active_count}",
+        "# HELP stock_analyst_yfinance_circuit_state Current circuit state as a one-hot gauge.",
+        "# TYPE stock_analyst_yfinance_circuit_state gauge",
+    ]
+    lines.extend(
+        f'stock_analyst_yfinance_circuit_state{{state="{state.value}"}} '
+        f"{1 if state == circuit_state else 0}"
+        for state in CircuitState
+    )
+    lines.extend(
+        (
+            "# HELP stock_analyst_yfinance_circuit_failures Current failures in the rolling window.",
+            "# TYPE stock_analyst_yfinance_circuit_failures gauge",
+            f"stock_analyst_yfinance_circuit_failures {_upstream_circuit.failure_count}",
+        )
+    )
+    return "\n".join(lines) + "\n"
 
 
 def _serialize_price(price):

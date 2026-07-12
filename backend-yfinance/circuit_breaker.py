@@ -42,6 +42,7 @@ class CircuitBreaker:
         *,
         forced_open_seconds=None,
         clock=time.monotonic,
+        on_transition=None,
     ):
         if failure_threshold <= 0:
             raise ValueError("failure_threshold must be positive")
@@ -56,6 +57,7 @@ class CircuitBreaker:
         self.open_seconds = open_seconds
         self.forced_open_seconds = forced_open_seconds or open_seconds
         self._clock = clock
+        self._on_transition = on_transition
         self._lock = threading.Lock()
         self._state = CircuitState.CLOSED
         self._generation = 0
@@ -84,7 +86,7 @@ class CircuitBreaker:
             if self._state == CircuitState.OPEN:
                 if now < self._open_until:
                     raise CircuitOpenError(self._retry_after(now))
-                self._state = CircuitState.HALF_OPEN
+                self._transition_to(CircuitState.HALF_OPEN, "cooldown_elapsed")
                 self._generation += 1
                 return _Attempt(generation=self._generation, probe=True)
             if self._state == CircuitState.HALF_OPEN:
@@ -95,7 +97,7 @@ class CircuitBreaker:
         with self._lock:
             now = self._clock()
             if outcome == CircuitOutcome.FORCE_OPEN:
-                self._open(now, self.forced_open_seconds)
+                self._open(now, self.forced_open_seconds, reason="force_open")
                 return
             if attempt.generation != self._generation:
                 return
@@ -103,9 +105,9 @@ class CircuitBreaker:
                 if self._state != CircuitState.HALF_OPEN:
                     return
                 if outcome == CircuitOutcome.HEALTHY:
-                    self._close()
+                    self._close(reason="probe_success")
                 else:
-                    self._open(now)
+                    self._open(now, reason="probe_failure")
                 return
             if self._state != CircuitState.CLOSED:
                 return
@@ -115,21 +117,21 @@ class CircuitBreaker:
                 self._prune_failures(now)
                 self._failure_times.append(now)
                 if len(self._failure_times) >= self.failure_threshold:
-                    self._open(now)
+                    self._open(now, reason="failure_threshold")
 
     def _prune_failures(self, now):
         cutoff = now - self.failure_window_seconds
         while self._failure_times and self._failure_times[0] <= cutoff:
             self._failure_times.popleft()
 
-    def _open(self, now, duration=None):
-        self._state = CircuitState.OPEN
+    def _open(self, now, duration=None, reason="failure_threshold"):
+        self._transition_to(CircuitState.OPEN, reason)
         self._open_until = now + (duration or self.open_seconds)
         self._failure_times.clear()
         self._generation += 1
 
-    def _close(self):
-        self._state = CircuitState.CLOSED
+    def _close(self, reason="probe_success"):
+        self._transition_to(CircuitState.CLOSED, reason)
         self._open_until = None
         self._failure_times.clear()
         self._generation += 1
@@ -137,9 +139,20 @@ class CircuitBreaker:
     def _retry_after(self, now):
         return max(1, math.ceil(self._open_until - now))
 
+    def _transition_to(self, state, reason):
+        previous = self._state
+        self._state = state
+        if previous == state or self._on_transition is None:
+            return
+        try:
+            self._on_transition(previous, state, reason)
+        except Exception:
+            # Observability must never change circuit-breaker behavior.
+            pass
+
     def reset(self):
         with self._lock:
-            self._state = CircuitState.CLOSED
+            self._transition_to(CircuitState.CLOSED, "reset")
             self._open_until = None
             self._failure_times.clear()
             self._generation += 1

@@ -25,6 +25,7 @@ from app import (
     _history_cache,
     _loader_bulkhead,
     _metadata_cache,
+    _metrics,
     _single_flight,
     _upstream_circuit,
     app,
@@ -36,6 +37,7 @@ from app import (
 from bulkhead import LoaderBulkhead
 from circuit_breaker import CircuitBreaker, CircuitOpenError, CircuitState
 from memory_cache import ByteBoundedTTLCache, estimate_cache_entry_bytes
+from metrics import AdapterMetrics
 from yfinance.exceptions import YFPricesMissingError, YFRateLimitError, YFTzMissingError
 
 
@@ -51,6 +53,7 @@ def clear_data_cache():
     assert _single_flight.active_count == 0
     assert _loader_bulkhead.active_count == 0
     _upstream_circuit.reset()
+    _metrics.reset()
     _history_cache.clear()
     _metadata_cache.clear()
     yield
@@ -1120,6 +1123,35 @@ class TestCircuitBreaker:
             circuit.call(lambda: pytest.fail("Open circuit called loader"), _classify_circuit_error)
         assert opened.value.retry_after_seconds == RATE_LIMIT_RETRY_AFTER_SECONDS
 
+    def test_reports_bounded_state_transition_reasons(self):
+        clock = FakeClock()
+        metrics = AdapterMetrics()
+        circuit = CircuitBreaker(
+            failure_threshold=1,
+            failure_window_seconds=30,
+            open_seconds=10,
+            clock=clock,
+            on_transition=metrics.record_circuit_transition,
+        )
+
+        self.fail(circuit, UpstreamDataError())
+        clock.advance(10)
+        assert circuit.call(lambda: "recovered", _classify_circuit_error) == "recovered"
+
+        rendered = metrics.render()
+        assert (
+            'stock_analyst_yfinance_circuit_transitions_total'
+            '{from_state="closed",to_state="open",reason="failure_threshold"} 1'
+        ) in rendered
+        assert (
+            'stock_analyst_yfinance_circuit_transitions_total'
+            '{from_state="open",to_state="half_open",reason="cooldown_elapsed"} 1'
+        ) in rendered
+        assert (
+            'stock_analyst_yfinance_circuit_transitions_total'
+            '{from_state="half_open",to_state="closed",reason="probe_success"} 1'
+        ) in rendered
+
 
 class TestSingleFlight:
     @pytest.mark.parametrize("symbol", ["AAPL", "GBPPLN=X"])
@@ -1567,6 +1599,37 @@ class TestHealthEndpoint:
 
         assert response.status_code == 200
         assert response.get_json() == {"status": "ok"}
+
+
+class TestMetricsEndpoint:
+    def test_exposes_bounded_http_cache_and_runtime_metrics(self, client, mock_ticker):
+        mock_ticker(info={"longName": "Apple Inc."})
+
+        assert client.get("/info/AAPL").status_code == 200
+        assert client.get("/info/AAPL").status_code == 200
+        assert client.get("/not-a-route").status_code == 404
+        assert client.get("/health").status_code == 200
+        response = client.get("/metrics")
+        body = response.get_data(as_text=True)
+
+        assert response.status_code == 200
+        assert response.content_type == "text/plain; version=0.0.4; charset=utf-8"
+        assert (
+            'stock_analyst_yfinance_http_requests_total'
+            '{method="GET",route="/info/{symbol}",status="200"} 2'
+        ) in body
+        assert (
+            'stock_analyst_yfinance_http_requests_total'
+            '{method="GET",route="unmatched",status="404"} 1'
+        ) in body
+        assert (
+            'stock_analyst_yfinance_cache_lookups_total'
+            '{cache="metadata",result="hit"} 1'
+        ) in body
+        assert 'stock_analyst_yfinance_cache_entries{cache="metadata"} 1' in body
+        assert 'stock_analyst_yfinance_circuit_state{state="closed"} 1' in body
+        assert "AAPL" not in body
+        assert "/health" not in body
 
 
 class TestSearchEndpoint:

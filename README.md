@@ -286,6 +286,12 @@ Results are filtered to equities, ETFs, and indices. Returns an empty array when
   request latency. Health, readiness, metrics and OpenAPI traffic are excluded, and labels never
   contain symbols, query values or request IDs.
 
+The internal Python adapter also exposes `GET :8081/metrics` on the Compose network. It reports
+bounded endpoint latency/status, history and metadata cache outcomes/size, active single-flight
+and bulkhead loaders, bulkhead/circuit rejections, the current circuit state and explicit state
+transition counters (`failure_threshold`, `force_open`, `cooldown_elapsed`, `probe_success` and
+`probe_failure`). These labels likewise never contain ticker symbols or search values.
+
 ## Key Features
 
 ### Currency conversion
