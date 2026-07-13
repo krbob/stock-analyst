@@ -250,7 +250,7 @@ jobs:
           status=$(curl --silent --show-error --output /tmp/not-found.json \
             --write-out '%{http_code}' http://localhost:8080/v1/not-a-route)
           test "$status" = "404"
-          jq --exit-status '.errorCode == "NOT_FOUND" and .retryable == false' \
+          jq --exit-status '.errorCode == "ROUTE_NOT_FOUND" and .retryable == false' \
             /tmp/not-found.json >/dev/null
       - name: Clean up test containers
         if: always()
