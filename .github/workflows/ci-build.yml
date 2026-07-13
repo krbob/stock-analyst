@@ -202,14 +202,30 @@ jobs:
           echo "📦 Checking container status:"
           docker ps -a
 
-          for container in $(docker compose ps --all --quiet); do
-            running=$(docker inspect --format='{{.State.Running}}' "$container")
-            health=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$container")
-            if [ "$running" != "true" ] || [ "$health" != "healthy" ]; then
-              echo "❌ Container $container is not healthy (running=$running, health=$health)"
-              docker logs "$container"
+          echo "⏳ Waiting for Docker healthchecks to catch up with application readiness..."
+          for attempt in {1..60}; do
+            all_healthy=true
+            for container in $(docker compose ps --all --quiet); do
+              running=$(docker inspect --format='{{.State.Running}}' "$container")
+              health=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$container")
+              if [ "$running" != "true" ] || [ "$health" != "healthy" ]; then
+                all_healthy=false
+                break
+              fi
+            done
+
+            if [ "$all_healthy" = "true" ]; then
+              break
+            fi
+
+            if [ "$attempt" = "60" ]; then
+              echo "❌ Containers did not become healthy"
+              docker compose ps
+              docker compose logs
               exit 1
             fi
+
+            sleep 2
           done
 
           echo "🔍 Checking deterministic runtime contracts..."
