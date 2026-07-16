@@ -134,7 +134,8 @@ class GetStockHistoryUseCase(
                     coverageFrom = coverageFrom,
                     coverageTo = coverageTo,
                     cadence = interval.marketDataCadence(),
-                    partial = partial || finalPrices.isEmpty()
+                    partial = partial || finalPrices.isEmpty(),
+                    freshnessReferenceDate = range?.second?.takeIf { it < today }
                 )
             )
         }

@@ -328,7 +328,10 @@ three endpoints:
   `PARTIAL` takes precedence when the requested calculation cannot be fully populated, while
   `STALE` describes the market observation (not the retrieval). The maximum expected age follows
   its cadence: four days for quote/intraday/daily data, ten for weekly bars and forty for monthly
-  bars. An upstream `marketTimestamp`, when available, takes precedence over its calendar date.
+  bars. An upstream `marketTimestamp`, when available, takes precedence over its calendar date for
+  live responses. For an exact `from`/`to` history window ending before today, freshness is instead
+  assessed against the requested `to` date, so a complete archival response does not become stale
+  merely because it was retrieved later.
 
 Consumers should render this metadata as supporting context, not infer freshness from the API
 server clock or from a chart's last visible point.

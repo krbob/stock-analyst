@@ -58,11 +58,33 @@ class MarketDataProvenanceTest {
         assertEquals(DataStatus.FRESH, validMonthlyObservation.status)
     }
 
+    @Test
+    fun `assesses an explicitly bounded historical observation against the requested end date`() {
+        val provenance = provenance(
+            marketDate = LocalDate(2024, 3, 1),
+            marketTimestampEpochSeconds = 1_709_251_200,
+            freshnessReferenceDate = LocalDate(2024, 3, 1)
+        )
+
+        assertEquals(DataStatus.FRESH, provenance.status)
+    }
+
+    @Test
+    fun `marks bounded historical coverage stale when it ends too far before the requested end date`() {
+        val provenance = provenance(
+            marketDate = LocalDate(2024, 2, 25),
+            freshnessReferenceDate = LocalDate(2024, 3, 1)
+        )
+
+        assertEquals(DataStatus.STALE, provenance.status)
+    }
+
     private fun provenance(
         marketDate: LocalDate?,
         marketTimestampEpochSeconds: Long? = null,
         cadence: MarketDataCadence = MarketDataCadence.DAILY,
-        partial: Boolean = false
+        partial: Boolean = false,
+        freshnessReferenceDate: LocalDate? = null
     ) = marketDataProvenance(
         currentTimeProvider = timeProvider,
         marketDate = marketDate,
@@ -72,6 +94,7 @@ class MarketDataProvenanceTest {
         coverageFrom = marketDate,
         coverageTo = marketDate,
         cadence = cadence,
-        partial = partial
+        partial = partial,
+        freshnessReferenceDate = freshnessReferenceDate
     )
 }

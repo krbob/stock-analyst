@@ -378,6 +378,7 @@ class GetStockHistoryUseCaseTest {
         assertEquals(LocalDate(2024, 1, 2), result.requestedFrom)
         assertEquals(LocalDate(2024, 3, 1), result.requestedTo)
         assertEquals(listOf(LocalDate(2024, 1, 2), LocalDate(2024, 3, 1)), result.prices.map { it.date })
+        assertEquals(DataStatus.FRESH, result.provenance.status)
     }
 
     @Test

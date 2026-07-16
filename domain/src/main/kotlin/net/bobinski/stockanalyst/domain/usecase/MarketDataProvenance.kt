@@ -21,14 +21,16 @@ internal fun marketDataProvenance(
     coverageFrom: LocalDate?,
     coverageTo: LocalDate?,
     cadence: MarketDataCadence,
-    partial: Boolean = false
+    partial: Boolean = false,
+    freshnessReferenceDate: LocalDate? = null
 ): DataProvenance {
     val retrievedAt = currentTimeProvider.instant()
     val marketTimestamp = marketTimestampEpochSeconds.toInstantOrNull()
-    val stale = if (marketTimestamp != null) {
-        retrievedAt - marketTimestamp > cadence.maxAgeDays.days
-    } else {
-        marketDate == null ||
+    val stale = when {
+        freshnessReferenceDate != null -> marketDate == null ||
+            marketDate < freshnessReferenceDate.minus(cadence.maxAgeDays, DateTimeUnit.DAY)
+        marketTimestamp != null -> retrievedAt - marketTimestamp > cadence.maxAgeDays.days
+        else -> marketDate == null ||
             marketDate < currentTimeProvider.localDate().minus(cadence.maxAgeDays, DateTimeUnit.DAY)
     }
 

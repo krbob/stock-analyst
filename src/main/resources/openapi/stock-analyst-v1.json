@@ -112,7 +112,7 @@
             "name": "to",
             "in": "query",
             "required": false,
-            "description": "Inclusive end date. Must be provided together with `from`.",
+            "description": "Inclusive end date. Must be provided together with `from`. For a window ending before today, provenance freshness is assessed relative to this date.",
             "schema": { "type": "string", "format": "date" }
           }
         ],
