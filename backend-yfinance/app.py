@@ -204,9 +204,18 @@ class SymbolNotFoundError(ApiError):
 def _raise_classified_upstream_error(error, symbol=None):
     if isinstance(error, YFRateLimitError):
         raise UpstreamRateLimitError() from error
-    if symbol is not None and isinstance(error, YFTzMissingError):
+    if symbol is not None and (
+        isinstance(error, YFTzMissingError) or _is_upstream_http_not_found(error)
+    ):
         raise SymbolNotFoundError(symbol) from error
     raise UpstreamDataError() from error
+
+
+def _is_upstream_http_not_found(error):
+    # yfinance can expose a missing symbol as its transport's HTTPError. Keep the
+    # adapter independent of that transitive transport while preserving the status.
+    response = getattr(error, "response", None)
+    return getattr(response, "status_code", None) == 404
 
 
 def _classify_circuit_error(error):

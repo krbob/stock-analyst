@@ -102,6 +102,12 @@ def _standard_json(response):
     return json.loads(response.get_data(as_text=True), parse_constant=reject_constant)
 
 
+def _http_error(status_code):
+    error = RuntimeError(f"HTTP Error {status_code}")
+    error.response = MagicMock(status_code=status_code)
+    return error
+
+
 class FakeClock:
     def __init__(self):
         self.now = 0.0
@@ -495,9 +501,18 @@ class TestHistoryEndpoint:
         assert response.status_code == 429
         assert response.headers["Retry-After"] == str(RATE_LIMIT_RETRY_AFTER_SECONDS)
 
-    def test_missing_timezone_is_the_only_history_exception_mapped_to_not_found(self, client, mock_ticker):
+    def test_missing_timezone_maps_to_not_found(self, client, mock_ticker):
         ticker = mock_ticker()
         ticker.history.side_effect = YFTzMissingError("INVALID")
+
+        response = client.get("/history/INVALID/1y")
+
+        assert response.status_code == 404
+        assert response.get_json()["error"] == "Symbol not found: INVALID"
+
+    def test_upstream_http_404_maps_to_not_found(self, client, mock_ticker):
+        ticker = mock_ticker()
+        ticker.history.side_effect = _http_error(404)
 
         response = client.get("/history/INVALID/1y")
 
@@ -532,7 +547,7 @@ class TestHistoryEndpoint:
 
     def test_upstream_403_is_failure_not_unknown_symbol(self, client, mock_ticker):
         ticker = mock_ticker()
-        ticker.history.side_effect = RuntimeError("HTTP Error 403: Forbidden")
+        ticker.history.side_effect = _http_error(403)
 
         response = client.get("/history/AAPL/1y")
 
@@ -790,7 +805,16 @@ class TestInfoEndpoint:
 
         assert response.status_code == 404
 
-    def test_yfinance_error_returns_404(self, client, mock_ticker):
+    def test_info_upstream_http_404_maps_to_not_found(self, client, mock_ticker):
+        ticker = mock_ticker()
+        type(ticker).info = PropertyMock(side_effect=_http_error(404))
+
+        response = client.get("/info/INVALID")
+
+        assert response.status_code == 404
+        assert response.get_json()["error"] == "Symbol not found: INVALID"
+
+    def test_yfinance_error_returns_502(self, client, mock_ticker):
         ticker = mock_ticker()
         type(ticker).info = PropertyMock(side_effect=Exception("Internal details"))
 
