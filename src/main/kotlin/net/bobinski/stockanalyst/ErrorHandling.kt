@@ -4,6 +4,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.install
 import io.ktor.server.application.log
 import io.ktor.server.plugins.statuspages.StatusPages
@@ -17,22 +18,6 @@ import net.bobinski.stockanalyst.route.respondError
 
 fun Application.configureErrorHandling() {
     install(StatusPages) {
-        status(HttpStatusCode.NotFound) { call, status ->
-            if (call.request.httpMethod != HttpMethod.Get && isKnownGetRoute(call.request.path())) {
-                call.response.header(HttpHeaders.Allow, HttpMethod.Get.value)
-                call.respondError(
-                    HttpStatusCode.MethodNotAllowed,
-                    "Method not allowed.",
-                    ApiErrorCode.METHOD_NOT_ALLOWED
-                )
-            } else {
-                call.respondError(status, "Route not found.", ApiErrorCode.ROUTE_NOT_FOUND)
-            }
-        }
-        status(HttpStatusCode.MethodNotAllowed) { call, status ->
-            call.response.header(HttpHeaders.Allow, HttpMethod.Get.value)
-            call.respondError(status, "Method not allowed.", ApiErrorCode.METHOD_NOT_ALLOWED)
-        }
         exception<Exception> { call, cause ->
             if (cause is CancellationException) throw cause
             call.application.log.error("Unhandled application error", cause)
@@ -42,6 +27,19 @@ fun Application.configureErrorHandling() {
                 errorCode = ApiErrorCode.INTERNAL_ERROR
             )
         }
+    }
+}
+
+internal suspend fun ApplicationCall.respondRouteFallback() {
+    if (request.httpMethod != HttpMethod.Get && isKnownGetRoute(request.path())) {
+        response.header(HttpHeaders.Allow, HttpMethod.Get.value)
+        respondError(
+            HttpStatusCode.MethodNotAllowed,
+            "Method not allowed.",
+            ApiErrorCode.METHOD_NOT_ALLOWED
+        )
+    } else {
+        respondError(HttpStatusCode.NotFound, "Route not found.", ApiErrorCode.ROUTE_NOT_FOUND)
     }
 }
 

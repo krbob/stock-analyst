@@ -55,7 +55,7 @@ class MonitoringAndErrorContractTest {
     }
 
     @Test
-    fun `framework 404 and 405 use the stable error contract`() = testApplication {
+    fun `route fallback 404 and 405 use the stable error contract`() = testApplication {
         application { module() }
 
         val missing = client.get("/v1/not-a-route")
@@ -69,6 +69,26 @@ class MonitoringAndErrorContractTest {
         assertEquals(ApiErrorCode.METHOD_NOT_ALLOWED, unsupported.apiError().errorCode)
         assertEquals(HttpStatusCode.NotFound, unsupportedUnknown.status)
         assertEquals(ApiErrorCode.ROUTE_NOT_FOUND, unsupportedUnknown.apiError().errorCode)
+    }
+
+    @Test
+    fun `typed domain 404 is not replaced by the route fallback`() = testApplication {
+        application {
+            module()
+            routing {
+                get("/test/domain-not-found") {
+                    call.respondError(BackendDataException.unknownSymbol("MISSING"))
+                }
+            }
+        }
+
+        val response = client.get("/test/domain-not-found")
+        val error = response.apiError()
+
+        assertEquals(HttpStatusCode.NotFound, response.status)
+        assertEquals(ApiErrorCode.SYMBOL_NOT_FOUND, error.errorCode)
+        assertEquals("Unknown symbol: MISSING", error.error)
+        assertFalse(error.retryable)
     }
 
     @Test

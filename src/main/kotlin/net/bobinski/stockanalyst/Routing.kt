@@ -30,6 +30,9 @@ fun Application.configureRouting() {
         route("/v1") {
             marketDataRoutes()
         }
+        route("/{unmatched...}") {
+            handle { call.respondRouteFallback() }
+        }
     }
 }
 
