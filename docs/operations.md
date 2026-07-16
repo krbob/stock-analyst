@@ -232,10 +232,11 @@ the actual request path, so apply suitable log access and retention controls.
 ## Live upstream validation
 
 Pull requests use deterministic fixtures and container smoke tests and do not call
-Yahoo. The scheduled, non-blocking
+Yahoo. The separate scheduled
 [`Live Yahoo canary`](../.github/workflows/live-canary.yml) runs on weekdays against
-published `main` images. It checks an AAPL quote and history, provenance, and a typed
-missing-symbol response.
+published `main` images. It checks an AAPL quote, bounded and maximum history,
+provenance, and a typed missing-symbol response. A failed canary is reported as a
+failed workflow run, but it is not a job in the reproducible build pipeline.
 
 An unsuccessful live canary indicates upstream or integration risk and should be
 investigated, but it does not invalidate a reproducible build by itself.

@@ -21,7 +21,6 @@ permissions:
 jobs:
   live-canary:
     runs-on: ubuntu-24.04
-    continue-on-error: true
     timeout-minutes: 12
 
     steps:

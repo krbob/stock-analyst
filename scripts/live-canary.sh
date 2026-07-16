@@ -32,13 +32,28 @@ jq --exit-status '
   (.provenance.coverageTo | type == "string")
 ' <<<"${history}" >/dev/null
 
+max_history=$(curl --fail --silent --show-error \
+  --retry 2 --retry-delay 2 --retry-connrefused \
+  "${base_url}/v1/history/AAPL?period=max")
+
+jq --exit-status '
+  .symbol == "AAPL" and
+  .period == "max" and
+  .interval == "1mo" and
+  (.prices | type == "array" and length > 0) and
+  .adjustment == "SPLIT_ADJUSTED" and
+  .provenance.source == "YAHOO_FINANCE" and
+  (.provenance.coverageFrom | type == "string") and
+  (.provenance.coverageTo | type == "string")
+' <<<"${max_history}" >/dev/null
+
 missing_status=$(curl --silent --show-error \
   --output /tmp/stock-analyst-canary-missing.json \
   --write-out '%{http_code}' \
-  "${base_url}/v1/quote/CODEX-NOT-A-REAL-SYMBOL-7D3F")
+  "${base_url}/v1/quote/CODEX-NOT-REAL-7D3F")
 test "${missing_status}" = "404"
 jq --exit-status \
   '.errorCode == "SYMBOL_NOT_FOUND" and .retryable == false and (.requestId | type == "string")' \
   /tmp/stock-analyst-canary-missing.json >/dev/null
 
-echo "Live Yahoo canary passed for quote, history, provenance and typed 404."
+echo "Live Yahoo canary passed for quote, bounded/max history, provenance and typed 404."
