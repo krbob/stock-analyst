@@ -130,13 +130,15 @@ are documented in [Operations](operations.md).
 
 ## State and scaling
 
-Both services are otherwise stateless. Adapter caches, in-flight maps, metrics and
-circuit state live in process memory and are lost on restart. Running multiple
-replicas is possible, but each replica has an independent cache and independent
-Yahoo rate-limit behavior; horizontal scaling therefore does not create a shared
-rate-limit budget.
+Neither service owns a domain database or message broker. Stock Analyst response
+caches, in-flight maps, metrics and circuit state live in process memory and are lost
+on restart. yfinance can additionally create disposable SQLite cookie and ticker-
+timezone caches under `~/.cache/py-yfinance`; the container creates that writable
+directory, but it is not canonical market data and is not shared between replicas.
 
-No database or message broker is used.
+Running multiple replicas is possible, but each replica has independent response and
+yfinance implementation caches plus independent Yahoo rate-limit behavior.
+Horizontal scaling therefore does not create a shared cache or rate-limit budget.
 
 ## Contract ownership
 

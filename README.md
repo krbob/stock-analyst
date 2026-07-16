@@ -87,8 +87,9 @@ Configuration, cache TTLs, retry budgets, circuit-breaker behavior and troublesh
 are covered by the [Operations guide](docs/operations.md).
 
 Production deployments should use immutable image digests and staged compatibility
-gates. See [Deployment](docs/deployment.md); do not treat the moving `main` tags used
-by CI and local examples as release identifiers.
+gates. See [Deployment](docs/deployment.md); do not treat the moving `main` tags
+published by CI and used by canaries as release identifiers. Local Compose defaults
+to the separate `:local` images.
 
 ## Development
 

@@ -221,8 +221,8 @@ docker compose exec stock-analyst-backend-yfinance \
 - readiness passes but a market call returns `429`: Yahoo rate limit, respect
   `Retry-After`;
 - `503` with `Retry-After`: local bulkhead saturation or open upstream circuit;
-- `502`: the adapter returned or produced an upstream failure that was not an
-  expected missing symbol;
+- `502`: adapter communication, response deserialization or an upstream failure that
+  was not an expected missing symbol;
 - `422`: required currency or historical conversion data was unavailable.
 
 Use request IDs to correlate a public typed error with Kotlin logs. Metric labels

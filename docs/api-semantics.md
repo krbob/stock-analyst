@@ -37,8 +37,10 @@ infer freshness from the API clock or from the final visible point of a chart.
 
 - `retrievedAt` is when Stock Analyst assembled the response.
 - `marketTimestamp` and `marketDate` identify the effective upstream observation.
-- `coverageFrom` and `coverageTo` describe the data that was actually used. FX
-  coverage can make it narrower than the requested instrument range.
+- `coverageFrom` and `coverageTo` describe the returned market-data range. For a
+  history response they exclude indicator warmup bars even though those earlier bars
+  participate in the calculation. FX coverage can make the returned range narrower
+  than the requested instrument range.
 - `currency`, `unitScale` and `adjustment` make the value basis explicit.
 - `status` is `FRESH`, `STALE` or `PARTIAL` for current single-instrument
   responses. `ERROR` is reserved by the shared model for future batch semantics.
@@ -92,10 +94,12 @@ contain aggregated dividends, and Stock Analyst preserves them even when the
 `dividends` query parameter is omitted or `false`.
 
 Setting `dividends=true` for weekly or monthly data enables an additional daily-data
-fallback. If the aggregate bars contain no dividends, daily payments are injected
-into the matching aggregate bars. If the aggregate bars already contain payments,
-the fallback does not add them again. The flag therefore requests completeness for
-coarse bars; it is not an include/exclude filter.
+fallback. If the aggregate bars contain no dividends, daily payments are summed into
+the bar whose `(previousBar.date, currentBar.date]` window contains the payment. With
+period-start timestamps this can be the following visible bar rather than the bar
+whose label shares the calendar week or month. If the aggregate bars already contain
+payments, the fallback does not add them again. The flag therefore requests
+completeness for coarse bars; it is not an include/exclude filter.
 
 OHLC, volume and dividends are expressed on the latest split-adjusted share basis.
 Prices are not adjusted for dividends. `splitRatio` appears only on a
@@ -136,8 +140,10 @@ in the exchange subunit.
 
 ## Indicators
 
-The API supports SMA 50/200, EMA 50/200, Bollinger Bands, RSI and MACD. The OpenAPI
-contract lists the accepted indicator keys.
+The accepted keys are `sma50`, `sma200`, `ema50`, `ema200`, `bb`, `rsi` and `macd`.
+They represent SMA 50/200, EMA 50/200, Bollinger Bands, RSI and MACD. The current
+OpenAPI parameter documents the comma-separated format but does not encode this set
+as an enum; this list follows the request validator and calculation code.
 
 `/v1/indicators/{stock}` returns only the latest requested values.
 `/v1/history/{stock}?indicators=...` returns series aligned with the requested price
