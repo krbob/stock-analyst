@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, PropertyMock, patch
 import numpy as np
 import pandas as pd
 import pytest
+import yfinance as yf
 
 from app import (
     ApiError,
@@ -187,6 +188,9 @@ def _split_adjusted_history(index=None):
 
 
 class TestHistoryEndpoint:
+    def test_yfinance_upstream_exceptions_are_not_hidden(self):
+        assert yf.config.debug.hide_exceptions is False
+
     def test_returns_prices(self, client, mock_ticker):
         index = pd.DatetimeIndex([pd.Timestamp("2024-06-15")])
         dividends = pd.Series([0.5], index=index)
@@ -213,7 +217,6 @@ class TestHistoryEndpoint:
             auto_adjust=False,
             actions=True,
             repair=True,
-            raise_errors=True,
         )
 
     def test_preserves_repaired_10_for_1_split_basis_without_double_adjustment(self, client, mock_ticker):
@@ -242,7 +245,6 @@ class TestHistoryEndpoint:
             auto_adjust=False,
             actions=True,
             repair=True,
-            raise_errors=True,
         )
 
     def test_keeps_history_without_splits_unchanged(self, client, mock_ticker):
@@ -294,7 +296,6 @@ class TestHistoryEndpoint:
             auto_adjust=False,
             actions=True,
             repair=True,
-            raise_errors=True,
         )
 
     @pytest.mark.parametrize("interval", ["1wk", "1mo"])
@@ -308,6 +309,22 @@ class TestHistoryEndpoint:
         assert [row["close"] for row in data] == [100.0, 101.0, 102.0]
         assert [row["volume"] for row in data] == [100_000, 120_000, 110_000]
         assert data[1]["splitRatio"] == 10.0
+
+    @pytest.mark.parametrize("interval", ["1wk", "1mo"])
+    def test_max_repaired_multi_day_history_uses_explicit_start(self, client, mock_ticker, interval):
+        ticker = mock_ticker(history_df=_split_adjusted_history())
+
+        response = client.get(f"/history/NVDA/max?interval={interval}")
+
+        assert response.status_code == 200
+        assert [row["close"] for row in response.get_json()] == [100.0, 101.0, 102.0]
+        ticker.history.assert_called_once_with(
+            start="1900-01-01",
+            interval=interval,
+            auto_adjust=False,
+            actions=True,
+            repair=True,
+        )
 
     def test_intraday_keeps_provider_split_basis_and_event_timestamp(self, client, mock_ticker):
         index = pd.DatetimeIndex([
@@ -330,7 +347,6 @@ class TestHistoryEndpoint:
             auto_adjust=False,
             actions=True,
             repair=True,
-            raise_errors=True,
         )
 
     def test_uses_dividends_from_history_actions_column(self, client, mock_ticker):
@@ -1337,6 +1353,41 @@ class TestSingleFlight:
 
 
 class TestCircuitBreakerIntegration:
+    def test_deterministic_history_value_error_does_not_poison_global_circuit(self):
+        circuit = CircuitBreaker(
+            failure_threshold=1,
+            failure_window_seconds=30,
+            open_seconds=10,
+            forced_open_seconds=RATE_LIMIT_RETRY_AFTER_SECONDS,
+        )
+
+        def ticker_for(symbol):
+            ticker = MagicMock()
+            if symbol == "AVWS.DE":
+                ticker.history.side_effect = ValueError("unit abbreviation w/o a number")
+            elif symbol == "AAPL":
+                type(ticker).info = PropertyMock(return_value={"longName": "Apple Inc."})
+            else:
+                raise AssertionError(f"Unexpected symbol: {symbol}")
+            return ticker
+
+        with (
+            patch("app._upstream_circuit", circuit),
+            patch("app.yf.Ticker", side_effect=ticker_for) as ticker_class,
+        ):
+            with pytest.raises(UpstreamDataError) as failed:
+                get_history("AVWS.DE", "max", "1mo")
+
+            assert failed.value.status_code == 502
+            assert isinstance(failed.value.__cause__, ValueError)
+            assert circuit.state == CircuitState.CLOSED
+            assert circuit.failure_count == 0
+
+            independent_info = get_basic_info("AAPL")
+
+        assert independent_info.name == "Apple Inc."
+        assert [call.args[0] for call in ticker_class.call_args_list] == ["AVWS.DE", "AAPL"]
+
     def test_is_global_across_operation_keys_and_recovers_with_one_probe(self):
         clock = FakeClock()
         circuit = CircuitBreaker(

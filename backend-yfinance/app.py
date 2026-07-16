@@ -35,9 +35,14 @@ app = StandardJSONFlask(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
+# yfinance 1.5 deprecated the per-request ``raise_errors`` argument. Keep failures
+# observable so the adapter can preserve its typed upstream error contract.
+yf.config.debug.hide_exceptions = False
+
 VALID_PERIODS = {"1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"}
 VALID_INTERVALS = {"1m", "5m", "15m", "30m", "1h", "1d", "1wk", "1mo"}
 INTRADAY_INTERVALS = {"1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h"}
+MAX_HISTORY_START = "1900-01-01"
 METRIC_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"}
 OPERATIONAL_PATHS = {"/health", "/metrics"}
 
@@ -208,6 +213,8 @@ def _classify_circuit_error(error):
     if isinstance(error, UpstreamRateLimitError):
         return CircuitOutcome.FORCE_OPEN
     if isinstance(error, UpstreamDataError):
+        if isinstance(error.__cause__, ValueError):
+            return CircuitOutcome.NEUTRAL
         return CircuitOutcome.FAILURE
     if isinstance(error, SymbolNotFoundError):
         return CircuitOutcome.HEALTHY
@@ -337,13 +344,20 @@ def _load_history(symbol, period, interval, cache_key):
         # GBP/ZAR/ILS. Downstream consumers must therefore scale only info-derived spot fields.
         # Keep `auto_adjust=False`: enabling it would additionally adjust for dividends and
         # would make the explicit dividend stream unsuitable for yield/total-return logic.
+        # With repaired weekly/monthly candles yfinance resamples daily data and tries to
+        # parse the period before its special `max` handling. An explicit start preserves
+        # maximum-history semantics without passing the unparseable `max` duration.
+        history_range = (
+            {"start": MAX_HISTORY_START}
+            if period == "max" and interval in {"1wk", "1mo"}
+            else {"period": period}
+        )
         history = ticker.history(
-            period=period,
             interval=interval,
             auto_adjust=False,
             actions=True,
             repair=True,
-            raise_errors=True,
+            **history_range,
         )
     except YFPricesMissingError:
         logger.info("No prices returned for %s (%s); verifying symbol identity", symbol, period)
