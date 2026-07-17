@@ -44,6 +44,7 @@ class GetStockHistoryUseCase(
             val rangeRequested = range != null
             val interval = interval ?: intervalFor(period)
             val warmup = warmupBars(indicators)
+            val requiredPreviousBars = requiredPreviousIndicatorBars(indicators)
             val basePeriod = when {
                 rangeRequested -> minimalPeriodCovering(range.first, today)
                 else -> period
@@ -71,24 +72,31 @@ class GetStockHistoryUseCase(
                 convHistory
             }
 
-            var history = historyDeferred.await()
+            val history = historyDeferred.await()
             if (history.isEmpty()) throw BackendDataException.missingHistory(symbol)
 
-            var partial = false
-            if (conversionHistory != null) {
-                val convMinDate = conversionHistory.minOf { it.date }
-                val originalSize = history.size
-                history = history.filter { it.date >= convMinDate }
-                partial = history.size < originalSize
-                if (history.isEmpty()) throw BackendDataException.insufficientConversion(conversionSymbol)
-            }
+            val conversionStart = conversionHistory?.minOf { it.date }
+            val partial = if (conversionStart != null) {
+                if (history.none { it.date >= conversionStart }) {
+                    throw BackendDataException.insufficientConversion(conversionSymbol)
+                }
+                conversionTrimAffectsRequestedResult(
+                    history = history,
+                    conversionStart = conversionStart,
+                    requestedRange = range,
+                    requiredPreviousBars = requiredPreviousBars
+                )
+            } else false
 
             val pricesWithDividends: Collection<HistoricalPrice> = if (dailyDividendsDeferred != null) {
                 val dailyPrices = dailyDividendsDeferred.await()
                 injectDividends(history, dailyPrices)
             } else history
 
-            val sortedPrices = pricesWithDividends.sortedBy { it.sortKey }
+            val conversionCoveredPrices = if (conversionStart != null) {
+                pricesWithDividends.filter { it.date >= conversionStart }
+            } else pricesWithDividends
+            val sortedPrices = conversionCoveredPrices.sortedBy { it.sortKey }
 
             val periodCutoff = if (!rangeRequested && fetchPeriod != period) periodStartDate(period) else null
 
@@ -161,6 +169,44 @@ class GetStockHistoryUseCase(
         if ("bb" in indicators) max = maxOf(max, 20)
         if ("rsi" in indicators) max = maxOf(max, 14)
         return max
+    }
+
+    private fun requiredPreviousIndicatorBars(indicators: Set<String>): Int {
+        var max = 0
+        if ("sma200" in indicators || "ema200" in indicators) max = maxOf(max, 199)
+        if ("sma50" in indicators || "ema50" in indicators) max = maxOf(max, 49)
+        if ("macd" in indicators) max = maxOf(max, 33)
+        if ("bb" in indicators) max = maxOf(max, 19)
+        if ("rsi" in indicators) max = maxOf(max, 13)
+        return max
+    }
+
+    private fun conversionTrimAffectsRequestedResult(
+        history: Collection<HistoricalPrice>,
+        conversionStart: LocalDate,
+        requestedRange: Pair<LocalDate, LocalDate>?,
+        requiredPreviousBars: Int
+    ): Boolean {
+        val removedPrices = history.filter { it.date < conversionStart }
+        if (removedPrices.isEmpty()) return false
+        if (requestedRange == null) return true
+
+        val (requestedFrom, requestedTo) = requestedRange
+        if (removedPrices.any { it.date >= requestedFrom && it.date <= requestedTo }) return true
+        if (requiredPreviousBars == 0) return false
+
+        val usablePrices = history
+            .filter { price -> setOf(price.open, price.close, price.low, price.high).none(Double::isNaN) }
+            .sortedBy { it.sortKey }
+        val firstRequestedIndex = usablePrices.indexOfFirst {
+            it.date >= requestedFrom && it.date <= requestedTo
+        }
+        if (firstRequestedIndex < 0) return false
+
+        val warmupStartIndex = (firstRequestedIndex - requiredPreviousBars).coerceAtLeast(0)
+        return usablePrices
+            .subList(warmupStartIndex, firstRequestedIndex)
+            .any { it.date < conversionStart }
     }
 
     private fun extendedPeriod(period: Period, interval: Interval, warmupBars: Int): Period {

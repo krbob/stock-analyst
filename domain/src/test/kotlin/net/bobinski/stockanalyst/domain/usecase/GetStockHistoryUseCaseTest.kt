@@ -3,7 +3,9 @@ package net.bobinski.stockanalyst.domain.usecase
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
+import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.plus
 import net.bobinski.stockanalyst.core.time.MutableCurrentTimeProvider
 import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.model.BasicInfo
@@ -286,6 +288,7 @@ class GetStockHistoryUseCaseTest {
         // Price from 2023-06-15 should be excluded (before conversion start)
         assertEquals(2, result.prices.size)
         assertEquals(LocalDate(2024, 1, 2), result.prices[0].date)
+        assertEquals(DataStatus.PARTIAL, result.provenance.status)
     }
 
     @Test
@@ -334,6 +337,47 @@ class GetStockHistoryUseCaseTest {
 
         assertEquals(0.0, result.prices[0].dividend) // week ending 6/7 — no dividend
         assertEquals(0.25, result.prices[1].dividend, 0.001) // week ending 6/14 — includes 6/10 dividend
+    }
+
+    @Test
+    fun `does not carry dividends from FX-trimmed weekly bars into bounded range`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.", currency = "USD")
+        coEvery { stockDataProvider.getHistory("AAPL", Period._1mo, Interval.WEEKLY) } returns listOf(
+            historicalPrice(LocalDate(2024, 5, 17), 100.0),
+            historicalPrice(LocalDate(2024, 5, 24), 101.0),
+            historicalPrice(LocalDate(2024, 5, 31), 102.0),
+            historicalPrice(LocalDate(2024, 6, 7), 103.0),
+            historicalPrice(LocalDate(2024, 6, 14), 104.0)
+        )
+        coEvery { stockDataProvider.getHistory("AAPL", Period._1mo, Interval.DAILY) } returns listOf(
+            historicalPrice(LocalDate(2024, 5, 22), 100.0, dividend = 0.5),
+            historicalPrice(LocalDate(2024, 5, 30), 101.0, dividend = 0.25),
+            historicalPrice(LocalDate(2024, 6, 5), 102.0, dividend = 0.1)
+        )
+        coEvery { stockDataProvider.resolveConversionSymbol("USD", "EUR") } returns "EUR=X"
+        coEvery { stockDataProvider.getHistory("EUR=X", Period._1mo) } returns listOf(
+            historicalPrice(LocalDate(2024, 5, 28), 2.0),
+            historicalPrice(LocalDate(2024, 6, 6), 3.0)
+        )
+
+        val result = useCase(
+            symbol = "AAPL",
+            period = Period._1y,
+            interval = Interval.WEEKLY,
+            currency = "EUR",
+            dividends = true,
+            requestedFrom = LocalDate(2024, 5, 31),
+            requestedTo = LocalDate(2024, 6, 14)
+        )
+
+        assertEquals(
+            listOf(LocalDate(2024, 5, 31), LocalDate(2024, 6, 7), LocalDate(2024, 6, 14)),
+            result.prices.map { it.date }
+        )
+        assertEquals(0.5, result.prices[0].dividend, 0.001)
+        assertEquals(0.3, result.prices[1].dividend, 0.001)
+        assertEquals(0.0, result.prices[2].dividend, 0.001)
+        assertEquals(DataStatus.FRESH, result.provenance.status)
     }
 
     @Test
@@ -405,6 +449,113 @@ class GetStockHistoryUseCaseTest {
         assertEquals(1, result.prices.size)
         assertEquals(LocalDate(2024, 6, 15), result.prices.single().date)
         assertEquals(190.0, result.prices.single().close, 0.01)
+    }
+
+    @Test
+    fun `keeps fresh status when conversion only trims prices before requested range`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.", currency = "USD")
+        coEvery { stockDataProvider.getHistory("AAPL", Period._5d, Interval.DAILY) } returns listOf(
+            historicalPrice(LocalDate(2024, 5, 31), 99.0),
+            historicalPrice(LocalDate(2024, 6, 10), 100.0),
+            historicalPrice(LocalDate(2024, 6, 15), 105.0)
+        )
+        coEvery { stockDataProvider.resolveConversionSymbol("USD", "EUR") } returns "EUR=X"
+        coEvery { stockDataProvider.getHistory("EUR=X", Period._5d) } returns listOf(
+            historicalPrice(LocalDate(2024, 6, 9), 0.9),
+            historicalPrice(LocalDate(2024, 6, 15), 0.95)
+        )
+
+        val result = useCase(
+            symbol = "AAPL",
+            period = Period._1y,
+            currency = "EUR",
+            requestedFrom = LocalDate(2024, 6, 10),
+            requestedTo = LocalDate(2024, 6, 15)
+        )
+
+        assertEquals(listOf(LocalDate(2024, 6, 10), LocalDate(2024, 6, 15)), result.prices.map { it.date })
+        assertEquals(DataStatus.FRESH, result.provenance.status)
+    }
+
+    @Test
+    fun `keeps partial status when conversion trims a price inside requested range`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.", currency = "USD")
+        coEvery { stockDataProvider.getHistory("AAPL", Period._5d, Interval.DAILY) } returns listOf(
+            historicalPrice(LocalDate(2024, 5, 31), 99.0),
+            historicalPrice(LocalDate(2024, 6, 10), 100.0),
+            historicalPrice(LocalDate(2024, 6, 15), 105.0)
+        )
+        coEvery { stockDataProvider.resolveConversionSymbol("USD", "EUR") } returns "EUR=X"
+        coEvery { stockDataProvider.getHistory("EUR=X", Period._5d) } returns listOf(
+            historicalPrice(LocalDate(2024, 6, 11), 0.9),
+            historicalPrice(LocalDate(2024, 6, 15), 0.95)
+        )
+
+        val result = useCase(
+            symbol = "AAPL",
+            period = Period._1y,
+            currency = "EUR",
+            requestedFrom = LocalDate(2024, 6, 10),
+            requestedTo = LocalDate(2024, 6, 15)
+        )
+
+        assertEquals(listOf(LocalDate(2024, 6, 15)), result.prices.map { it.date })
+        assertEquals(DataStatus.PARTIAL, result.provenance.status)
+    }
+
+    @Test
+    fun `keeps partial status when conversion trims indicator warmup prices`() = runTest {
+        val historyStart = LocalDate(2024, 5, 29)
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.", currency = "USD")
+        coEvery { stockDataProvider.getHistory("AAPL", Period._1mo, Interval.DAILY) } returns
+            (0..17).map { offset ->
+                historicalPrice(historyStart.plus(offset, DateTimeUnit.DAY), 100.0 + offset)
+            }
+        coEvery { stockDataProvider.resolveConversionSymbol("USD", "EUR") } returns "EUR=X"
+        coEvery { stockDataProvider.getHistory("EUR=X", Period._1mo) } returns listOf(
+            historicalPrice(LocalDate(2024, 6, 5), 0.9),
+            historicalPrice(LocalDate(2024, 6, 15), 0.95)
+        )
+
+        val result = useCase(
+            symbol = "AAPL",
+            period = Period._1y,
+            indicators = setOf("rsi"),
+            currency = "EUR",
+            requestedFrom = LocalDate(2024, 6, 14),
+            requestedTo = LocalDate(2024, 6, 15)
+        )
+
+        assertEquals(listOf(LocalDate(2024, 6, 14), LocalDate(2024, 6, 15)), result.prices.map { it.date })
+        assertTrue(result.indicators?.rsi?.isEmpty() == true)
+        assertEquals(DataStatus.PARTIAL, result.provenance.status)
+    }
+
+    @Test
+    fun `keeps fresh status when conversion trim ends before RSI lookback boundary`() = runTest {
+        val historyStart = LocalDate(2024, 5, 31)
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.", currency = "USD")
+        coEvery { stockDataProvider.getHistory("AAPL", Period._1mo, Interval.DAILY) } returns
+            (0..15).map { offset ->
+                historicalPrice(historyStart.plus(offset, DateTimeUnit.DAY), 100.0 + offset)
+            }
+        coEvery { stockDataProvider.resolveConversionSymbol("USD", "EUR") } returns "EUR=X"
+        coEvery { stockDataProvider.getHistory("EUR=X", Period._1mo) } returns listOf(
+            historicalPrice(LocalDate(2024, 6, 2), 0.9),
+            historicalPrice(LocalDate(2024, 6, 15), 0.95)
+        )
+
+        val result = useCase(
+            symbol = "AAPL",
+            period = Period._1y,
+            indicators = setOf("rsi"),
+            currency = "EUR",
+            requestedFrom = LocalDate(2024, 6, 15),
+            requestedTo = LocalDate(2024, 6, 15)
+        )
+
+        assertEquals(1, result.prices.size)
+        assertEquals(DataStatus.FRESH, result.provenance.status)
     }
 
     private fun basicInfo(name: String, currency: String? = null) = BasicInfo(
