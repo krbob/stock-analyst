@@ -101,6 +101,58 @@ class CalculateGainTest {
     }
 
     @Test
+    fun `five-year gain uses FX rate applicable to the instrument reference session`() {
+        val data = listOf(
+            price(LocalDate(2021, 7, 16), close = 100.0),
+            price(LocalDate(2026, 7, 17), close = 150.0)
+        )
+        val conversion = listOf(
+            price(LocalDate(2021, 7, 15), close = 4.0),
+            price(LocalDate(2026, 7, 17), close = 5.0)
+        )
+
+        val result = calculateGain.fiveYear(
+            data = data,
+            conversion = conversion,
+            asOfDate = LocalDate(2026, 7, 17)
+        )
+
+        assertEquals(0.875, result, 0.001)
+    }
+
+    @Test
+    fun `five-year gain stays unavailable when instrument is younger than five years`() {
+        val data = listOf(
+            price(LocalDate(2021, 7, 26), close = 100.0),
+            price(LocalDate(2026, 7, 17), close = 150.0)
+        )
+
+        val result = calculateGain.fiveYear(
+            data = data,
+            conversion = null,
+            asOfDate = LocalDate(2026, 7, 17)
+        )
+
+        assertTrue(result.isNaN())
+    }
+
+    @Test
+    fun `gain stays unavailable when historical FX rate is too old`() {
+        val data = listOf(
+            price(LocalDate(2023, 6, 15), close = 100.0),
+            price(LocalDate(2024, 6, 15), close = 150.0)
+        )
+        val conversion = listOf(
+            price(LocalDate(2023, 6, 9), close = 4.0),
+            price(LocalDate(2024, 6, 15), close = 5.0)
+        )
+
+        val result = calculateGain.yearly(data, conversion)
+
+        assertTrue(result.isNaN())
+    }
+
+    @Test
     fun `gain returns NaN when old price is zero`() {
         val data = listOf(
             price(LocalDate(2024, 6, 14), close = 0.0),

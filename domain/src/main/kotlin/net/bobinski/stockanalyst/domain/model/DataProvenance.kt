@@ -15,8 +15,18 @@ data class DataProvenance(
     val adjustment: DataAdjustment,
     val coverageFrom: LocalDate? = null,
     val coverageTo: LocalDate? = null,
-    val status: DataStatus
+    val status: DataStatus,
+    val priceStatus: DataStatus? = null,
+    val analyticsStatus: AnalyticsStatus? = null,
+    val analyticsLimitations: List<String>? = null
 )
+
+@Serializable
+enum class AnalyticsStatus {
+    COMPLETE,
+    PARTIAL,
+    UNAVAILABLE
+}
 
 @Serializable
 enum class MarketDataSource {

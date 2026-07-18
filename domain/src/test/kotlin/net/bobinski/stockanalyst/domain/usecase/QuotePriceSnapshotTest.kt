@@ -93,6 +93,23 @@ class QuotePriceSnapshotTest {
     }
 
     @Test
+    fun `prefers newer historical FX over an older spot observation`() {
+        val snapshot = QuotePriceSnapshot.create(
+            history = listOf(price(LocalDate(2024, 6, 15), 100.0)),
+            conversionHistory = listOf(price(LocalDate(2024, 6, 14), 4.2)),
+            nativeSpotPrice = 120.0,
+            spotConversionRate = 4.0,
+            marketDate = LocalDate(2024, 6, 15),
+            fallbackDate = LocalDate(2024, 6, 15),
+            conversionMarketDate = LocalDate(2024, 6, 7)
+        )
+
+        assertEquals(4.2, snapshot.effectiveConversionRate)
+        assertEquals(LocalDate(2024, 6, 14), snapshot.conversionObservationDate)
+        assertEquals(504.0, snapshot.effectiveSpotPrice)
+    }
+
+    @Test
     fun `uses later FX session as terminal date for a composite currency valuation`() {
         val snapshot = QuotePriceSnapshot.create(
             history = listOf(price(LocalDate(2024, 6, 14), 100.0)),

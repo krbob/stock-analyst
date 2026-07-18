@@ -13,6 +13,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import net.bobinski.stockanalyst.domain.model.AnalyticsStatus
 import net.bobinski.stockanalyst.domain.model.BollingerValue
 import net.bobinski.stockanalyst.domain.model.CompareResult
 import net.bobinski.stockanalyst.domain.model.DataAdjustment
@@ -109,6 +110,7 @@ class ApiVersionContractTest {
         )
         assertEquals(DataAdjustment.entries.map(DataAdjustment::name), schemas.enumValues("DataAdjustment"))
         assertEquals(DataStatus.entries.map(DataStatus::name), schemas.enumValues("DataStatus"))
+        assertEquals(AnalyticsStatus.entries.map(AnalyticsStatus::name), schemas.enumValues("AnalyticsStatus"))
     }
 
     private fun kotlinx.serialization.json.JsonObject.enumValues(schemaName: String): List<String> =

@@ -45,7 +45,21 @@ infer freshness from the API clock or from the final visible point of a chart.
 - `status` is `FRESH`, `STALE` or `PARTIAL` for current single-instrument
   responses. `ERROR` is reserved by the shared model for future batch semantics.
 
-`PARTIAL` takes precedence when a calculation cannot be fully populated. Otherwise,
+Quote provenance additionally separates current-price freshness from derived
+analytics:
+
+- `priceStatus` reports whether `lastPrice` is fresh, independently of historical
+  gain coverage;
+- `analyticsStatus` is `COMPLETE`, `PARTIAL` or `UNAVAILABLE`;
+- `analyticsLimitations` contains stable response paths for missing calculations,
+  for example `gain.fiveYear`.
+
+These quote-only fields are additive and optional so older stored responses remain
+readable. New quote responses always populate them. The legacy `status` retains its
+aggregate behavior for existing consumers: incomplete analytics still make it
+`PARTIAL`, even when `priceStatus` is `FRESH`.
+
+Legacy `PARTIAL` takes precedence when a calculation cannot be fully populated. Otherwise,
 freshness is evaluated against the cadence of the returned data:
 
 | Cadence | Maximum expected age |
@@ -130,8 +144,24 @@ After a successful conversion:
   dimensionless; monetary indicator outputs reflect the target-currency series.
 
 If FX history starts later than instrument history, the response is trimmed to the
-available overlap and provenance becomes `PARTIAL`. The response `currency` changes
-to the requested target only after conversion has succeeded.
+available overlap. Quote provenance becomes `PARTIAL` only when that overlap leaves
+an actual analytic unavailable; `priceStatus` continues to describe the current
+converted price. History and indicator responses remain `PARTIAL` when trimming
+removes requested or calculation-warmup data. The response `currency` changes to the
+requested target only after conversion has succeeded.
+
+The five-year gain uses the nearest available session on or before its anniversary.
+Quote calculation fetches the provider's ten-year period because Yahoo exposes no
+five-year-plus-buffer period, then retains only a 14-day buffer before the five-year
+target. This avoids a rolling-window boundary without treating a genuinely younger
+instrument as five years old. Historical FX conversion uses the latest rate on or
+before the instrument session only when it is at most four calendar days old. A
+missing instrument or FX reference reports `gain.fiveYear` in
+`analyticsLimitations`.
+
+For a converted quote, `priceStatus` is the worse freshness status of the instrument
+price and the FX rate actually selected for `lastPrice`. A fresh instrument therefore
+cannot mask a stale conversion rate.
 
 yfinance's repair pipeline standardizes histories quoted in subunits: GBp, ZAc and
 ILA candles and dividends arrive as GBP, ZAR and ILS. Stock Analyst applies the

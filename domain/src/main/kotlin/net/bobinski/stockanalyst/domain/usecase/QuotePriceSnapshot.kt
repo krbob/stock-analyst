@@ -15,6 +15,9 @@ import net.bobinski.stockanalyst.domain.model.latestPrice
  */
 internal class QuotePriceSnapshot private constructor(
     val terminalDate: LocalDate,
+    val nativeObservationDate: LocalDate,
+    val conversionObservationDate: LocalDate?,
+    val usesSpotConversion: Boolean,
     val effectiveSpotPrice: Double,
     val effectiveConversionRate: Double?,
     val history: List<HistoricalPrice>,
@@ -35,27 +38,41 @@ internal class QuotePriceSnapshot private constructor(
             val sourceHistory = history.toList()
             val latestHistoryDate = sourceHistory.maxOf { it.date }
             val resolvedNativeSpot = nativeSpotPrice ?: sourceHistory.latestPrice()
-            val requestedTerminalDate = if (nativeSpotPrice != null) {
+            val nativeObservationDate = if (nativeSpotPrice != null) {
                 marketDate ?: fallbackDate
             } else {
                 latestHistoryDate
             }
             val sourceConversionHistory = conversionHistory?.toList()
-            val resolvedConversionRate = spotConversionRate
-                ?: sourceConversionHistory?.latestPrice()?.takeIf { it.isFinite() }
+            val latestConversionDate = sourceConversionHistory?.maxOfOrNull { it.date }
+            val historicalConversionRate = sourceConversionHistory
+                ?.latestPrice()
+                ?.takeIf { it.isFinite() }
+            val normalizedSpotConversionRate = spotConversionRate?.takeIf { it.isFinite() }
+            val spotConversionDate = normalizedSpotConversionRate?.let {
+                conversionMarketDate ?: fallbackDate
+            }
+            val useSpotConversion = normalizedSpotConversionRate != null &&
+                (latestConversionDate == null || spotConversionDate!! >= latestConversionDate)
+            val resolvedConversionRate = when {
+                sourceConversionHistory == null -> null
+                useSpotConversion -> normalizedSpotConversionRate
+                historicalConversionRate != null -> historicalConversionRate
+                else -> normalizedSpotConversionRate
+            }
             require(sourceConversionHistory == null || resolvedConversionRate != null) {
                 "Quote conversion history must provide a finite terminal rate"
             }
-            val requestedConversionDate = when {
+            val conversionObservationDate = when {
                 sourceConversionHistory == null -> null
-                spotConversionRate != null -> conversionMarketDate ?: fallbackDate
-                else -> sourceConversionHistory.maxOf { it.date }
+                useSpotConversion -> spotConversionDate
+                historicalConversionRate != null -> latestConversionDate
+                else -> spotConversionDate
             }
-            val latestConversionDate = sourceConversionHistory?.maxOf { it.date }
             val terminalDate = listOfNotNull(
-                requestedTerminalDate,
+                nativeObservationDate,
                 latestHistoryDate,
-                requestedConversionDate,
+                conversionObservationDate,
                 latestConversionDate
             ).max()
 
@@ -66,6 +83,9 @@ internal class QuotePriceSnapshot private constructor(
 
             return QuotePriceSnapshot(
                 terminalDate = terminalDate,
+                nativeObservationDate = nativeObservationDate,
+                conversionObservationDate = conversionObservationDate,
+                usesSpotConversion = useSpotConversion,
                 effectiveSpotPrice = resolvedNativeSpot.applyConversion(resolvedConversionRate),
                 effectiveConversionRate = resolvedConversionRate,
                 history = snapshotHistory,

@@ -6,7 +6,6 @@ import kotlinx.datetime.minus
 import net.bobinski.stockanalyst.core.time.CurrentTimeProvider
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
 import net.bobinski.stockanalyst.domain.model.applyConversion
-import net.bobinski.stockanalyst.domain.model.priceFor
 
 class CalculateGain(private val currentTimeProvider: CurrentTimeProvider) {
 
@@ -64,9 +63,23 @@ class CalculateGain(private val currentTimeProvider: CurrentTimeProvider) {
         targetDate: LocalDate
     ): Double {
         val currentPrice = CalculateLastPrice(data, conversion)
-        val oldPrice = data.priceFor(targetDate)
-            .applyConversion(conversion?.priceFor(targetDate))
+        val reference = data.filter { it.date <= targetDate }.maxByOrNull(HistoricalPrice::date)
+            ?: return Double.NaN
+        val oldPrice = reference.close
+            .applyConversion(conversion?.rateFor(reference.date))
         if (oldPrice == 0.0 || !oldPrice.isFinite()) return Double.NaN
         return (currentPrice - oldPrice) / oldPrice
+    }
+
+    private fun Collection<HistoricalPrice>.rateFor(date: LocalDate): Double {
+        val observation = filter { it.date <= date }.maxByOrNull(HistoricalPrice::date)
+            ?: return Double.NaN
+        return observation.close.takeIf {
+            observation.date >= date.minus(MAX_CONVERSION_RATE_AGE_DAYS, DateTimeUnit.DAY)
+        } ?: Double.NaN
+    }
+
+    private companion object {
+        const val MAX_CONVERSION_RATE_AGE_DAYS = 4
     }
 }

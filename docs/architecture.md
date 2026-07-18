@@ -79,7 +79,12 @@ The quote use case fetches instrument info and price history concurrently. It ch
 an effective terminal date, adds a spot point to an immutable calculation snapshot
 when needed, fetches FX data when a target currency is requested, then calculates
 gains and dividend metrics. Shorter history periods are tried when a newly listed
-instrument lacks a useful five-year series.
+instrument lacks a useful long-term series. Because the provider has no buffered
+five-year period, quote calculation fetches ten years and immediately trims it to a
+14-day calculation buffer before the five-year target. Historical FX is an as-of
+join with a four-day maximum age. Quote provenance reports current-price freshness
+as the worse status of its instrument and conversion legs, separately from the
+completeness and explicit limitations of derived gain analytics.
 
 ### History
 
