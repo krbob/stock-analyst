@@ -2,8 +2,8 @@
 # Manual edits can break the build and are not advised.
 # This file is expected to be part of source control.
 # To regenerate this file, run: ./gradlew :dependencies --write-locks
-ch.qos.logback:logback-classic:1.5.37=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
-ch.qos.logback:logback-core:1.5.37=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+ch.qos.logback:logback-classic:1.5.38=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
+ch.qos.logback:logback-core:1.5.38=compileClasspath,runtimeClasspath,testCompileClasspath,testRuntimeClasspath
 co.touchlab:stately-concurrency-jvm:2.1.0=runtimeClasspath,testRuntimeClasspath
 co.touchlab:stately-concurrency:2.1.0=runtimeClasspath,testRuntimeClasspath
 co.touchlab:stately-concurrent-collections-jvm:2.1.0=runtimeClasspath,testRuntimeClasspath
