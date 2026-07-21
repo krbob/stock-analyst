@@ -96,12 +96,12 @@ For the Stock Analyst pair itself:
 Do not deploy the Kotlin service merely because its process is live. `/readyz` is the
 provider gate because it includes adapter reachability.
 
-## Current ecosystem routing convention
+## Reverse-proxy routing convention
 
-The current production reverse proxy routes:
+A reverse proxy can route:
 
-- `https://stock.bobinski.net/` to Stock Analyst UI;
-- `https://stock.bobinski.net/api/...` to the Kotlin API after stripping `/api`;
+- `https://stocks.example.invalid/` to Stock Analyst UI;
+- `https://stocks.example.invalid/api/...` to the Kotlin API after stripping `/api`;
 - `/api/metrics` through a separate deny/restricted route rather than the public API
   router.
 
@@ -117,10 +117,11 @@ such as `strip-api` can collide with another stack in the same Traefik instance.
 
 ## Post-deployment verification
 
-From the public side:
+From the client-facing side, after replacing the reserved example host with the
+deployment's actual host:
 
 ~~~bash
-base_url=https://stock.bobinski.net/api
+base_url=https://stocks.example.invalid/api
 
 curl --fail "$base_url/healthz"
 curl --fail "$base_url/readyz"

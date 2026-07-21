@@ -191,8 +191,8 @@ The adapter `/metrics` endpoint additionally reports:
 Neither endpoint authenticates scrapes. Restrict both with the container network,
 reverse proxy or monitoring-network policy.
 
-In the current ecosystem deployment, Traefik exposes the Kotlin API under
-`https://stock.bobinski.net/api` and strips `/api` before forwarding. Public
+In a reverse-proxy deployment, Traefik can expose the Kotlin API under
+`https://stocks.example.invalid/api` and strip `/api` before forwarding. Client-facing
 `/api/metrics` is intentionally denied. Container-local paths remain the unprefixed
 paths documented above.
 

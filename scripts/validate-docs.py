@@ -71,6 +71,7 @@ REQUIRED_RELATIVE_REFERENCES = {
 LINK_PATTERN = re.compile(r"!?\[[^\]]*\]\(([^)\s]+)(?:\s+[^)]*)?\)")
 HEADING_PATTERN = re.compile(r"^#{1,6}\s+(.+?)\s*#*\s*$")
 CONFIG_VARIABLE_PATTERN = re.compile(r"\b(?:BACKEND_URL|YFINANCE_[A-Z0-9_]+)\b")
+PRIVATE_DEPLOYMENT_DOMAIN_PATTERN = re.compile(r"\bbobinski\.net\b", re.IGNORECASE)
 ADAPTER_DEFAULT_PATTERN = re.compile(
     r"^\s+(YFINANCE_[A-Z0-9_]+):\s+"
     r"\$\{(YFINANCE_[A-Z0-9_]+):-(\d+)\}\s*$",
@@ -175,6 +176,22 @@ def validate_links(files: list[Path], errors: list[str]) -> int:
                     )
 
     return relative_link_count
+
+
+def validate_no_private_deployment_domains(
+    files: list[Path],
+    errors: list[str],
+) -> None:
+    for source in files:
+        for line_number, line in enumerate(
+            source.read_text(encoding="utf-8").splitlines(),
+            start=1,
+        ):
+            if PRIVATE_DEPLOYMENT_DOMAIN_PATTERN.search(line):
+                errors.append(
+                    f"{repository_path(source)}:{line_number}: "
+                    "public documentation must not reference private deployment domains"
+                )
 
 
 def validate_required_references(files: list[Path], errors: list[str]) -> None:
@@ -295,6 +312,7 @@ def validate_configuration_docs(errors: list[str]) -> int:
 def main() -> int:
     errors: list[str] = []
     files = validate_file_set(errors)
+    validate_no_private_deployment_domains(files, errors)
     relative_links = validate_links(files, errors)
     validate_required_references(files, errors)
     openapi_paths = validate_openapi(errors)
