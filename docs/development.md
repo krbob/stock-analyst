@@ -220,32 +220,32 @@ ghcr.io/krbob/stock-analyst-backend-yfinance
 Moving tags are useful for development and canaries. Production promotion must use
 the resulting immutable digests.
 
-## yfinance update review
+## yfinance update coverage
 
-Renovate gives every yfinance release a minimum age of seven days and labels it for
-manual upstream-contract review. Before merging such an update:
-
-1. review upstream release notes and known Yahoo behavior changes;
-2. run the complete adapter fixture suite, including repair, subunit, split and error
-   cases;
-3. build the adapter image locally;
-4. inspect fixture and serialization diffs deliberately.
+The repository-wide Renovate policy gives every yfinance release a minimum age of
+seven days. Its pull request must pass the complete adapter fixture suite, including
+repair, subunit, split and error cases, before it is eligible for the monthly merge
+window.
 
 The current pull-request workflow does **not** publish candidate images. The manual
 `Live Yahoo canary` accepts an already published tag and uses that same tag for both
 the Kotlin and adapter images. Therefore this repository does not currently provide
 an automatic pre-merge candidate-image canary.
 
-Do not claim that gate has run unless an authorized external process first published
-a matching pair of candidate images. After merge, the scheduled/manual canary
-validates the published `main` pair against live Yahoo, but remains non-blocking
-because an external outage must not invalidate a reproducible build.
+After merge, the scheduled/manual canary validates the published `main` pair against
+live Yahoo, but remains non-blocking because an external outage must not invalidate a
+reproducible build. A green Renovate pull request therefore proves the deterministic
+contract and fixture coverage, not a live Yahoo request.
 
 ## Renovate policy
 
-Routine updates are limited to the configured Monday window, with bounded concurrent
-and hourly pull requests. Nothing is automerged. Runtime/build providers, actions,
-scanners, wrapper updates and major versions receive manual-review labels.
+Renovate creates mature dependency pull requests in the configured Monday window,
+with bounded concurrent and hourly creation. Existing branches may be rebased and
+retested at any time. Every update type, including major versions, actions, images,
+scanners, lockfile maintenance and security alerts, is eligible for squash automerge
+only after required CI is green and the branch is current. Renovate itself performs
+merges during the first three days of each month; native platform automerge stays
+disabled so it cannot bypass that window.
 
 When Renovate changes a direct Python input, regenerate and commit the corresponding
 lockfile rather than accepting an incomplete direct-file-only update.

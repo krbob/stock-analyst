@@ -179,5 +179,5 @@ can start only an already published tag and applies one tag name to both provide
 images. The repository therefore has no self-contained pre-merge candidate-image
 publication flow.
 
-See [Development](development.md#yfinance-update-review) for the review procedure.
+See [Development](development.md#yfinance-update-coverage) for the automated coverage boundary.
 Do not describe an unpublished PR image as canary-tested.
