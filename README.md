@@ -42,6 +42,10 @@ Stop the stack with:
 docker compose down
 ~~~
 
+This repository's Compose stack is the complete API tier. To evaluate the browser application as well, use the
+[three-service Compose quick start in Stock Analyst UI](https://github.com/krbob/stock-analyst-ui#complete-docker-stack);
+it wires the frontend proxy, this API and the private yfinance adapter with readiness checks.
+
 ## API
 
 The canonical API is versioned under `/v1`:
