@@ -239,13 +239,12 @@ contract and fixture coverage, not a live Yahoo request.
 
 ## Renovate policy
 
-Renovate creates mature dependency pull requests in the configured Monday window,
-with bounded concurrent and hourly creation. Existing branches may be rebased and
-retested at any time. Every update type, including major versions, actions, images,
-scanners, lockfile maintenance and security alerts, is eligible for squash automerge
-only after required CI is green and the branch is current. Renovate itself performs
-merges during the first three days of each month; native platform automerge stays
-disabled so it cannot bypass that window.
+Renovate creates mature dependency pull requests continuously, without concurrent or
+hourly limits. Existing branches may be rebased and retested at any time. Every update
+type, including major versions, actions, images, scanners, lockfile maintenance and
+security alerts, is eligible for squash automerge only after required CI is green and
+the branch is current. Renovate itself performs merges during the first three days of
+each month; native platform automerge stays disabled so it cannot bypass that window.
 
 When Renovate changes a direct Python input, regenerate and commit the corresponding
 lockfile rather than accepting an incomplete direct-file-only update.
