@@ -18,10 +18,6 @@ allprojects {
         }
     }
 
-    dependencyLocking {
-        lockAllConfigurations()
-    }
-
     configure<dev.detekt.gradle.extensions.DetektExtension> {
         config.from(rootProject.files("detekt.yml"))
     }
@@ -104,21 +100,5 @@ tasks.named<org.cyclonedx.gradle.CyclonedxAggregateTask>("cyclonedxBom") {
             sbom.replace(timestampPattern, """"timestamp" : "1970-01-01T00:00:00Z""""),
             Charsets.UTF_8,
         )
-    }
-}
-
-tasks.register("resolveAndLockAll") {
-    group = "build setup"
-    description = "Resolves every resolvable configuration and writes complete dependency lock state."
-    doFirst {
-        check(gradle.startParameter.isWriteDependencyLocks) {
-            "Run this task with --write-locks."
-        }
-    }
-    doLast {
-        allprojects
-            .flatMap { it.configurations }
-            .filter { it.isCanBeResolved }
-            .forEach { it.resolve() }
     }
 }

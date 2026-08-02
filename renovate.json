@@ -57,18 +57,6 @@
       "depNameTemplate": "hadolint/hadolint",
       "datasourceTemplate": "docker",
       "versioningTemplate": "docker"
-    },
-    {
-      "customType": "regex",
-      "managerFilePatterns": [
-        "/^\\.github/workflows/ci-build\\.yml$/"
-      ],
-      "matchStrings": [
-        "version:\\s*(?<currentValue>v[0-9]+\\.[0-9]+\\.[0-9]+)"
-      ],
-      "depNameTemplate": "aquasecurity/trivy",
-      "datasourceTemplate": "github-releases",
-      "versioningTemplate": "semver-coerced"
     }
   ],
   "packageRules": [
@@ -90,6 +78,25 @@
         "pin"
       ],
       "groupName": "Python backend dependencies"
+    },
+    {
+      "description": "Update yfinance immediately and merge it as soon as CI passes",
+      "matchManagers": [
+        "pip_requirements"
+      ],
+      "matchPackageNames": [
+        "yfinance"
+      ],
+      "schedule": [
+        "at any time"
+      ],
+      "automergeSchedule": [
+        "at any time"
+      ],
+      "minimumReleaseAge": "0 days",
+      "automerge": true,
+      "groupName": null,
+      "prPriority": 100
     }
   ]
 }
