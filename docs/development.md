@@ -26,13 +26,11 @@ with `docker compose down`.
 
 ### Both services natively
 
-Create a POSIX virtual environment and install the complete hash-locked development
-set:
+Create a POSIX virtual environment and install the development dependencies:
 
 ~~~bash
 python3.13 -m venv .venv
-.venv/bin/python -m pip install --require-hashes \
-  -r backend-yfinance/requirements-dev.lock
+.venv/bin/python -m pip install -r backend-yfinance/requirements-dev.txt
 ~~~
 
 Start the adapter in one terminal:
@@ -93,7 +91,7 @@ Run detekt:
 ./gradlew detekt
 ~~~
 
-Run the adapter suite from an environment containing `requirements-dev.lock`:
+Run the adapter suite from an environment containing `requirements-dev.txt`:
 
 ~~~bash
 (cd backend-yfinance && ../.venv/bin/python -m pytest test_app.py)
@@ -131,54 +129,16 @@ an externally visible contract or semantic change:
 Do not copy large response examples into README files. Tests and OpenAPI should
 provide executable contract evidence.
 
-## Gradle dependency locks
+## Dependency updates
 
-Every resolvable Gradle configuration is locked. After an intentional dependency
-change:
-
-~~~bash
-./gradlew resolveAndLockAll --write-locks
-git status --short -- '*gradle.lockfile'
-~~~
-
-Review every lockfile change. Do not edit lockfiles manually.
-
-## Python dependency locks
-
-Direct production, development and lock-tool dependencies live in:
+Direct production and development Python dependencies live in:
 
 - `backend-yfinance/requirements.txt`;
-- `backend-yfinance/requirements-dev.txt`;
-- `backend-yfinance/requirements-tooling.txt`.
+- `backend-yfinance/requirements-dev.txt`.
 
-Install the pinned lock generator:
-
-~~~bash
-.venv/bin/python -m pip install --require-hashes \
-  -r backend-yfinance/requirements-tooling.lock
-~~~
-
-Regenerate locks with Python 3.13.14:
-
-~~~bash
-cd backend-yfinance
-
-../.venv/bin/pip-compile --generate-hashes --strip-extras \
-  --resolver=backtracking \
-  --output-file=requirements.lock requirements.txt
-
-../.venv/bin/pip-compile --generate-hashes --strip-extras \
-  --resolver=backtracking \
-  --output-file=requirements-dev.lock requirements-dev.txt
-
-../.venv/bin/pip-compile --generate-hashes --strip-extras --allow-unsafe \
-  --resolver=backtracking \
-  --output-file=requirements-tooling.lock requirements-tooling.txt
-~~~
-
-Install the regenerated file with `--require-hashes` and run `python -m pip check`
-plus the adapter tests before committing it. CI regenerates all three locks and
-rejects drift.
+Gradle resolves transitive JVM dependencies during the build, while direct versions
+remain pinned in the version catalog. There are no separately generated Gradle or
+Python lockfiles to keep in sync with Renovate.
 
 ## SBOM and reproducible inputs
 
@@ -195,18 +155,17 @@ build/reports/cyclonedx/stock-analyst.cdx.json
 ~~~
 
 It excludes test/build dependencies, omits a random serial number and normalizes its
-metadata timestamp. CI generates it twice, requires identical bytes, uploads it for
-14 days and scans it with pinned Trivy.
+metadata timestamp. Generate it explicitly when supply-chain evidence is needed; it
+is not a pull-request gate.
 
-Runtime base images use immutable OCI digests, the Python image installs
-`requirements.lock` in `--require-hashes` mode, and GitHub Actions are commit-pinned.
+Runtime base images use immutable OCI digests and GitHub Actions are commit-pinned.
 
 ## CI and published images
 
 The main workflow:
 
 - runs on pull requests and pushes to `main`;
-- runs all deterministic quality and supply-chain gates;
+- runs deterministic quality, unit and container smoke tests;
 - publishes multi-platform API and adapter images only for a push;
 - publishes BuildKit provenance and SBOM attestations.
 

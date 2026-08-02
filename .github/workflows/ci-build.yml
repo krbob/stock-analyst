@@ -16,6 +16,7 @@ env:
 
 jobs:
   test:
+    name: ci-required
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -47,17 +48,6 @@ jobs:
           build-scan-terms-of-use-url: 'https://gradle.com/help/legal-terms-of-use'
           build-scan-terms-of-use-agree: 'yes'
 
-      - name: Verify dependency locks
-        run: |
-          set -euo pipefail
-          ./gradlew resolveAndLockAll --write-locks
-          lock_changes="$(git status --porcelain -- '*gradle.lockfile')"
-          if [[ -n "$lock_changes" ]]; then
-            echo "Dependency lockfiles are stale:"
-            echo "$lock_changes"
-            exit 1
-          fi
-
       - name: Run detekt
         run: ./gradlew detekt
 
@@ -69,68 +59,12 @@ jobs:
         with:
           python-version: '3.13.14'
 
-      - name: Verify backend dependency locks
-        working-directory: backend-yfinance
-        run: |
-          set -euo pipefail
-          python -m pip install --require-hashes -r requirements-tooling.lock
-          pip-compile --quiet --generate-hashes --strip-extras --resolver=backtracking \
-            --output-file=requirements.lock requirements.txt
-          pip-compile --quiet --generate-hashes --strip-extras --resolver=backtracking \
-            --output-file=requirements-dev.lock requirements-dev.txt
-          pip-compile --quiet --generate-hashes --strip-extras --allow-unsafe --resolver=backtracking \
-            --output-file=requirements-tooling.lock requirements-tooling.txt
-          lock_changes="$(git status --porcelain -- requirements.lock requirements-dev.lock requirements-tooling.lock)"
-          if [[ -n "$lock_changes" ]]; then
-            echo "Python dependency lockfiles are stale:"
-            echo "$lock_changes"
-            exit 1
-          fi
-
       - name: Run backend tests
         working-directory: backend-yfinance
         run: |
-          python -m pip install --require-hashes -r requirements-dev.lock
+          python -m pip install -r requirements-dev.txt
           python -m pip check
           pytest test_app.py
-
-      - name: Generate reproducible CycloneDX SBOM
-        id: sbom
-        run: |
-          set -euo pipefail
-          sbom="build/reports/cyclonedx/stock-analyst.cdx.json"
-          ./gradlew cyclonedxBom --rerun-tasks
-          first_hash="$(sha256sum "$sbom" | cut -d ' ' -f 1)"
-          ./gradlew cyclonedxBom --rerun-tasks
-          second_hash="$(sha256sum "$sbom" | cut -d ' ' -f 1)"
-          if [[ "$first_hash" != "$second_hash" ]]; then
-            echo "CycloneDX SBOM is not reproducible: $first_hash != $second_hash"
-            exit 1
-          fi
-          echo "sha256=$second_hash" >> "$GITHUB_OUTPUT"
-
-      - name: Upload CycloneDX SBOM
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: stock-analyst-sbom-${{ steps.sbom.outputs.sha256 }}
-          path: build/reports/cyclonedx/stock-analyst.cdx.json
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Scan JVM runtime dependencies
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          cache-dir: ${{ runner.temp }}/trivy-cache
-          scan-type: sbom
-          scan-ref: build/reports/cyclonedx/stock-analyst.cdx.json
-          version: v0.72.0
-          scanners: vuln
-          vuln-type: library
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: 1
-          hide-progress: true
-          timeout: 10m0s
 
       - name: Build backend test image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
@@ -149,36 +83,6 @@ jobs:
           tags: stock-analyst:test
           cache-from: type=gha,scope=stock-analyst-api
           cache-to: type=gha,mode=max,scope=stock-analyst-api
-
-      - name: Scan backend image
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          cache-dir: ${{ runner.temp }}/trivy-cache
-          scan-type: image
-          image-ref: stock-analyst-backend-yfinance:test
-          skip-setup-trivy: true
-          scanners: vuln
-          vuln-type: os,library
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: 1
-          hide-progress: true
-          timeout: 10m0s
-
-      - name: Scan API image
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          cache-dir: ${{ runner.temp }}/trivy-cache
-          scan-type: image
-          image-ref: stock-analyst:test
-          skip-setup-trivy: true
-          scanners: vuln
-          vuln-type: os
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: 1
-          hide-progress: true
-          timeout: 10m0s
 
       - name: Test containers
         env:

@@ -101,7 +101,7 @@ Native development requires JDK 25 and Python 3.13.14. Running `./gradlew run` s
 only the Kotlin service, so the Python adapter must already be listening on port 8081
 or `BACKEND_URL` must point to another instance.
 
-Setup, test, lockfile, SBOM and dependency-update commands are in
+Setup, test, SBOM and dependency-update commands are in
 [Development](docs/development.md).
 
 The primary checks are:
@@ -111,7 +111,7 @@ python3 scripts/validate-docs.py
 ./gradlew test detekt
 
 python3.13 -m venv .venv
-.venv/bin/python -m pip install --require-hashes -r backend-yfinance/requirements-dev.lock
+.venv/bin/python -m pip install -r backend-yfinance/requirements-dev.txt
 (cd backend-yfinance && ../.venv/bin/python -m pytest test_app.py)
 ~~~
 
