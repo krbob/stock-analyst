@@ -17,7 +17,6 @@ DOCS_DIRECTORY = ROOT / "docs"
 OPENAPI = ROOT / "src/main/resources/openapi/stock-analyst-v1.json"
 COMPOSE = ROOT / "docker-compose.yml"
 BUILD_GRADLE = ROOT / "build.gradle.kts"
-PYTHON_VERSION = ROOT / ".python-version"
 CI_WORKFLOW = ROOT / ".github/workflows/ci-build.yml"
 BACKEND_PROVIDER_MODULE = (
     ROOT / "src/main/kotlin/net/bobinski/stockanalyst/BackendProviderModule.kt"
@@ -284,14 +283,7 @@ def validate_configuration_docs(errors: list[str]) -> int:
             + backend_default_match.group(1)
         )
 
-    python_version = PYTHON_VERSION.read_text(encoding="utf-8").strip()
     development = (DOCS_DIRECTORY / "development.md").read_text(encoding="utf-8")
-    if python_version not in development:
-        errors.append(
-            "development guide does not mention the version from .python-version: "
-            + python_version
-        )
-
     build_gradle = BUILD_GRADLE.read_text(encoding="utf-8")
     toolchain_match = re.search(r"jvmToolchain\((\d+)\)", build_gradle)
     if toolchain_match is None:

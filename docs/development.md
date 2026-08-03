@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - JDK 25;
-- Python 3.13.14, matching [`.python-version`](../.python-version);
+- Python matching [`.python-version`](../.python-version);
 - Docker with the Compose plugin for container tests and the simplest full-stack
   setup.
 
@@ -205,5 +205,5 @@ security alerts, is eligible for squash automerge only after required CI is gree
 the branch is current. Renovate itself performs merges during the first three days of
 each month; native platform automerge stays disabled so it cannot bypass that window.
 
-When Renovate changes a direct Python input, regenerate and commit the corresponding
-lockfile rather than accepting an incomplete direct-file-only update.
+Python dependency inputs are tested directly; this repository does not maintain a
+generated Python lockfile.
