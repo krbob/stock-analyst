@@ -97,9 +97,10 @@ to the separate `:local` images.
 
 ## Development
 
-Native development requires JDK 25 and Python 3.13.14. Running `./gradlew run` starts
-only the Kotlin service, so the Python adapter must already be listening on port 8081
-or `BACKEND_URL` must point to another instance.
+Native development requires JDK 25 and the Python version pinned in
+[`.python-version`](.python-version). Running `./gradlew run` starts only the Kotlin
+service, so the Python adapter must already be listening on port 8081 or
+`BACKEND_URL` must point to another instance.
 
 Setup, test, SBOM and dependency-update commands are in
 [Development](docs/development.md).
