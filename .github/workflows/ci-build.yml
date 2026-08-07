@@ -32,8 +32,8 @@ jobs:
 
       - name: Lint Dockerfiles
         run: |
-          docker run --rm -i hadolint/hadolint:v2.14.0-debian@sha256:158cd0184dcaa18bd8ec20b61f4c1cabdf8b32a592d062f57bdcb8e4c1d312e2 hadolint --failure-threshold error - < Dockerfile
-          docker run --rm -i hadolint/hadolint:v2.14.0-debian@sha256:158cd0184dcaa18bd8ec20b61f4c1cabdf8b32a592d062f57bdcb8e4c1d312e2 hadolint --failure-threshold error - < backend-yfinance/Dockerfile
+          docker run --rm -i hadolint/hadolint:v2.15.1-debian@sha256:9a3944b7fddcb947d1ffd90829ac1a6e5c30479223358f249d8b96c7d0019e27 hadolint --failure-threshold error - < Dockerfile
+          docker run --rm -i hadolint/hadolint:v2.15.1-debian@sha256:9a3944b7fddcb947d1ffd90829ac1a6e5c30479223358f249d8b96c7d0019e27 hadolint --failure-threshold error - < backend-yfinance/Dockerfile
 
       - name: Set up JDK
         uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
