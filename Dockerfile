@@ -11,7 +11,7 @@ COPY src /app/src
 RUN --mount=type=cache,target=/root/.gradle \
     ./gradlew shadowJar --no-daemon
 
-FROM eclipse-temurin:25.0.3_9-jre@sha256:681c543d6f36c50f45e9b5226930a46203dcfa351d3670e9d0bdf0dabae53539
+FROM eclipse-temurin:25.0.3_9-jre@sha256:7c1c6297dc3a3ff947922f3ab14ecd326e29083b9edaa8dbff3b94fef1688311
 
 WORKDIR /app
 
