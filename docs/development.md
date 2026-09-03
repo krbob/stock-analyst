@@ -181,10 +181,10 @@ the resulting immutable digests.
 
 ## yfinance update coverage
 
-The repository-wide Renovate policy gives every yfinance release a minimum age of
+The shared monthly Renovate policy gives every yfinance release a minimum age of
 seven days. Its pull request must pass the complete adapter fixture suite, including
-repair, subunit, split and error cases, before it is eligible for the monthly merge
-window.
+repair, subunit, split and error cases, before GitHub may merge it during the monthly
+update run. yfinance has no out-of-cycle exception.
 
 The current pull-request workflow does **not** publish candidate images. The manual
 `Live Yahoo canary` accepts an already published tag and uses that same tag for both
@@ -198,12 +198,13 @@ contract and fixture coverage, not a live Yahoo request.
 
 ## Renovate policy
 
-Renovate creates mature dependency pull requests continuously, without concurrent or
-hourly limits. Existing branches may be rebased and retested at any time. Every update
-type, including major versions, actions, images, scanners, lockfile maintenance and
-security alerts, is eligible for squash automerge only after required CI is green and
-the branch is current. Renovate itself performs merges during the first three days of
-each month; native platform automerge stays disabled so it cannot bypass that window.
+Renovate inherits the shared monthly ecosystem policy. On the first day of each month
+it creates at most five dependency pull requests at once, and GitHub squash-merges
+each one as soon as required CI is green. Every update type, including major versions,
+actions, images, scanners and lockfile maintenance, is eligible. Releases with a
+trustworthy timestamp mature for seven days and branches are rebased only to resolve
+conflicts. Separate vulnerability-alert pull requests are disabled because they
+bypass schedules; vulnerable dependencies remain part of the normal monthly run.
 
 Python dependency inputs are tested directly; this repository does not maintain a
 generated Python lockfile.
