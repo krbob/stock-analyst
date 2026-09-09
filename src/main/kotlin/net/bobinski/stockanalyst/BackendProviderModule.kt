@@ -19,6 +19,8 @@ import net.bobinski.stockanalyst.domain.provider.StockDataProvider
 import org.koin.dsl.module
 import org.koin.dsl.onClose
 import java.io.IOException
+import kotlinx.coroutines.withTimeoutOrNull
+import net.bobinski.stockanalyst.domain.error.BackendDataException
 
 val BackendProviderModule = module {
     single<HttpClient>(createdAtStart = true) {
@@ -68,12 +70,19 @@ internal fun HttpTimeoutConfig.configureBackendTimeouts() {
 }
 
 internal object BackendHttpBudget {
-    const val REQUEST_TIMEOUT_MILLIS = 6_000L
+    const val REQUEST_TIMEOUT_MILLIS = 15_000L
     const val CONNECT_TIMEOUT_MILLIS = 2_000L
-    const val SOCKET_TIMEOUT_MILLIS = 6_000L
+    const val SOCKET_TIMEOUT_MILLIS = 15_000L
     const val MAX_TRANSPORT_RETRIES = 2
     const val RETRY_DELAY_MILLIS = 250L
-    const val MAX_TOTAL_ELAPSED_MILLIS =
-        REQUEST_TIMEOUT_MILLIS * (MAX_TRANSPORT_RETRIES + 1) +
-            RETRY_DELAY_MILLIS * MAX_TRANSPORT_RETRIES
+    const val MAX_TOTAL_ELAPSED_MILLIS = 18_500L
+}
+
+internal suspend fun <T> withBackendRequestBudget(symbol: String, block: suspend () -> T): T {
+    // Slow successful Yahoo loads get a full attempt, while transport retries
+    // share one deadline instead of multiplying the caller's waiting time.
+    val result = withTimeoutOrNull(BackendHttpBudget.MAX_TOTAL_ELAPSED_MILLIS) {
+        Result.success(block())
+    } ?: throw BackendDataException.backendError(symbol)
+    return result.getOrThrow()
 }

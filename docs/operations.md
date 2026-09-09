@@ -153,17 +153,20 @@ The Kotlin-to-Python HTTP client has:
 | Budget | Value |
 |---|---:|
 | Connect timeout | 2 seconds |
-| Request timeout per attempt | 6 seconds |
-| Socket timeout per attempt | 6 seconds |
+| Request timeout per attempt | 15 seconds |
+| Socket timeout per attempt | 15 seconds |
 | Additional transport retries | 2 |
 | Delay between attempts | 250 ms |
-| Maximum three-attempt path | 18.5 seconds |
+| Shared deadline for a backend operation, including retries and decoding | 18.5 seconds |
 
 Only transport-level `IOException` failures for which no HTTP response exists are
-retried. Cancellation and every classified HTTP response are not retried.
+retried. Cancellation and every classified HTTP response are not retried. A slow
+successful Yahoo load can use the full 15-second attempt; retries use the remaining
+shared budget and cannot extend it. Exhaustion is reported as a backend error.
 
 Callers that place a total deadline around a market-data request must allow more than
-18.5 seconds if they intend to permit the complete transport-retry path. They should
+18.5 seconds for each underlying backend operation. A public request can also need
+separate price and currency-conversion operations. Callers should
 respect `Retry-After` rather than immediately retrying public `429` or `503`
 responses.
 

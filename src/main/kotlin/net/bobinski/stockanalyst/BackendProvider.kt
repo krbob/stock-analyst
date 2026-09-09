@@ -32,10 +32,10 @@ internal class BackendProvider(
     private val inFlight = ConcurrentHashMap<String, Deferred<Any?>>()
 
     @Suppress("UNCHECKED_CAST")
-    private suspend fun <T> coalesce(key: String, block: suspend () -> T): T {
+    private suspend fun <T> coalesce(key: String, symbol: String, block: suspend () -> T): T {
         var created: Deferred<Any?>? = null
         val deferred = inFlight.computeIfAbsent(key) {
-            workScope.async { block() }.also { created = it }
+            workScope.async { withBackendRequestBudget(symbol, block) }.also { created = it }
         }
         if (created === deferred) {
             deferred.invokeOnCompletion {
@@ -49,7 +49,7 @@ internal class BackendProvider(
         symbol: String,
         period: StockDataProvider.Period,
         interval: StockDataProvider.Interval
-    ): Collection<HistoricalPrice> = coalesce("history:$symbol:${period.value}:${interval.value}") {
+    ): Collection<HistoricalPrice> = coalesce("history:$symbol:${period.value}:${interval.value}", symbol) {
         val encodedSymbol = symbol.encodeURLPathPart()
         val response = try {
             client.get("$backendUrl/history/$encodedSymbol/${period.value}") {
@@ -87,7 +87,7 @@ internal class BackendProvider(
         }
     }
 
-    override suspend fun search(query: String): List<SearchResult> = coalesce("search:$query") {
+    override suspend fun search(query: String): List<SearchResult> = coalesce("search:$query", query) {
         val response = try {
             client.get("$backendUrl/search/${query.encodeURLPathPart()}")
         } catch (e: CancellationException) {
@@ -131,7 +131,7 @@ internal class BackendProvider(
         false
     }
 
-    override suspend fun getInfo(symbol: String): BasicInfo? = coalesce("info:$symbol") {
+    override suspend fun getInfo(symbol: String): BasicInfo? = coalesce("info:$symbol", symbol) {
         val encodedSymbol = symbol.encodeURLPathPart()
         val response = try {
             client.get("$backendUrl/info/$encodedSymbol")
