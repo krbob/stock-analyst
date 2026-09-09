@@ -7,12 +7,14 @@ import io.ktor.server.request.httpMethod
 import io.ktor.server.request.path
 import io.ktor.util.AttributeKey
 import org.koin.dsl.module
+import org.koin.dsl.onClose
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.LongAdder
 
 internal val ObservabilityModule = module {
     single { RequestMetricsRegistry() }
+    single(createdAtStart = true) { RuntimeMetrics() } onClose { it?.close() }
 }
 
 internal class RequestMetricsConfig {

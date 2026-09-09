@@ -140,10 +140,17 @@ jobs:
           curl --fail --silent --show-error http://localhost:8080/openapi/v1.json \
             | jq --exit-status '.openapi == "3.0.3" and (.paths["/v1/quote/{stock}"] != null)' >/dev/null
           curl --fail --silent --show-error http://localhost:8080/metrics \
-            | grep --quiet '^# TYPE stock_analyst_http_requests_total counter$'
+            --output /tmp/api-metrics.txt
+          grep --quiet '^# TYPE stock_analyst_http_requests_total counter$' /tmp/api-metrics.txt
+          grep --quiet '^# TYPE jvm_memory_used_bytes gauge$' /tmp/api-metrics.txt
+          grep --quiet '^# TYPE process_cpu_usage gauge$' /tmp/api-metrics.txt
+          awk '$1 == "jvm_threads_live_threads" && $2 > 0 { found = 1 } END { exit !found }' /tmp/api-metrics.txt
           docker compose exec -T stock-analyst-backend-yfinance \
             curl --fail --silent --show-error http://localhost:8081/metrics \
-            | grep --quiet '^# TYPE stock_analyst_yfinance_http_requests_total counter$'
+            > /tmp/yfinance-metrics.txt
+          grep --quiet '^# TYPE stock_analyst_yfinance_http_requests_total counter$' /tmp/yfinance-metrics.txt
+          grep --quiet '^# TYPE process_cpu_seconds_total counter$' /tmp/yfinance-metrics.txt
+          awk '$1 == "process_resident_memory_bytes" && $2 > 0 { found = 1 } END { exit !found }' /tmp/yfinance-metrics.txt
 
           status=$(curl --silent --show-error --output /tmp/api-error.json \
             --write-out '%{http_code}' \

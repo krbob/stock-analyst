@@ -14,6 +14,27 @@ import org.junit.jupiter.api.Test
 class RequestMetricsTest {
 
     @Test
+    fun `runtime metrics are available before application traffic`() = testApplication {
+        application { module() }
+
+        repeat(2) {
+            val response = client.get("/metrics")
+            val body = response.bodyAsText()
+
+            assertEquals(HttpStatusCode.OK, response.status)
+            assertTrue(body.contains("# TYPE jvm_memory_used_bytes gauge"), body)
+            assertTrue(body.contains("# TYPE jvm_gc_max_data_size_bytes gauge"), body)
+            assertTrue(body.contains("# TYPE process_cpu_usage gauge"), body)
+            assertTrue(body.contains("# TYPE process_uptime_seconds gauge"), body)
+            val threads = body.lineSequence().first { it.startsWith("jvm_threads_live_threads ") }
+            assertTrue(threads.substringAfter(' ').toDouble() > 0, threads)
+            assertFalse(body.lineSequence().any { it.startsWith("stock_analyst_http_requests_total{") })
+            val types = body.lineSequence().filter { it.startsWith("# TYPE ") }.toList()
+            assertEquals(types.size, types.distinct().size, "Duplicate metric families")
+        }
+    }
+
+    @Test
     fun `metrics expose bounded route labels without request data`() = testApplication {
         application { module() }
 

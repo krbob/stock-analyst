@@ -12,7 +12,7 @@ from circuit_breaker import CircuitBreaker, CircuitOpenError, CircuitOutcome, Ci
 from flask import Flask, Response, g, jsonify, request
 from flask.json.provider import DefaultJSONProvider
 from memory_cache import ByteBoundedTTLCache
-from metrics import AdapterMetrics
+from metrics import AdapterMetrics, ProcessMetrics
 from singleflight import SingleFlight
 from werkzeug.exceptions import HTTPException
 from yfinance.exceptions import YFPricesMissingError, YFRateLimitError, YFTzMissingError
@@ -143,6 +143,7 @@ _history_cache = ByteBoundedTTLCache(HISTORY_CACHE_MAX_BYTES, HISTORY_CACHE_MAX_
 _metadata_cache = ByteBoundedTTLCache(METADATA_CACHE_MAX_BYTES, METADATA_CACHE_MAX_ENTRIES)
 _single_flight = SingleFlight()
 _metrics = AdapterMetrics()
+_process_metrics = ProcessMetrics()
 _loader_bulkhead = LoaderBulkhead(
     BULKHEAD_MAX_ACTIVE_LOADERS,
     acquire_timeout_seconds=BULKHEAD_ACQUIRE_TIMEOUT_MS / 1000,
@@ -671,7 +672,7 @@ def health_endpoint():
 @app.route("/metrics")
 def metrics_endpoint():
     return Response(
-        _metrics.render() + _render_runtime_gauges(),
+        _metrics.render() + _render_runtime_gauges() + _process_metrics.render(),
         content_type="text/plain; version=0.0.4; charset=utf-8",
     )
 

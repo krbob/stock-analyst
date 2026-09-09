@@ -1,6 +1,8 @@
 import threading
 from collections import defaultdict
 
+from prometheus_client import CollectorRegistry, ProcessCollector, generate_latest
+
 
 _DURATION_BUCKETS = (
     ("0.01", 0.01),
@@ -17,7 +19,7 @@ _DURATION_BUCKETS = (
 
 
 class AdapterMetrics:
-    """Small dependency-free Prometheus collector with bounded label domains."""
+    """Application metrics with bounded label domains."""
 
     def __init__(self):
         self._lock = threading.Lock()
@@ -144,6 +146,17 @@ class AdapterMetrics:
                 f"{circuit_transitions[key]}"
             )
         return "\n".join(lines) + "\n"
+
+
+class ProcessMetrics:
+    """Standard Linux process metrics, isolated from the global registry."""
+
+    def __init__(self, proc="/proc"):
+        self._registry = CollectorRegistry()
+        ProcessCollector(proc=proc, registry=self._registry)
+
+    def render(self):
+        return generate_latest(self._registry).decode("utf-8")
 
 
 def _labels(**labels):

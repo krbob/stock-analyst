@@ -1,4 +1,6 @@
 import json
+import os
+import resource
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -10,6 +12,7 @@ import numpy as np
 import pandas as pd
 import pytest
 import yfinance as yf
+from prometheus_client.parser import text_string_to_metric_families
 
 from app import (
     ApiError,
@@ -38,7 +41,7 @@ from app import (
 from bulkhead import LoaderBulkhead
 from circuit_breaker import CircuitBreaker, CircuitOpenError, CircuitState
 from memory_cache import ByteBoundedTTLCache, estimate_cache_entry_bytes
-from metrics import AdapterMetrics
+from metrics import AdapterMetrics, ProcessMetrics
 from yfinance.exceptions import YFPricesMissingError, YFRateLimitError, YFTzMissingError
 
 
@@ -1679,6 +1682,44 @@ class TestHealthEndpoint:
 
 
 class TestMetricsEndpoint:
+    def test_process_metrics_are_exported_before_traffic_without_duplicates(self, client, tmp_path):
+        # A procfs fixture exercises the real collector on non-Linux development hosts too.
+        (tmp_path / "stat").write_text("btime 1700000000\n")
+        (tmp_path / "self").mkdir()
+        fields = ["0"] * 22
+        fields[0] = "R"
+        fields[11] = str(2 * os.sysconf("SC_CLK_TCK"))
+        fields[12] = str(os.sysconf("SC_CLK_TCK"))
+        fields[19] = str(10 * os.sysconf("SC_CLK_TCK"))
+        fields[20] = "104857600"
+        fields[21] = "256"
+        (tmp_path / "self" / "stat").write_text("1 (python) " + " ".join(fields))
+
+        with patch("app._process_metrics", ProcessMetrics(proc=str(tmp_path))):
+            for _ in range(2):
+                response = client.get("/metrics")
+                body = response.get_data(as_text=True)
+                families = list(text_string_to_metric_families(body))
+                samples = [sample for family in families for sample in family.samples]
+                process = {sample.name: sample.value for sample in samples if sample.name.startswith("process_")}
+
+                assert response.status_code == 200
+                assert process["process_cpu_seconds_total"] == 3
+                assert process["process_resident_memory_bytes"] == 256 * resource.getpagesize()
+                assert process["process_start_time_seconds"] == 1700000010
+                assert len({family.name for family in families}) == len(families)
+                assert not any(sample.name == "stock_analyst_yfinance_http_requests_total" for sample in samples)
+
+    def test_unavailable_procfs_does_not_break_existing_metrics(self, client, tmp_path):
+        with patch("app._process_metrics", ProcessMetrics(proc=str(tmp_path))):
+            response = client.get("/metrics")
+
+        assert response.status_code == 200
+        body = response.get_data(as_text=True)
+        assert "# TYPE stock_analyst_yfinance_http_requests_total counter" in body
+        assert 'stock_analyst_yfinance_circuit_state{state="closed"} 1' in body
+        assert "process_resident_memory_bytes" not in body
+
     def test_exposes_bounded_http_cache_and_runtime_metrics(self, client, mock_ticker):
         mock_ticker(info={"longName": "Apple Inc."})
 

@@ -25,7 +25,7 @@ network.
 | `/healthz` | `200`, `{"status":"UP"}` | The process can serve requests |
 | `/readyz` | `200`, `{"status":"UP"}` | Adapter `/health` succeeded within one second |
 | `/readyz` | `503`, `{"status":"DOWN"}` | Required adapter unavailable or too slow |
-| `/metrics` | `200`, Prometheus text | Bounded API request metrics |
+| `/metrics` | `200`, Prometheus text | Bounded API request and JVM/process metrics |
 | `/openapi/v1.json` | `200`, JSON | Contract bundled into this application image |
 
 Liveness deliberately does not depend on Yahoo or the adapter. Use `/healthz` for a
@@ -36,7 +36,7 @@ container liveness probe and `/readyz` for readiness and rollout gates.
 | Path | Success | Meaning |
 |---|---|---|
 | `/health` | `200`, `{"status":"ok"}` | Waitress/Flask can serve requests |
-| `/metrics` | `200`, Prometheus text | Adapter, cache and resilience metrics |
+| `/metrics` | `200`, Prometheus text | Adapter, cache, resilience and process metrics |
 
 Adapter health does not call Yahoo and bypasses the loader bulkhead and circuit
 breaker. It verifies process availability, not fresh upstream market data.
@@ -181,6 +181,12 @@ The Kotlin `/metrics` endpoint exposes request count and latency histograms with
 
 Health, readiness, metrics and OpenAPI traffic are excluded.
 
+The same endpoint also uses Micrometer to expose JVM memory, garbage collection,
+threads, class loading, process CPU, uptime and file descriptors. These use standard
+`jvm_*` and `process_*` names; `system_*` metrics describe what the JVM sees of its
+environment. The registry starts with the application and closes with it, including
+the GC notification listeners. GC pause series appear after a GC event.
+
 The adapter `/metrics` endpoint additionally reports:
 
 - bounded endpoint count and latency;
@@ -190,6 +196,20 @@ The adapter `/metrics` endpoint additionally reports:
 - bulkhead and circuit rejections;
 - current circuit state and failure count;
 - circuit transition counters with bounded reason labels.
+
+The adapter additionally uses the standard `prometheus-client` process collector in
+an isolated registry. In the Linux container, it reads `/proc` for
+`process_cpu_seconds_total`, `process_resident_memory_bytes`,
+`process_virtual_memory_bytes`, `process_start_time_seconds` and file descriptors.
+These describe the single Waitress process, including all its threads. On native
+hosts without procfs, these process series are absent; application metrics still
+work. A scrape does not contact Yahoo.
+
+For dashboards, `rate(process_cpu_seconds_total[5m])` measures CPU cores used by
+Python (1 means one fully busy core). JVM `process_cpu_usage` is a fraction of the
+CPU capacity visible to the JVM. JVM heap/non-heap bytes and Python resident memory
+describe different memory scopes; neither is the total container memory charge.
+Request labels and existing application metric names remain unchanged.
 
 Neither endpoint authenticates scrapes. Restrict both with the container network,
 reverse proxy or monitoring-network policy.

@@ -8,6 +8,7 @@ koin-version = "4.2.2"
 ta4j-version = "0.24.1"
 detekt-version = "2.0.0-alpha.6"
 cyclonedx-version = "3.4.1"
+micrometer-version = "1.17.1"
 
 [libraries]
 # Server
@@ -30,6 +31,7 @@ ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor-ve
 
 # Logging
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback-version" }
+micrometer-registry-prometheus = { module = "io.micrometer:micrometer-registry-prometheus", version.ref = "micrometer-version" }
 
 # Coroutines
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines-version" }
