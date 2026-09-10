@@ -14,6 +14,24 @@ import org.junit.jupiter.api.Test
 class RequestMetricsTest {
 
     @Test
+    fun `response counters expose a zero baseline and retain the first error across scrapes`() {
+        val registry = RequestMetricsRegistry()
+        assertTrue(registry.scrape().contains("stock_analyst_http_responses_total{status_class=\"5xx\"} 0"))
+        assertTrue(registry.scrape().contains("stock_analyst_http_responses_total{status_class=\"429\"} 0"))
+
+        registry.record("GET", "/v1/history/{stock}", 502, 10_000_000_000)
+        repeat(2) {
+            assertTrue(registry.scrape().contains("stock_analyst_http_responses_total{status_class=\"5xx\"} 1"))
+        }
+        registry.record("GET", "/v1/quote/{stock}", 429, 1_000_000)
+        registry.record("GET", "/v1/quote/{stock}", 422, 1_000_000)
+        val after = registry.scrape()
+        assertTrue(after.contains("stock_analyst_http_responses_total{status_class=\"429\"} 1"))
+        assertTrue(after.contains("stock_analyst_http_responses_total{status_class=\"4xx\"} 1"))
+        assertTrue(after.contains("stock_analyst_http_responses_total{status_class=\"5xx\"} 1"))
+    }
+
+    @Test
     fun `runtime metrics are available before application traffic`() = testApplication {
         application { module() }
 

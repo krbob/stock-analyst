@@ -1682,6 +1682,23 @@ class TestHealthEndpoint:
 
 
 class TestMetricsEndpoint:
+    def test_response_counters_keep_a_zero_baseline_and_count_the_first_error(self):
+        metrics = AdapterMetrics()
+        prefix = "stock_analyst_yfinance_http_responses_total"
+        assert f'{prefix}{{status_class="5xx"}} 0' in metrics.render()
+        assert f'{prefix}{{status_class="429"}} 0' in metrics.render()
+
+        metrics.record_http("GET", "/history/{symbol}/{period}", 502, 10.6)
+        for _ in range(2):
+            assert f'{prefix}{{status_class="5xx"}} 1' in metrics.render()
+        metrics.record_http("GET", "/info/{symbol}", 429, 0.1)
+        metrics.record_http("GET", "/info/{symbol}", 404, 0.1)
+        assert f'{prefix}{{status_class="429"}} 1' in metrics.render()
+        assert f'{prefix}{{status_class="4xx"}} 1' in metrics.render()
+        assert f'{prefix}{{status_class="5xx"}} 1' in metrics.render()
+        metrics.reset()
+        assert f'{prefix}{{status_class="5xx"}} 0' in metrics.render()
+
     def test_process_metrics_are_exported_before_traffic_without_duplicates(self, client, tmp_path):
         # A procfs fixture exercises the real collector on non-Linux development hosts too.
         (tmp_path / "stat").write_text("btime 1700000000\n")

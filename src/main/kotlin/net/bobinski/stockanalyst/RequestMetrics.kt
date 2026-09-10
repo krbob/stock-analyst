@@ -47,13 +47,20 @@ internal val RequestMetricsPlugin = createApplicationPlugin(
 
 internal class RequestMetricsRegistry {
     private val samples = ConcurrentHashMap<MetricKey, MetricSample>()
+    private val responses = HTTP_STATUS_CLASSES.associateWith { LongAdder() }
 
     fun record(method: String, route: String, status: Int, durationNanos: Long) {
         samples.computeIfAbsent(MetricKey(method, route, status)) { MetricSample() }
             .record(durationNanos)
+        responses.getValue(statusClass(status)).increment()
     }
 
     fun scrape(): String = buildString {
+        appendLine("# HELP stock_analyst_http_responses_total Completed API responses by status class, initialized at zero.")
+        appendLine("# TYPE stock_analyst_http_responses_total counter")
+        responses.forEach { (statusClass, count) ->
+            appendLine("stock_analyst_http_responses_total{status_class=\"$statusClass\"} ${count.sum()}")
+        }
         appendLine("# HELP stock_analyst_http_requests_total Completed API requests.")
         appendLine("# TYPE stock_analyst_http_requests_total counter")
         orderedSamples().forEach { (key, sample) ->
@@ -94,6 +101,14 @@ internal class RequestMetricsRegistry {
                 { it.key.status }
             )
         )
+}
+
+private val HTTP_STATUS_CLASSES = listOf("1xx", "2xx", "3xx", "4xx", "429", "5xx", "other")
+
+private fun statusClass(status: Int): String = when (status) {
+    429 -> "429"
+    in 100..599 -> "${status / 100}xx"
+    else -> "other"
 }
 
 private data class MetricKey(

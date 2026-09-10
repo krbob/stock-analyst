@@ -16,6 +16,7 @@ _DURATION_BUCKETS = (
     ("10", 10.0),
     ("30", 30.0),
 )
+_HTTP_STATUS_CLASSES = ("1xx", "2xx", "3xx", "4xx", "429", "5xx", "other")
 
 
 class AdapterMetrics:
@@ -28,6 +29,7 @@ class AdapterMetrics:
     def reset(self):
         with self._lock:
             self._http_counts = defaultdict(int)
+            self._http_responses = dict.fromkeys(_HTTP_STATUS_CLASSES, 0)
             self._http_duration_sums = defaultdict(float)
             self._http_duration_buckets = defaultdict(lambda: [0] * len(_DURATION_BUCKETS))
             self._cache_lookups = defaultdict(int)
@@ -40,6 +42,8 @@ class AdapterMetrics:
         duration_seconds = max(0.0, float(duration_seconds))
         with self._lock:
             self._http_counts[key] += 1
+            status_class = "429" if key[2] == 429 else f"{key[2] // 100}xx"
+            self._http_responses[status_class if status_class in self._http_responses else "other"] += 1
             self._http_duration_sums[key] += duration_seconds
             buckets = self._http_duration_buckets[key]
             for index, (_label, upper_bound) in enumerate(_DURATION_BUCKETS):
@@ -65,6 +69,7 @@ class AdapterMetrics:
     def render(self):
         with self._lock:
             http_counts = dict(self._http_counts)
+            http_responses = dict(self._http_responses)
             duration_sums = dict(self._http_duration_sums)
             duration_buckets = {
                 key: tuple(values) for key, values in self._http_duration_buckets.items()
@@ -75,9 +80,18 @@ class AdapterMetrics:
             circuit_transitions = dict(self._circuit_transitions)
 
         lines = [
+            "# HELP stock_analyst_yfinance_http_responses_total Completed adapter responses by status class, initialized at zero.",
+            "# TYPE stock_analyst_yfinance_http_responses_total counter",
+        ]
+        for status_class, count in http_responses.items():
+            lines.append(
+                "stock_analyst_yfinance_http_responses_total"
+                f'{_labels(status_class=status_class)} {count}'
+            )
+        lines.extend([
             "# HELP stock_analyst_yfinance_http_requests_total Completed adapter requests.",
             "# TYPE stock_analyst_yfinance_http_requests_total counter",
-        ]
+        ])
         for key in sorted(http_counts):
             method, route, status = key
             labels = _labels(method=method, route=route, status=str(status))

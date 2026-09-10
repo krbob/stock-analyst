@@ -181,6 +181,15 @@ The Kotlin `/metrics` endpoint exposes request count and latency histograms with
 
 Health, readiness, metrics and OpenAPI traffic are excluded.
 
+`stock_analyst_http_responses_total` and the adapter's
+`stock_analyst_yfinance_http_responses_total` expose response classes initialized
+at zero before application traffic. Their `status_class` values are `1xx`, `2xx`,
+`3xx`, `4xx`, `429`, `5xx` and `other`; 429 is excluded from the 4xx class.
+Use these counters for request/error rates and alerts. Detailed route/status
+counters and histograms are created on demand, so `rate()` can miss the first
+observation of a new series. The initialized counters require a baseline scrape
+before the event and cannot recover errors that occurred before monitoring began.
+
 The same endpoint also uses Micrometer to expose JVM memory, garbage collection,
 threads, class loading, process CPU, uptime and file descriptors. These use standard
 `jvm_*` and `process_*` names; `system_*` metrics describe what the JVM sees of its
