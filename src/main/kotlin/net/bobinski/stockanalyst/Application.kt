@@ -9,8 +9,9 @@ fun main(args: Array<String>) {
 
 fun Application.module() {
     configureDependencies()
-    configureSerialization()
+    // Observe typed domain responses before ContentNegotiation serializes them.
     configureMonitoring()
+    configureSerialization()
     configureErrorHandling()
     configureRouting()
 }

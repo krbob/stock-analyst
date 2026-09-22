@@ -143,6 +143,12 @@ After a successful conversion:
 - technical indicators are recomputed from the converted price series. RSI remains
   dimensionless; monetary indicator outputs reflect the target-currency series.
 
+A one-day history request fetches five days of daily FX observations. Before an
+exchange opens, its latest equity session can precede the latest FX session,
+especially across a weekend. Conversion still selects the last FX rate on or before
+each equity date; the extra FX window does not expand the returned equity history
+or permit using a future rate. Missing eligible FX data still returns `422`.
+
 If FX history starts later than instrument history, the response is trimmed to the
 available overlap. Quote provenance becomes `PARTIAL` only when that overlap leaves
 an actual analytic unavailable; `priceStatus` continues to describe the current

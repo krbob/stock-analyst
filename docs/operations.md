@@ -190,6 +190,21 @@ counters and histograms are created on demand, so `rate()` can miss the first
 observation of a new series. The initialized counters require a baseline scrape
 before the event and cannot recover errors that occurred before monitoring began.
 
+Successful quote, history and indicator responses also populate
+`stock_analyst_market_data_responses_total{operation,scope,status}`. All combinations
+are initialized at zero. Quotes use `priceStatus` when present, so incomplete
+long-term analytics on a young instrument do not imply a stale current price.
+History with an explicit `requestedTo` before the retrieval date is classified as
+`historical`; other responses use `live`. Status labels come from domain provenance,
+not the HTTP code. This makes stale or partial data visible even with HTTP 200.
+
+`stock_analyst_market_data_age_seconds` is a histogram of the age of observations in
+live responses. It uses `marketTimestamp` or UTC midnight of `marketDate`, measured
+against `retrievedAt`; archival responses and missing observation dates are excluded.
+Use domain status for alerts because acceptable age depends on cadence and calendars.
+These metrics observe requested data, not every cached instrument or the availability
+of an idle upstream. They do not include symbols, query strings or request IDs.
+
 The same endpoint also uses Micrometer to expose JVM memory, garbage collection,
 threads, class loading, process CPU, uptime and file descriptors. These use standard
 `jvm_*` and `process_*` names; `system_*` metrics describe what the JVM sees of its
