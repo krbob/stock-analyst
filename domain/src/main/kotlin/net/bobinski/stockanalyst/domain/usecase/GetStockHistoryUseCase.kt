@@ -67,7 +67,10 @@ class GetStockHistoryUseCase(
             val conversionSymbol = conversionPlan.conversionSymbol
 
             val conversionHistory = conversionSymbol?.let {
-                val convHistory = stockDataProvider.getHistory(it, fetchPeriod)
+                // FX may already be on today's session while a one-day equity response still
+                // contains yesterday (or Friday). Keep prior FX sessions for the as-of lookup.
+                val conversionPeriod = if (fetchPeriod == Period._1d) Period._5d else fetchPeriod
+                val convHistory = stockDataProvider.getHistory(it, conversionPeriod)
                 if (convHistory.isEmpty()) throw BackendDataException.insufficientConversion(it)
                 convHistory
             }

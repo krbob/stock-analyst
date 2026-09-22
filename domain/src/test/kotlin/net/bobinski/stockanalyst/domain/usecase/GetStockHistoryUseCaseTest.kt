@@ -200,6 +200,47 @@ class GetStockHistoryUseCaseTest {
     }
 
     @Test
+    fun `converts one day history before market open using that sessions FX rate`() = runTest {
+        timeProvider.setDate(LocalDate(2024, 6, 17))
+        coEvery { stockDataProvider.getInfo("VWRA.L") } returns basicInfo("Vanguard", currency = "USD")
+        coEvery { stockDataProvider.getHistory("VWRA.L", Period._1d, Interval.DAILY) } returns listOf(
+            historicalPrice(LocalDate(2024, 6, 14), 100.0, dividend = 0.5)
+        )
+        coEvery { stockDataProvider.resolveConversionSymbol("USD", "PLN") } returns "PLN=X"
+        coEvery { stockDataProvider.getHistory("PLN=X", Period._5d) } returns listOf(
+            historicalPrice(LocalDate(2024, 6, 13), 3.9),
+            historicalPrice(LocalDate(2024, 6, 14), 4.0),
+            historicalPrice(LocalDate(2024, 6, 17), 4.5)
+        )
+
+        val result = useCase("VWRA.L", Period._1d, currency = "PLN")
+
+        assertEquals("1d", result.period)
+        assertEquals(LocalDate(2024, 6, 14), result.prices.single().date)
+        assertEquals(400.0, result.prices.single().close)
+        assertEquals(2.0, result.prices.single().dividend)
+        assertEquals(DataStatus.FRESH, result.provenance.status)
+    }
+
+    @Test
+    fun `one day conversion still rejects FX exclusively after the stock session`() = runTest {
+        coEvery { stockDataProvider.getInfo("VWRA.L") } returns basicInfo("Vanguard", currency = "USD")
+        coEvery { stockDataProvider.getHistory("VWRA.L", Period._1d, Interval.DAILY) } returns listOf(
+            historicalPrice(LocalDate(2024, 6, 14), 100.0)
+        )
+        coEvery { stockDataProvider.resolveConversionSymbol("USD", "PLN") } returns "PLN=X"
+        coEvery { stockDataProvider.getHistory("PLN=X", Period._5d) } returns listOf(
+            historicalPrice(LocalDate(2024, 6, 15), 4.5)
+        )
+
+        val error = assertThrows<BackendDataException> {
+            useCase("VWRA.L", Period._1d, currency = "PLN")
+        }
+
+        assertEquals(BackendDataException.Reason.INSUFFICIENT_DATA, error.reason)
+    }
+
+    @Test
     fun `skips conversion when currency matches native`() = runTest {
         coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.", currency = "USD")
         coEvery { stockDataProvider.getHistory("AAPL", Period._1y, Interval.DAILY) } returns listOf(

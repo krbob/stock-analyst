@@ -32,6 +32,9 @@ internal val RequestMetricsPlugin = createApplicationPlugin(
             call.attributes.put(REQUEST_STARTED_AT_NANOS, System.nanoTime())
         }
     }
+    onCallRespond { call, body ->
+        MarketDataObservation.from(body)?.let { call.attributes.put(MARKET_DATA_OBSERVATION, it) }
+    }
     on(ResponseSent) { call ->
         val startedAt = call.attributes.getOrNull(REQUEST_STARTED_AT_NANOS) ?: return@on
         if (call.attributes.contains(METRICS_RECORDED)) return@on
@@ -42,10 +45,14 @@ internal val RequestMetricsPlugin = createApplicationPlugin(
             status = call.response.status()?.value ?: 500,
             durationNanos = (System.nanoTime() - startedAt).coerceAtLeast(0)
         )
+        if (call.response.status()?.value in 200..299) {
+            call.attributes.getOrNull(MARKET_DATA_OBSERVATION)?.let(registry.marketData::record)
+        }
     }
 }
 
 internal class RequestMetricsRegistry {
+    val marketData = MarketDataMetrics()
     private val samples = ConcurrentHashMap<MetricKey, MetricSample>()
     private val responses = HTTP_STATUS_CLASSES.associateWith { LongAdder() }
 
@@ -56,6 +63,7 @@ internal class RequestMetricsRegistry {
     }
 
     fun scrape(): String = buildString {
+        append(marketData.scrape())
         appendLine("# HELP stock_analyst_http_responses_total Completed API responses by status class, initialized at zero.")
         appendLine("# TYPE stock_analyst_http_responses_total counter")
         responses.forEach { (statusClass, count) ->
@@ -171,6 +179,7 @@ private data class DurationBucket(val label: String, val nanos: Long)
 private const val NANOS_PER_SECOND = 1_000_000_000.0
 private val REQUEST_STARTED_AT_NANOS = AttributeKey<Long>("request-metrics-started-at")
 private val METRICS_RECORDED = AttributeKey<Boolean>("request-metrics-recorded")
+private val MARKET_DATA_OBSERVATION = AttributeKey<MarketDataObservation>("market-data-observation")
 private val EXCLUDED_PATHS = setOf("/health", "/healthz", "/readyz", "/metrics", "/openapi/v1.json")
 private val QUOTE_ROUTE = Regex("^/(?:v1/)?quote/[^/]+$")
 private val HISTORY_ROUTE = Regex("^/(?:v1/)?history/[^/]+$")
