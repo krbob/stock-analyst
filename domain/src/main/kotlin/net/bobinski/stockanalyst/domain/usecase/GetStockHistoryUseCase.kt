@@ -9,6 +9,7 @@ import net.bobinski.stockanalyst.core.time.CurrentTimeProvider
 import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.model.DataAdjustment
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
+import net.bobinski.stockanalyst.domain.model.HistoryPartialReason
 import net.bobinski.stockanalyst.domain.model.PriceAdjustment
 import net.bobinski.stockanalyst.domain.model.StockHistory
 import net.bobinski.stockanalyst.domain.model.convertPrices
@@ -125,6 +126,11 @@ class GetStockHistoryUseCase(
             val coverageTo = finalPrices.maxOfOrNull(HistoricalPrice::date)
             val marketTimestamp = finalPrices.lastOrNull()?.timestamp
 
+            val partialReason = when {
+                partial -> HistoryPartialReason.FX_COVERAGE
+                finalPrices.isEmpty() -> HistoryPartialReason.EMPTY_RANGE
+                else -> null
+            }
             StockHistory(
                 symbol = symbol,
                 name = name,
@@ -145,9 +151,10 @@ class GetStockHistoryUseCase(
                     coverageFrom = coverageFrom,
                     coverageTo = coverageTo,
                     cadence = interval.marketDataCadence(),
-                    partial = partial || finalPrices.isEmpty(),
+                    partial = partialReason != null,
                     freshnessReferenceDate = range?.second?.takeIf { it < today }
-                )
+                ),
+                partialReason = partialReason
             )
         }
 

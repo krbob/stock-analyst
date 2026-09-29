@@ -3,6 +3,7 @@ package net.bobinski.stockanalyst.domain.model
 import kotlinx.datetime.LocalDate
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 
 @Serializable
 data class StockHistory(
@@ -16,8 +17,11 @@ data class StockHistory(
     val currency: String? = null,
     val requestedFrom: LocalDate? = null,
     val requestedTo: LocalDate? = null,
-    val provenance: DataProvenance
+    val provenance: DataProvenance,
+    @Transient val partialReason: HistoryPartialReason? = null
 )
+
+enum class HistoryPartialReason { EMPTY_RANGE, FX_COVERAGE }
 
 @Serializable
 enum class PriceAdjustment {

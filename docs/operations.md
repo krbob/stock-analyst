@@ -198,6 +198,17 @@ History with an explicit `requestedTo` before the retrieval date is classified a
 `historical`; other responses use `live`. Status labels come from domain provenance,
 not the HTTP code. This makes stale or partial data visible even with HTTP 200.
 
+`stock_analyst_market_data_partial_responses_total{operation,scope,reason}` adds
+diagnostics for PARTIAL responses without changing the existing status counter or
+the public API. All combinations start at zero. `empty_range` means the requested
+range contains no returned prices; it is not proof of a holiday or a closed exchange.
+`fx_coverage` means insufficient FX history removed requested prices or required
+indicator warmup, including when it leaves the entire requested range empty.
+`other` preserves visibility of PARTIAL responses without a more specific cause.
+Quotes with fresh prices and incomplete analytics do not increment this counter.
+An empty same-day query before a session can be expected, but alerts must not
+globally exclude empty ranges: an empty response can also reveal missing data.
+
 `stock_analyst_market_data_age_seconds` is a histogram of the age of observations in
 live responses. It uses `marketTimestamp` or UTC midnight of `marketDate`, measured
 against `retrievedAt`; archival responses and missing observation dates are excluded.

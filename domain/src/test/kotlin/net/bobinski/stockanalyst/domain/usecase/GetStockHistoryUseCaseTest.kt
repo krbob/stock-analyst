@@ -12,6 +12,7 @@ import net.bobinski.stockanalyst.domain.model.BasicInfo
 import net.bobinski.stockanalyst.domain.model.DataStatus
 import net.bobinski.stockanalyst.domain.model.MarketDataSource
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
+import net.bobinski.stockanalyst.domain.model.HistoryPartialReason
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider.Interval
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider.Period
@@ -542,6 +543,7 @@ class GetStockHistoryUseCaseTest {
 
         assertEquals(listOf(LocalDate(2024, 6, 15)), result.prices.map { it.date })
         assertEquals(DataStatus.PARTIAL, result.provenance.status)
+        assertEquals(HistoryPartialReason.FX_COVERAGE, result.partialReason)
     }
 
     @Test
@@ -570,6 +572,53 @@ class GetStockHistoryUseCaseTest {
         assertEquals(listOf(LocalDate(2024, 6, 14), LocalDate(2024, 6, 15)), result.prices.map { it.date })
         assertTrue(result.indicators?.rsi?.isEmpty() == true)
         assertEquals(DataStatus.PARTIAL, result.provenance.status)
+        assertEquals(HistoryPartialReason.FX_COVERAGE, result.partialReason)
+    }
+
+    @Test
+    fun `empty requested day is distinguished from missing currency coverage`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
+        coEvery { stockDataProvider.getHistory("AAPL", Period._1d, Interval.DAILY) } returns listOf(
+            historicalPrice(LocalDate(2024, 6, 14), 100.0)
+        )
+
+        val result = useCase(
+            symbol = "AAPL",
+            period = Period.max,
+            interval = Interval.DAILY,
+            requestedFrom = LocalDate(2024, 6, 15),
+            requestedTo = LocalDate(2024, 6, 15)
+        )
+
+        assertTrue(result.prices.isEmpty())
+        assertEquals(DataStatus.PARTIAL, result.provenance.status)
+        assertEquals(HistoryPartialReason.EMPTY_RANGE, result.partialReason)
+    }
+
+    @Test
+    fun `missing FX remains the cause when conversion removes every requested price`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.", currency = "USD")
+        coEvery { stockDataProvider.getHistory("AAPL", Period._5d, Interval.DAILY) } returns listOf(
+            historicalPrice(LocalDate(2024, 6, 10), 100.0),
+            historicalPrice(LocalDate(2024, 6, 15), 105.0)
+        )
+        coEvery { stockDataProvider.resolveConversionSymbol("USD", "EUR") } returns "EUR=X"
+        coEvery { stockDataProvider.getHistory("EUR=X", Period._5d) } returns listOf(
+            historicalPrice(LocalDate(2024, 6, 11), 0.9)
+        )
+
+        val result = useCase(
+            symbol = "AAPL",
+            period = Period.max,
+            interval = Interval.DAILY,
+            currency = "EUR",
+            requestedFrom = LocalDate(2024, 6, 10),
+            requestedTo = LocalDate(2024, 6, 10)
+        )
+
+        assertTrue(result.prices.isEmpty())
+        assertEquals(DataStatus.PARTIAL, result.provenance.status)
+        assertEquals(HistoryPartialReason.FX_COVERAGE, result.partialReason)
     }
 
     @Test
