@@ -4,6 +4,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.toLocalDateTime
 import net.bobinski.stockanalyst.domain.model.DataStatus
+import net.bobinski.stockanalyst.domain.model.HistoryPartialReason
 import net.bobinski.stockanalyst.domain.model.LatestIndicators
 import net.bobinski.stockanalyst.domain.model.Quote
 import net.bobinski.stockanalyst.domain.model.StockHistory
@@ -11,12 +12,14 @@ import java.util.Locale
 import java.util.concurrent.atomic.LongAdder
 
 internal enum class MarketDataOperation { QUOTE, HISTORY, INDICATORS }
+internal enum class MarketDataPartialReason { EMPTY_RANGE, FX_COVERAGE, OTHER }
 
 internal data class MarketDataObservation(
     val operation: MarketDataOperation,
     val status: DataStatus,
     val historical: Boolean,
-    val ageSeconds: Double?
+    val ageSeconds: Double?,
+    val partialReason: MarketDataPartialReason? = null
 ) {
     companion object {
         fun from(body: Any): MarketDataObservation? {
@@ -37,6 +40,11 @@ internal data class MarketDataObservation(
                 historical = historical,
                 ageSeconds = observationTime?.let {
                     (provenance.retrievedAt - it).inWholeMilliseconds.coerceAtLeast(0) / 1000.0
+                },
+                partialReason = when ((body as? StockHistory)?.partialReason) {
+                    HistoryPartialReason.EMPTY_RANGE -> MarketDataPartialReason.EMPTY_RANGE
+                    HistoryPartialReason.FX_COVERAGE -> MarketDataPartialReason.FX_COVERAGE
+                    null -> null
                 }
             )
         }
@@ -51,9 +59,23 @@ internal class MarketDataMetrics {
         }
     }.toMap()
     private val ages = MarketDataOperation.entries.associateWith { AgeHistogram() }
+    private data class PartialKey(
+        val operation: MarketDataOperation,
+        val historical: Boolean,
+        val reason: MarketDataPartialReason
+    )
+    private val partialResponses = MarketDataOperation.entries.flatMap { operation ->
+        listOf(false, true).flatMap { historical ->
+            MarketDataPartialReason.entries.map { reason -> PartialKey(operation, historical, reason) to LongAdder() }
+        }
+    }.toMap()
 
     fun record(observation: MarketDataObservation) {
         responses.getValue(Key(observation.operation, observation.historical, observation.status)).increment()
+        if (observation.status == DataStatus.PARTIAL) {
+            val reason = observation.partialReason ?: MarketDataPartialReason.OTHER
+            partialResponses.getValue(PartialKey(observation.operation, observation.historical, reason)).increment()
+        }
         if (!observation.historical) {
             observation.ageSeconds?.let { ages.getValue(observation.operation).record(it) }
         }
@@ -65,6 +87,12 @@ internal class MarketDataMetrics {
         responses.forEach { (key, count) ->
             val scope = if (key.historical) "historical" else "live"
             appendLine("stock_analyst_market_data_responses_total{operation=\"${key.operation.name.lowercase()}\",scope=\"$scope\",status=\"${key.status}\"} ${count.sum()}")
+        }
+        appendLine("# HELP stock_analyst_market_data_partial_responses_total Partial successful responses by cause; empty_range does not imply a market holiday.")
+        appendLine("# TYPE stock_analyst_market_data_partial_responses_total counter")
+        partialResponses.forEach { (key, count) ->
+            val scope = if (key.historical) "historical" else "live"
+            appendLine("stock_analyst_market_data_partial_responses_total{operation=\"${key.operation.name.lowercase()}\",scope=\"$scope\",reason=\"${key.reason.name.lowercase()}\"} ${count.sum()}")
         }
         appendLine("# HELP stock_analyst_market_data_age_seconds Age of live data at response time; date-only observations use UTC midnight. Archival requests are excluded.")
         appendLine("# TYPE stock_analyst_market_data_age_seconds histogram")

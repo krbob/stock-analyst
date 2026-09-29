@@ -45,6 +45,12 @@ infer freshness from the API clock or from the final visible point of a chart.
 - `status` is `FRESH`, `STALE` or `PARTIAL` for current single-instrument
   responses. `ERROR` is reserved by the shared model for future batch semantics.
 
+An explicit history range with no returned prices remains `PARTIAL`, including
+a query for today's session before any bar is available. A normal `period=1d`
+request can still return a fresh previous-session price. Monitoring distinguishes
+empty ranges from insufficient FX coverage; these diagnostic reasons do not add
+fields to the public response or assert knowledge of an exchange calendar.
+
 Quote provenance additionally separates current-price freshness from derived
 analytics:
 

@@ -1,6 +1,7 @@
 package net.bobinski.stockanalyst
 
 import io.ktor.client.request.get
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.response.respond
 import io.ktor.server.routing.get
@@ -12,6 +13,7 @@ import kotlinx.datetime.LocalDate
 import net.bobinski.stockanalyst.domain.model.DataAdjustment
 import net.bobinski.stockanalyst.domain.model.DataProvenance
 import net.bobinski.stockanalyst.domain.model.DataStatus
+import net.bobinski.stockanalyst.domain.model.HistoryPartialReason
 import net.bobinski.stockanalyst.domain.model.MarketDataSource
 import net.bobinski.stockanalyst.domain.model.PriceAdjustment
 import net.bobinski.stockanalyst.domain.model.Quote
@@ -24,6 +26,35 @@ import org.koin.ktor.ext.getKoin
 import kotlin.time.Instant
 
 class MarketDataMetricsTest {
+    @Test
+    fun `partial reasons are counted once and do not change the public response schema`() = testApplication {
+        lateinit var registry: RequestMetricsRegistry
+        application {
+            module()
+            registry = getKoin().get()
+            routing {
+                get("/test/partial/{cause}") {
+                    val cause = call.parameters["cause"]?.let { name ->
+                        HistoryPartialReason.entries.find { it.name.lowercase() == name }
+                    }
+                    call.respond(history(DataStatus.PARTIAL).copy(partialReason = cause))
+                }
+            }
+        }
+        startApplication()
+
+        for (reason in listOf("empty_range", "fx_coverage", "other")) {
+            val response = client.get("/test/partial/$reason")
+            assertEquals(HttpStatusCode.OK, response.status)
+            assertFalse(response.bodyAsText().contains("partialReason"))
+            assertTrue(registry.scrape().contains(
+                "stock_analyst_market_data_partial_responses_total{operation=\"history\",scope=\"live\",reason=\"$reason\"} 1"
+            ))
+        }
+        assertTrue(registry.scrape().contains("operation=\"history\",scope=\"live\",status=\"PARTIAL\"} 3"))
+        assertFalse(registry.scrape().contains("PRIVATE"))
+    }
+
     @Test
     fun `HTTP success with stale data is counted once without exposing symbols`() = testApplication {
         lateinit var registry: RequestMetricsRegistry
@@ -63,7 +94,11 @@ class MarketDataMetricsTest {
         val quote = mockk<Quote>()
         every { quote.provenance } returns provenance(DataStatus.PARTIAL).copy(priceStatus = DataStatus.FRESH)
 
-        assertEquals(DataStatus.FRESH, MarketDataObservation.from(quote)!!.status)
+        val observation = MarketDataObservation.from(quote)!!
+        assertEquals(DataStatus.FRESH, observation.status)
+        val metrics = MarketDataMetrics()
+        metrics.record(observation)
+        assertTrue(metrics.scrape().contains("operation=\"quote\",scope=\"live\",reason=\"other\"} 0"))
     }
 
     @Test
