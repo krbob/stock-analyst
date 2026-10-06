@@ -3,7 +3,7 @@ import math
 import os
 import time
 import traceback
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 
 import pandas as pd
 import yfinance as yf
@@ -408,11 +408,24 @@ def _load_history(symbol, period, interval, cache_key):
             low=low_price,
             high=high_price,
             volume=_finite_int(row.get("Volume")),
-            dividend=_resolve_dividend(row, date, dividends_by_date),
+            dividend=_resolve_dividend(row, date, {} if intraday else dividends_by_date),
             timestamp=timestamp,
             splitRatio=_resolve_split_ratio(row),
         )
         result.append(price)
+
+    if intraday:
+        # A daily fallback is an event, not a value to repeat on every candle.
+        # Inspect all valid candles first so a later provider action keeps its
+        # timestamp and repaired amount without an extra fallback at the open.
+        dividend_dates = {price.date for price in result if price.dividend != 0.0}
+        for position, price in enumerate(result):
+            if price.date in dividend_dates:
+                continue
+            dividend = dividends_by_date.get(price.date, 0.0)
+            if dividend != 0.0:
+                result[position] = replace(price, dividend=dividend)
+                dividend_dates.add(price.date)
 
     if result:
         ttl = INTRADAY_CACHE_SECONDS if intraday else HISTORY_CACHE_SECONDS.get(period, 60)

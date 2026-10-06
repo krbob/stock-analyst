@@ -393,6 +393,85 @@ class TestHistoryEndpoint:
         assert response.status_code == 200
         assert response.get_json()[0]["dividend"] == 0.5
 
+    @pytest.mark.parametrize("interval,frequency,count", [
+        ("1m", "1min", 390), ("5m", "5min", 78), ("15m", "15min", 26),
+        ("30m", "30min", 13), ("1h", "1h", 7),
+    ])
+    def test_intraday_does_not_repeat_daily_dividend_on_each_candle(
+        self, client, mock_ticker, interval, frequency, count,
+    ):
+        index = pd.date_range("2026-10-01 09:30", periods=count, freq=frequency, tz="America/New_York")
+        history = pd.DataFrame(
+            {"Open": 77.0, "Close": 77.1, "Low": 76.9, "High": 77.2, "Volume": 1000,
+             "Dividends": [0.312] + [0.0] * (count - 1)},
+            index=index,
+        )
+        dividends = pd.Series([0.312], index=pd.DatetimeIndex([index[0]]))
+        mock_ticker(history_df=history, dividends=dividends)
+
+        response = client.get(f"/history/TLT/5d?interval={interval}")
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert len(data) == count
+        assert [row["dividend"] for row in data] == [0.312] + [0.0] * (count - 1)
+        assert data[0]["timestamp"] == int(index[0].timestamp())
+        assert sum(row["dividend"] for row in data) == pytest.approx(0.312)
+
+    @pytest.mark.parametrize("actions", [None, [0.0, 0.0, 0.0, 0.0], [float("nan")] * 4])
+    def test_intraday_fallback_fills_only_first_candle_of_each_ex_date(self, client, mock_ticker, actions):
+        index = pd.DatetimeIndex([
+            "2026-09-30 15:45", "2026-10-01 09:30", "2026-10-01 09:45", "2026-10-02 09:30",
+        ], tz="America/New_York")
+        history = pd.DataFrame(
+            {"Open": 77.0, "Close": 77.1, "Low": 76.9, "High": 77.2, "Volume": 1000},
+            index=index,
+        )
+        if actions is not None:
+            history["Dividends"] = actions
+        dividends = pd.Series([0.312, 0.2], index=pd.DatetimeIndex(["2026-10-01", "2026-10-02"], tz="UTC"))
+        mock_ticker(history_df=history, dividends=dividends)
+
+        response = client.get("/history/TLT/5d?interval=15m")
+
+        assert response.status_code == 200
+        assert [row["dividend"] for row in response.get_json()] == [0.0, 0.312, 0.0, 0.2]
+
+    def test_intraday_preserves_later_action_instead_of_adding_earlier_fallback(self, client, mock_ticker):
+        index = pd.date_range("2026-10-01 09:30", periods=3, freq="15min", tz="America/New_York")
+        history = pd.DataFrame(
+            {"Open": 77.0, "Close": 77.1, "Low": 76.9, "High": 77.2, "Volume": 1000,
+             "Dividends": [0.0, 0.312, 0.0]},
+            index=index,
+        )
+        # The repaired history action takes precedence over the fallback's amount.
+        dividends = pd.Series([0.4], index=pd.DatetimeIndex([index[0]]))
+        mock_ticker(history_df=history, dividends=dividends)
+
+        response = client.get("/history/TLT/5d?interval=15m")
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert [row["dividend"] for row in data] == [0.0, 0.312, 0.0]
+        assert data[1]["timestamp"] == int(index[1].timestamp())
+
+    def test_intraday_fallback_survives_discarded_invalid_action_candle(self, client, mock_ticker):
+        index = pd.date_range("2026-10-01 09:30", periods=3, freq="15min", tz="America/New_York")
+        history = pd.DataFrame(
+            {"Open": [float("nan"), 77.0, 77.0], "Close": 77.1, "Low": 76.9, "High": 77.2,
+             "Volume": 1000, "Dividends": [0.312, 0.0, 0.0]},
+            index=index,
+        )
+        dividends = pd.Series([0.312], index=pd.DatetimeIndex([index[0]]))
+        mock_ticker(history_df=history, dividends=dividends)
+
+        response = client.get("/history/TLT/5d?interval=15m")
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert [row["dividend"] for row in data] == [0.312, 0.0]
+        assert data[0]["timestamp"] == int(index[1].timestamp())
+
     def test_zero_dividend_when_none_on_date(self, client, mock_ticker):
         mock_ticker(history_df=_sample_history())
 
