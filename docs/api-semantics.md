@@ -128,6 +128,10 @@ payments, the fallback does not add them again. The flag therefore requests
 completeness for coarse bars; it is not an include/exclude filter.
 
 OHLC, volume and dividends are expressed on the latest split-adjusted share basis.
+The adapter normalizes history prices and dividends from the quotation currency in
+yfinance history metadata: GBp/GBX to GBP, ZAc to ZAR, and ILA to ILS. Volume and
+split ratios are not currency-scaled. This normalization is explicit; it does not
+assume that yfinance's repair pipeline returns major currency units.
 Prices are not adjusted for dividends. `splitRatio` appears only on a
 corporate-action candle and expresses the new-to-old share ratio, for example `10.0`
 for a 10-for-1 split.

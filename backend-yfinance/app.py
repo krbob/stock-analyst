@@ -350,8 +350,8 @@ def _load_history(symbol, period, interval, cache_key):
         # Yahoo normally returns OHLC, volume and dividends already expressed on the latest
         # split basis, even when dividend auto-adjustment is disabled. `repair=True` makes
         # yfinance use the Stock Splits actions to repair missing or double split adjustments.
-        # The same repair pipeline standardises GBp/ZAc/ILA history (including dividends) to
-        # GBP/ZAR/ILS. Downstream consumers must therefore scale only info-derived spot fields.
+        # yfinance 1.7 returns repaired prices in the exchange's quotation unit.
+        # Normalize that unit explicitly using this response's history metadata.
         # Keep `auto_adjust=False`: enabling it would additionally adjust for dividends and
         # would make the explicit dividend stream unsuitable for yield/total-return logic.
         # With repaired weekly/monthly candles yfinance resamples daily data and tries to
@@ -369,6 +369,7 @@ def _load_history(symbol, period, interval, cache_key):
             repair=True,
             **history_range,
         )
+        price_scale = _history_price_scale(ticker.get_history_metadata().get("currency"))
     except YFPricesMissingError:
         logger.info("No prices returned for %s (%s); verifying symbol identity", symbol, period)
         return _empty_history_for_known_symbol(ticker, symbol)
@@ -403,12 +404,12 @@ def _load_history(symbol, period, interval, cache_key):
             timestamp = int(utc_index.timestamp())
         price = HistoricalPrice(
             date=date,
-            open=open_price,
-            close=close_price,
-            low=low_price,
-            high=high_price,
+            open=open_price * price_scale,
+            close=close_price * price_scale,
+            low=low_price * price_scale,
+            high=high_price * price_scale,
             volume=_finite_int(row.get("Volume")),
-            dividend=_resolve_dividend(row, date, {} if intraday else dividends_by_date),
+            dividend=_resolve_dividend(row, date, {} if intraday else dividends_by_date) * price_scale,
             timestamp=timestamp,
             splitRatio=_resolve_split_ratio(row),
         )
@@ -424,13 +425,18 @@ def _load_history(symbol, period, interval, cache_key):
                 continue
             dividend = dividends_by_date.get(price.date, 0.0)
             if dividend != 0.0:
-                result[position] = replace(price, dividend=dividend)
+                result[position] = replace(price, dividend=dividend * price_scale)
                 dividend_dates.add(price.date)
 
     if result:
         ttl = INTRADAY_CACHE_SECONDS if intraday else HISTORY_CACHE_SECONDS.get(period, 60)
         _cache_set(cache_key, result, ttl)
     return result
+
+
+def _history_price_scale(currency):
+    # Preserve case: GBp is pence, GBP is pounds; ZAc is cents, ZAR is rand.
+    return 0.01 if currency in ("GBp", "GBX", "ZAc", "ZAC", "ILA") else 1.0
 
 
 def _finite_float(value):

@@ -76,7 +76,8 @@ def mock_ticker():
 
     _sentinel = object()
 
-    def configure(history_df=None, dividends=None, info=_sentinel):
+    def configure(history_df=None, dividends=None, info=_sentinel, history_currency="USD"):
+        instance.get_history_metadata.return_value = {"currency": history_currency}
         if history_df is not None:
             instance.history.return_value = history_df
         type(instance).dividends = PropertyMock(
@@ -197,6 +198,28 @@ def _split_adjusted_history(index=None):
 
 
 class TestHistoryEndpoint:
+    @pytest.mark.parametrize("currency,scale", [
+        ("GBp", 0.01), ("GBX", 0.01), ("ZAc", 0.01), ("ILA", 0.01),
+        ("GBP", 1.0), ("ZAR", 1.0), ("ILS", 1.0), ("USD", 1.0),
+    ])
+    def test_normalizes_history_from_reported_quotation_unit(self, client, mock_ticker, currency, scale):
+        history = _sample_history()
+        history["Dividends"] = [4.0]
+        history["Stock Splits"] = [10.0]
+        mock_ticker(history_df=history, history_currency=currency)
+
+        response = client.get("/history/TEST/5d")
+
+        assert response.status_code == 200
+        price = response.get_json()[0]
+        assert price["open"] == pytest.approx(100 * scale)
+        assert price["close"] == pytest.approx(101 * scale)
+        assert price["low"] == pytest.approx(99 * scale)
+        assert price["high"] == pytest.approx(102 * scale)
+        assert price["dividend"] == pytest.approx(4 * scale)
+        assert price["volume"] == 1000
+        assert price["splitRatio"] == 10
+
     def test_yfinance_upstream_exceptions_are_not_hidden(self):
         assert yf.config.debug.hide_exceptions is False
 

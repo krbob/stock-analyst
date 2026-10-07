@@ -9,8 +9,8 @@ internal data class CurrencyConversionPlan(
     val spotPriceScale: Double
 ) {
     /**
-     * Yahoo info reports exchange-quoted spot fields in subunits (GBp/ZAc/ILA), while yfinance's
-     * repair pipeline standardises historical OHLC and dividends to GBP/ZAR/ILS. Keep this scale
+     * Yahoo info reports exchange-quoted spot fields in subunits (GBp/ZAc/ILA), while our Python
+     * adapter normalizes historical OHLC and dividends to GBP/ZAR/ILS using history metadata. Keep this scale
      * strictly on info-derived price fields; historical series must not be scaled a second time.
      */
     fun normalizeSpotPrice(value: Double): Double = value * spotPriceScale
