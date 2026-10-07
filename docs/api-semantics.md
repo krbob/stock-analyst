@@ -113,11 +113,11 @@ dividend data supplied by yfinance. Weekly and monthly yfinance bars can already
 contain aggregated dividends, and Stock Analyst preserves them even when the
 `dividends` query parameter is omitted or `false`.
 
-Intraday histories preserve dividends on the candles carrying yfinance's actions.
-If a date has no dividend action among its valid candles, the adapter applies the
-calendar-date fallback only to that date's first valid candle. It does not repeat
-the daily amount on every intraday candle. Dates follow the exchange-local history
-index, while candle timestamps are UTC.
+Histories use the actions returned by `history(actions=True, repair=True)`, including
+zero amounts after repair. The separate unrepaired `ticker.dividends` feed is never
+merged back into them. For intraday history, an action whose candle was discarded
+for invalid OHLC can move to the first valid candle on the same exchange-local date,
+provided no valid candle already carries that date's action. Candle timestamps are UTC.
 
 Setting `dividends=true` for weekly or monthly data enables an additional daily-data
 fallback. If the aggregate bars contain no dividends, daily payments are summed into

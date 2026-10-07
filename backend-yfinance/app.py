@@ -376,17 +376,10 @@ def _load_history(symbol, period, interval, cache_key):
     except Exception as error:
         logger.warning("Failed to fetch history for %s (%s)", symbol, period, exc_info=True)
         _raise_classified_upstream_error(error, symbol)
-    try:
-        dividends = ticker.dividends
-    except YFRateLimitError as error:
-        logger.warning("Rate limited while fetching dividends for %s", symbol)
-        _raise_classified_upstream_error(error, symbol)
-    except Exception:
-        logger.warning("Failed to fetch dividend fallback for %s", symbol, exc_info=True)
-        dividends = pd.Series(dtype=float)
-
     intraday = interval in INTRADAY_INTERVALS
-    dividends_by_date = _dividends_by_date(dividends)
+    # Only repaired actions are authoritative. ticker.dividends performs a separate
+    # unrepaired request and can resurrect phantom payouts removed by repair=True.
+    dividends_by_date = _dividends_by_date(history.get("Dividends"))
 
     result = []
     for index, row in history.iterrows():
@@ -409,16 +402,15 @@ def _load_history(symbol, period, interval, cache_key):
             low=low_price * price_scale,
             high=high_price * price_scale,
             volume=_finite_int(row.get("Volume")),
-            dividend=_resolve_dividend(row, date, {} if intraday else dividends_by_date) * price_scale,
+            dividend=(_finite_float(row.get("Dividends")) or 0.0) * price_scale,
             timestamp=timestamp,
             splitRatio=_resolve_split_ratio(row),
         )
         result.append(price)
 
     if intraday:
-        # A daily fallback is an event, not a value to repeat on every candle.
-        # Inspect all valid candles first so a later provider action keeps its
-        # timestamp and repaired amount without an extra fallback at the open.
+        # Recover an action only if its own candle was dropped for invalid OHLC.
+        # Never replace a repaired zero using a separate, unrepaired action feed.
         dividend_dates = {price.date for price in result if price.dividend != 0.0}
         for position, price in enumerate(result):
             if price.date in dividend_dates:
@@ -496,16 +488,6 @@ def _dividends_by_date(dividends):
         date = _date_key(index)
         result[date] = result.get(date, 0.0) + dividend
     return result
-
-
-def _resolve_dividend(row, date, dividends_by_date):
-    row_dividend = _finite_float(row.get("Dividends"))
-    if row_dividend is not None and row_dividend != 0.0:
-        return row_dividend
-    fallback = dividends_by_date.get(date)
-    if fallback is not None:
-        return fallback
-    return row_dividend if row_dividend is not None else 0.0
 
 
 def _resolve_split_ratio(row):

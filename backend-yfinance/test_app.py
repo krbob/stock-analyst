@@ -224,9 +224,9 @@ class TestHistoryEndpoint:
         assert yf.config.debug.hide_exceptions is False
 
     def test_returns_prices(self, client, mock_ticker):
-        index = pd.DatetimeIndex([pd.Timestamp("2024-06-15")])
-        dividends = pd.Series([0.5], index=index)
-        mock_ticker(history_df=_sample_history(), dividends=dividends)
+        history = _sample_history()
+        history["Dividends"] = [0.5]
+        mock_ticker(history_df=history)
 
         response = client.get("/history/AAPL/1y")
 
@@ -401,7 +401,7 @@ class TestHistoryEndpoint:
         assert response.status_code == 200
         assert response.get_json()[0]["dividend"] == 0.27
 
-    def test_matches_dividend_fallback_by_calendar_date(self, client, mock_ticker):
+    def test_preserves_repaired_zero_despite_raw_dividend_on_same_date(self, client, mock_ticker):
         history_index = pd.DatetimeIndex([pd.Timestamp("2024-06-15", tz="America/New_York")])
         dividend_index = pd.DatetimeIndex([pd.Timestamp("2024-06-15", tz="UTC")])
         history = pd.DataFrame(
@@ -409,12 +409,14 @@ class TestHistoryEndpoint:
             index=history_index,
         )
         dividends = pd.Series([0.5], index=dividend_index)
+        history["Dividends"] = [0.0]
+        history["Repaired?"] = [True]
         mock_ticker(history_df=history, dividends=dividends)
 
         response = client.get("/history/AAPL/1y")
 
         assert response.status_code == 200
-        assert response.get_json()[0]["dividend"] == 0.5
+        assert response.get_json()[0]["dividend"] == 0.0
 
     @pytest.mark.parametrize("interval,frequency,count", [
         ("1m", "1min", 390), ("5m", "5min", 78), ("15m", "15min", 26),
@@ -442,7 +444,7 @@ class TestHistoryEndpoint:
         assert sum(row["dividend"] for row in data) == pytest.approx(0.312)
 
     @pytest.mark.parametrize("actions", [None, [0.0, 0.0, 0.0, 0.0], [float("nan")] * 4])
-    def test_intraday_fallback_fills_only_first_candle_of_each_ex_date(self, client, mock_ticker, actions):
+    def test_intraday_does_not_import_unrepaired_actions(self, client, mock_ticker, actions):
         index = pd.DatetimeIndex([
             "2026-09-30 15:45", "2026-10-01 09:30", "2026-10-01 09:45", "2026-10-02 09:30",
         ], tz="America/New_York")
@@ -458,7 +460,7 @@ class TestHistoryEndpoint:
         response = client.get("/history/TLT/5d?interval=15m")
 
         assert response.status_code == 200
-        assert [row["dividend"] for row in response.get_json()] == [0.0, 0.312, 0.0, 0.2]
+        assert [row["dividend"] for row in response.get_json()] == [0.0, 0.0, 0.0, 0.0]
 
     def test_intraday_preserves_later_action_instead_of_adding_earlier_fallback(self, client, mock_ticker):
         index = pd.date_range("2026-10-01 09:30", periods=3, freq="15min", tz="America/New_York")
@@ -597,14 +599,14 @@ class TestHistoryEndpoint:
         assert response.headers["Retry-After"] == str(RATE_LIMIT_RETRY_AFTER_SECONDS)
         assert response.get_json()["error"] == "Upstream provider rate limit exceeded"
 
-    def test_dividend_fallback_rate_limit_remains_retryable(self, client, mock_ticker):
+    def test_history_does_not_request_unrepaired_dividend_feed(self, client, mock_ticker):
         ticker = mock_ticker(history_df=_sample_history())
         type(ticker).dividends = PropertyMock(side_effect=YFRateLimitError())
 
         response = client.get("/history/AAPL/1y")
 
-        assert response.status_code == 429
-        assert response.headers["Retry-After"] == str(RATE_LIMIT_RETRY_AFTER_SECONDS)
+        assert response.status_code == 200
+        type(ticker).__dict__["dividends"].assert_not_called()
 
     def test_missing_timezone_maps_to_not_found(self, client, mock_ticker):
         ticker = mock_ticker()
