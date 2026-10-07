@@ -106,6 +106,12 @@ When indicators are requested, the service fetches additional bars for warmup an
 removes them from the displayed range. For example, an SMA 200 needs up to 200 prior
 bars.
 
+Indicator warmup respects Yahoo's per-request intraday limits (8 days for 1m,
+60 days for 5m/15m/30m, and 730 days for 1h). If a wider supported period is
+unavailable, the service uses the widest supported fetch period and leaves initial
+indicator values unavailable until enough bars exist. Warmup preserves the last
+one or five market sessions for `1d`/`5d`, including across weekends.
+
 Intraday prices and indicator points contain a UTC epoch-second `timestamp` in
 addition to the calendar `date`. The adapter retains intraday results for 30 seconds;
 this is an internal server-side cache and not a public HTTP cache guarantee.

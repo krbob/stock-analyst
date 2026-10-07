@@ -148,6 +148,40 @@ class GetStockHistoryUseCaseTest {
     }
 
     @Test
+    fun `one minute indicators keep a supported five session fetch range`() = runTest {
+        val date = LocalDate(2024, 6, 14)
+        val start = java.time.Instant.parse("2024-06-14T13:30:00Z").epochSecond
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple")
+        coEvery { stockDataProvider.getHistory("AAPL", Period._5d, Interval._1m) } returns
+            (0 until 210).map { intradayPrice(date, 100.0 + it, start + it * 60) }
+
+        val result = useCase("AAPL", Period._5d, Interval._1m, indicators = setOf("rsi", "sma200"))
+
+        assertEquals("5d", result.period)
+        assertEquals(210, result.prices.size)
+        val indicators = checkNotNull(result.indicators)
+        assertTrue(indicators.rsi!!.isNotEmpty())
+        assertTrue(indicators.sma200!!.isNotEmpty())
+    }
+
+    @Test
+    fun `indicator warmup preserves five market sessions across a weekend`() = runTest {
+        timeProvider.setDate(LocalDate(2024, 6, 17))
+        val dates = listOf(7, 10, 11, 12, 13, 14, 17).map { LocalDate(2024, 6, it) }
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple")
+        coEvery { stockDataProvider.getHistory("AAPL", Period._1mo, Interval._15m) } returns
+            dates.flatMap { date ->
+                val start = java.time.Instant.parse("${date}T13:30:00Z").epochSecond
+                (0 until 26).map { intradayPrice(date, 100.0 + it, start + it * 900) }
+            }
+
+        val result = useCase("AAPL", Period._5d, Interval._15m, indicators = setOf("rsi"))
+
+        assertEquals(dates.takeLast(5), result.prices.map { it.date }.distinct())
+        assertEquals(130, result.prices.size)
+    }
+
+    @Test
     fun `uses intraday interval when specified`() = runTest {
         coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
         coEvery { stockDataProvider.getHistory("AAPL", Period._1d, Interval._5m) } returns listOf(

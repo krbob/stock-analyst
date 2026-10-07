@@ -106,7 +106,14 @@ class GetStockHistoryUseCase(
             } else pricesWithDividends
             val sortedPrices = conversionCoveredPrices.sortedBy { it.sortKey }
 
-            val periodCutoff = if (!rangeRequested && fetchPeriod != period) periodStartDate(period) else null
+            val periodCutoff = if (!rangeRequested && fetchPeriod != period) {
+                // Yahoo's 1d/5d ranges count market sessions, not calendar days.
+                when (period) {
+                    Period._1d -> history.maxOf { it.date }
+                    Period._5d -> history.map { it.date }.distinct().sorted().takeLast(5).first()
+                    else -> periodStartDate(period)
+                }
+            } else null
 
             val computed = if (indicators.isNotEmpty()) {
                 val raw = CalculateIndicatorSeries.compute(sortedPrices, indicators, barDuration, conversionHistory)
@@ -255,7 +262,18 @@ class GetStockHistoryUseCase(
             Period.max to Int.MAX_VALUE
         )
 
-        return candidates.firstOrNull { it.second >= neededDays }?.first ?: Period.max
+        val extended = candidates.firstOrNull { it.second >= neededDays }?.first ?: Period.max
+        val limitDays = when (interval) {
+            Interval._1m -> 8
+            Interval._5m, Interval._15m, Interval._30m -> 60
+            Interval._1h -> 730
+            else -> return extended
+        }
+        if (originalDays > limitDays) return period
+        // Warmup must not turn a valid intraday request into an unsupported Yahoo range.
+        // Keep the widest supported period; initial indicators may have fewer warmup bars.
+        val supported = candidates.filter { it.second <= limitDays }
+        return supported.firstOrNull { it.second >= neededDays }?.first ?: supported.last().first
     }
 
     /**
