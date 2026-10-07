@@ -5,6 +5,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.minus
+import kotlinx.datetime.plus
 import net.bobinski.stockanalyst.core.time.CurrentTimeProvider
 import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.model.DataAdjustment
@@ -55,7 +56,7 @@ class GetStockHistoryUseCase(
 
             val infoDeferred = async { stockDataProvider.getInfo(symbol) }
             val historyDeferred = async { stockDataProvider.getHistory(symbol, fetchPeriod, interval) }
-            // yfinance doesn't include dividends in weekly/monthly candles — fetch daily in parallel
+            // Repaired daily actions fill individual missing weekly/monthly aggregates.
             val needsDividendFill = dividends && (interval == Interval.WEEKLY || interval == Interval.MONTHLY)
             val dailyDividendsDeferred = if (needsDividendFill) {
                 async { stockDataProvider.getHistory(symbol, fetchPeriod, Interval.DAILY) }
@@ -94,7 +95,7 @@ class GetStockHistoryUseCase(
 
             val pricesWithDividends: Collection<HistoricalPrice> = if (dailyDividendsDeferred != null) {
                 val dailyPrices = dailyDividendsDeferred.await()
-                injectDividends(history, dailyPrices)
+                injectDividends(history, dailyPrices, interval)
             } else history
 
             val conversionCoveredPrices = if (conversionStart != null) {
@@ -258,28 +259,27 @@ class GetStockHistoryUseCase(
     /**
      * Fallback dividend fill for weekly/monthly candles.
      *
-     * Current yfinance already reports dividends in weekly/monthly candles (placed on the
-     * period-start bar, i.e. the bar whose week/month contains the ex-dividend date). When that
-     * is the case we must NOT inject from daily data as well — the injected copy lands on the
-     * *next* bar (whose (prev, cur] range covers the ex-date), so every payout would show up twice
-     * on two adjacent bars. We therefore only fall back to daily injection when the candles carry
-     * no dividends at all.
-     *
-     * Inject dividends from daily data by summing daily dividends that fall within each bar's date range.
+     * Yahoo labels aggregates by period start. Preserve existing payouts and fill only empty
+     * bars from daily actions in [start, end), including the final visible period. Calendar
+     * bounds prevent a gap in aggregate bars from swallowing a later period's payout.
      */
     private fun injectDividends(
         bars: Collection<HistoricalPrice>,
-        dailyPrices: Collection<HistoricalPrice>
+        dailyPrices: Collection<HistoricalPrice>,
+        interval: Interval
     ): List<HistoricalPrice> {
-        if (bars.any { it.dividend > 0 }) return bars.toList()
         val dailyDividends = dailyPrices.filter { it.dividend > 0 }
         if (dailyDividends.isEmpty()) return bars.toList()
 
         val sorted = bars.sortedBy { it.date }
         return sorted.mapIndexed { index, bar ->
-            val startDate = if (index > 0) sorted[index - 1].date else LocalDate(1900, 1, 1)
+            if (bar.dividend != 0.0) return@mapIndexed bar
+            val calendarEnd = if (interval == Interval.WEEKLY) {
+                bar.date.plus(1, DateTimeUnit.WEEK)
+            } else bar.date.plus(1, DateTimeUnit.MONTH)
+            val endDate = sorted.getOrNull(index + 1)?.date?.let { minOf(it, calendarEnd) } ?: calendarEnd
             val divSum = dailyDividends
-                .filter { it.date > startDate && it.date <= bar.date }
+                .filter { it.date >= bar.date && it.date < endDate }
                 .sumOf { it.dividend }
             if (divSum > 0) bar.copy(dividend = divSum) else bar
         }

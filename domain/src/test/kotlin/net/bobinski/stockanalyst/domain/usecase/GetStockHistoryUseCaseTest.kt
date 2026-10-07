@@ -366,8 +366,8 @@ class GetStockHistoryUseCaseTest {
     fun `injects daily dividends into weekly bars`() = runTest {
         coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
         coEvery { stockDataProvider.getHistory("AAPL", Period._5y, Interval.WEEKLY) } returns listOf(
-            historicalPrice(LocalDate(2024, 6, 7), 200.0),
-            historicalPrice(LocalDate(2024, 6, 14), 210.0)
+            historicalPrice(LocalDate(2024, 6, 3), 200.0),
+            historicalPrice(LocalDate(2024, 6, 10), 210.0)
         )
         coEvery { stockDataProvider.getHistory("AAPL", Period._5y, Interval.DAILY) } returns listOf(
             historicalPrice(LocalDate(2024, 6, 3), 198.0),
@@ -377,8 +377,8 @@ class GetStockHistoryUseCaseTest {
 
         val result = useCase("AAPL", Period._5y, dividends = true)
 
-        assertEquals(0.0, result.prices[0].dividend) // week ending 6/7 — no dividend
-        assertEquals(0.25, result.prices[1].dividend, 0.001) // week ending 6/14 — includes 6/10 dividend
+        assertEquals(0.0, result.prices[0].dividend)
+        assertEquals(0.25, result.prices[1].dividend, 0.001)
     }
 
     @Test
@@ -416,10 +416,50 @@ class GetStockHistoryUseCaseTest {
             listOf(LocalDate(2024, 5, 31), LocalDate(2024, 6, 7), LocalDate(2024, 6, 14)),
             result.prices.map { it.date }
         )
-        assertEquals(0.5, result.prices[0].dividend, 0.001)
-        assertEquals(0.3, result.prices[1].dividend, 0.001)
+        assertEquals(0.2, result.prices[0].dividend, 0.001)
+        assertEquals(0.0, result.prices[1].dividend, 0.001)
         assertEquals(0.0, result.prices[2].dividend, 0.001)
         assertEquals(DataStatus.FRESH, result.provenance.status)
+    }
+
+    @Test
+    fun `fills missing weekly payouts alongside existing actions including final week`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
+        coEvery { stockDataProvider.getHistory("AAPL", Period._5y, Interval.WEEKLY) } returns listOf(
+            historicalPrice(LocalDate(2024, 6, 3), 100.0, dividend = 0.2),
+            historicalPrice(LocalDate(2024, 6, 10), 100.0),
+            historicalPrice(LocalDate(2024, 6, 17), 100.0)
+        )
+        coEvery { stockDataProvider.getHistory("AAPL", Period._5y, Interval.DAILY) } returns listOf(
+            historicalPrice(LocalDate(2024, 6, 5), 100.0, dividend = 0.2),
+            historicalPrice(LocalDate(2024, 6, 13), 100.0, dividend = 0.3),
+            historicalPrice(LocalDate(2024, 6, 17), 100.0, dividend = 0.4),
+            historicalPrice(LocalDate(2024, 6, 21), 100.0, dividend = 0.5),
+            historicalPrice(LocalDate(2024, 6, 24), 100.0, dividend = 0.6)
+        )
+
+        val result = useCase("AAPL", Period._5y, dividends = true)
+
+        assertEquals(listOf(0.2, 0.3, 0.9), result.prices.map { it.dividend })
+    }
+
+    @Test
+    fun `monthly dividend fallback respects calendar boundaries and missing periods`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
+        coEvery { stockDataProvider.getHistory("AAPL", Period.max, Interval.MONTHLY) } returns listOf(
+            historicalPrice(LocalDate(2024, 2, 1), 100.0),
+            historicalPrice(LocalDate(2024, 4, 1), 100.0)
+        )
+        coEvery { stockDataProvider.getHistory("AAPL", Period.max, Interval.DAILY) } returns listOf(
+            historicalPrice(LocalDate(2024, 1, 31), 100.0, dividend = 1.0),
+            historicalPrice(LocalDate(2024, 2, 29), 100.0, dividend = 0.2),
+            historicalPrice(LocalDate(2024, 3, 1), 100.0, dividend = 0.3),
+            historicalPrice(LocalDate(2024, 4, 30), 100.0, dividend = 0.4)
+        )
+
+        val result = useCase("AAPL", Period.max, dividends = true)
+
+        assertEquals(listOf(0.2, 0.4), result.prices.map { it.dividend })
     }
 
     @Test

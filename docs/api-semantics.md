@@ -120,11 +120,10 @@ for invalid OHLC can move to the first valid candle on the same exchange-local d
 provided no valid candle already carries that date's action. Candle timestamps are UTC.
 
 Setting `dividends=true` for weekly or monthly data enables an additional daily-data
-fallback. If the aggregate bars contain no dividends, daily payments are summed into
-the bar whose `(previousBar.date, currentBar.date]` window contains the payment. With
-period-start timestamps this can be the following visible bar rather than the bar
-whose label shares the calendar week or month. If the aggregate bars already contain
-payments, the fallback does not add them again. The flag therefore requests
+fallback. Each empty aggregate bar receives daily payments in its `[start, end)`
+calendar week or month, including the last visible bar. Existing aggregate amounts
+are preserved without adding them again; they do not disable filling other empty
+bars. Missing periods do not expand a neighboring bar's calendar window. The flag requests
 completeness for coarse bars; it is not an include/exclude filter.
 
 OHLC, volume and dividends are expressed on the latest split-adjusted share basis.
