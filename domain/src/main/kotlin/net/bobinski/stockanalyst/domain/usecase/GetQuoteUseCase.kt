@@ -104,7 +104,10 @@ class GetQuoteUseCase(
                 conversionMarketDate = conversionInfo?.marketDate
             )
             val convRate = priceSnapshot.effectiveConversionRate
-            val marketTimestamp = sequenceOf(info, conversionInfo)
+            val marketTimestamp = sequenceOf(
+                info.takeIf { priceSnapshot.usesNativeSpot },
+                conversionInfo.takeIf { priceSnapshot.usesSpotConversion }
+            )
                 .filter { candidate -> candidate?.marketDate == priceSnapshot.terminalDate }
                 .mapNotNull { candidate -> candidate?.marketTimestamp }
                 .minOrNull()
@@ -117,13 +120,12 @@ class GetQuoteUseCase(
             }
             val nativePriceStatus = marketDataProvenance(
                 currentTimeProvider = currentTimeProvider,
-                marketDate = info.marketDate.takeIf { info.price != null }
-                    ?: priceSnapshot.nativeObservationDate.takeIf { info.price == null },
-                marketTimestampEpochSeconds = info.marketTimestamp,
+                marketDate = if (priceSnapshot.usesNativeSpot) info.marketDate else priceSnapshot.nativeObservationDate,
+                marketTimestampEpochSeconds = info.marketTimestamp.takeIf { priceSnapshot.usesNativeSpot },
                 currency = conversionPlan.responseCurrency,
                 adjustment = DataAdjustment.SPLIT_ADJUSTED,
-                coverageFrom = info.marketDate,
-                coverageTo = info.marketDate,
+                coverageFrom = priceSnapshot.nativeObservationDate,
+                coverageTo = priceSnapshot.nativeObservationDate,
                 cadence = MarketDataCadence.DAILY
             ).status
             val conversionPriceStatus = priceSnapshot.conversionObservationDate?.let { observationDate ->
@@ -192,8 +194,11 @@ class GetQuoteUseCase(
                 sector = info.sector,
                 industry = info.industry,
                 earningsDate = info.earningsDate,
-                previousClose = info.previousClose
-                    ?.let(conversionPlan::normalizeSpotPrice)
+                previousClose = (if (priceSnapshot.usesNativeSpot) {
+                    info.previousClose?.let(conversionPlan::normalizeSpotPrice)
+                } else {
+                    history.filter { it.date < priceSnapshot.nativeObservationDate }.maxByOrNull { it.sortKey }?.close
+                })
                     ?.let { convRate?.times(it) ?: it },
                 provenance = priceProvenance.copy(
                     status = if (analyticsStatus == AnalyticsStatus.COMPLETE) {

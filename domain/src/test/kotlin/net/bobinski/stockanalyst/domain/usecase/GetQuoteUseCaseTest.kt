@@ -37,6 +37,24 @@ class GetQuoteUseCaseTest {
     )
 
     @Test
+    fun `stale native info does not overwrite newer history or its freshness`() = runTest {
+        val history = priceHistory(2_000)
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple").copy(
+            price = 150.0, marketDate = LocalDate(2024, 6, 1), marketTimestamp = 1717200000L
+        )
+        coEvery { stockDataProvider.getHistory("AAPL", Period._10y) } returns history
+
+        val result = useCase("AAPL")
+
+        assertEquals(100.0, result.lastPrice)
+        assertEquals(100.1, result.previousClose)
+        assertEquals(LocalDate(2024, 6, 15), result.date)
+        assertEquals(DataStatus.FRESH, result.provenance.priceStatus)
+        assertNull(result.provenance.marketTimestamp)
+        assertEquals(-0.001, result.gain.daily)
+    }
+
+    @Test
     fun `returns quote for valid symbol`() = runTest {
         val history = priceHistory(2_000)
         coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")

@@ -9,6 +9,24 @@ import org.junit.jupiter.api.Test
 class QuotePriceSnapshotTest {
 
     @Test
+    fun `newer native history takes precedence over stale spot and preserves its actions`() {
+        val latest = price(LocalDate(2024, 6, 15), 120.0).copy(dividend = 0.5)
+        val snapshot = QuotePriceSnapshot.create(
+            history = listOf(price(LocalDate(2024, 6, 14), 100.0), latest),
+            conversionHistory = null,
+            nativeSpotPrice = 100.0,
+            spotConversionRate = null,
+            marketDate = LocalDate(2024, 6, 14),
+            fallbackDate = LocalDate(2024, 6, 15)
+        )
+
+        assertEquals(120.0, snapshot.effectiveSpotPrice)
+        assertEquals(latest, snapshot.history.last())
+        assertEquals(LocalDate(2024, 6, 15), snapshot.nativeObservationDate)
+        assertEquals(false, snapshot.usesNativeSpot)
+    }
+
+    @Test
     fun `appends missing spot and FX points without mutating provider history`() {
         val history = listOf(price(LocalDate(2024, 6, 14), 100.0))
         val conversion = listOf(price(LocalDate(2024, 6, 14), 4.0))

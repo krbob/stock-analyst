@@ -29,6 +29,10 @@ If the history fetched for a quote does not yet contain the effective spot sessi
 the service adds that point only to an immutable calculation snapshot. It does not
 mutate the adapter cache.
 
+A spot observation older than the latest historical session does not replace that
+session's close. Price freshness and previous close follow the selected observation,
+so stale spot metadata cannot relabel a newer historical price.
+
 ## Provenance and freshness
 
 Quote, history and latest-indicator responses contain a required `provenance`

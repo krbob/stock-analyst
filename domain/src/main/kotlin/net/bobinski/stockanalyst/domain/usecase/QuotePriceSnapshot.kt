@@ -16,6 +16,7 @@ import net.bobinski.stockanalyst.domain.model.latestPrice
 internal class QuotePriceSnapshot private constructor(
     val terminalDate: LocalDate,
     val nativeObservationDate: LocalDate,
+    val usesNativeSpot: Boolean,
     val conversionObservationDate: LocalDate?,
     val usesSpotConversion: Boolean,
     val effectiveSpotPrice: Double,
@@ -37,12 +38,10 @@ internal class QuotePriceSnapshot private constructor(
 
             val sourceHistory = history.toList()
             val latestHistoryDate = sourceHistory.maxOf { it.date }
-            val resolvedNativeSpot = nativeSpotPrice ?: sourceHistory.latestPrice()
-            val nativeObservationDate = if (nativeSpotPrice != null) {
-                marketDate ?: fallbackDate
-            } else {
-                latestHistoryDate
-            }
+            val spotDate = marketDate ?: fallbackDate
+            val useNativeSpot = nativeSpotPrice?.isFinite() == true && spotDate >= latestHistoryDate
+            val resolvedNativeSpot = if (useNativeSpot) checkNotNull(nativeSpotPrice) else sourceHistory.latestPrice()
+            val nativeObservationDate = if (useNativeSpot) spotDate else latestHistoryDate
             val sourceConversionHistory = conversionHistory?.toList()
             val latestConversionDate = sourceConversionHistory?.maxOfOrNull { it.date }
             val historicalConversionRate = sourceConversionHistory
@@ -84,6 +83,7 @@ internal class QuotePriceSnapshot private constructor(
             return QuotePriceSnapshot(
                 terminalDate = terminalDate,
                 nativeObservationDate = nativeObservationDate,
+                usesNativeSpot = useNativeSpot,
                 conversionObservationDate = conversionObservationDate,
                 usesSpotConversion = useSpotConversion,
                 effectiveSpotPrice = resolvedNativeSpot.applyConversion(resolvedConversionRate),
