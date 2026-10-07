@@ -363,6 +363,43 @@ class GetStockHistoryUseCaseTest {
     }
 
     @Test
+    fun `intraday history requests intraday FX and does not use a later candle rate`() = runTest {
+        val date = LocalDate(2024, 6, 14)
+        val start = java.time.Instant.parse("2024-06-14T13:30:00Z").epochSecond
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple", currency = "USD")
+        coEvery { stockDataProvider.resolveConversionSymbol("USD", "EUR") } returns "EUR=X"
+        coEvery { stockDataProvider.getHistory("AAPL", Period._5d, Interval._15m) } returns listOf(
+            intradayPrice(date, 10.0, start), intradayPrice(date, 10.0, start + 900)
+        )
+        coEvery { stockDataProvider.getHistory("EUR=X", Period._5d, Interval._15m) } returns listOf(
+            intradayPrice(date, 2.0, start), intradayPrice(date, 3.0, start + 900)
+        )
+
+        val result = useCase("AAPL", Period._5d, interval = Interval._15m, currency = "EUR")
+
+        assertEquals(listOf(20.0, 30.0), result.prices.map { it.close })
+        assertEquals(DataStatus.FRESH, result.provenance.status)
+    }
+
+    @Test
+    fun `stale FX removes uncovered dates and marks history partial`() = runTest {
+        coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple", currency = "USD")
+        coEvery { stockDataProvider.resolveConversionSymbol("USD", "EUR") } returns "EUR=X"
+        coEvery { stockDataProvider.getHistory("AAPL", Period._1y, Interval.DAILY) } returns listOf(
+            historicalPrice(LocalDate(2024, 6, 3), 100.0), historicalPrice(LocalDate(2024, 6, 15), 110.0)
+        )
+        coEvery { stockDataProvider.getHistory("EUR=X", Period._1y) } returns listOf(
+            historicalPrice(LocalDate(2024, 6, 3), 2.0)
+        )
+
+        val result = useCase("AAPL", Period._1y, currency = "EUR")
+
+        assertEquals(listOf(200.0), result.prices.map { it.close })
+        assertEquals(DataStatus.PARTIAL, result.provenance.status)
+        assertEquals(HistoryPartialReason.FX_COVERAGE, result.partialReason)
+    }
+
+    @Test
     fun `injects daily dividends into weekly bars`() = runTest {
         coEvery { stockDataProvider.getInfo("AAPL") } returns basicInfo("Apple Inc.")
         coEvery { stockDataProvider.getHistory("AAPL", Period._5y, Interval.WEEKLY) } returns listOf(
@@ -399,7 +436,8 @@ class GetStockHistoryUseCaseTest {
         coEvery { stockDataProvider.resolveConversionSymbol("USD", "EUR") } returns "EUR=X"
         coEvery { stockDataProvider.getHistory("EUR=X", Period._1mo) } returns listOf(
             historicalPrice(LocalDate(2024, 5, 28), 2.0),
-            historicalPrice(LocalDate(2024, 6, 6), 3.0)
+            historicalPrice(LocalDate(2024, 6, 6), 3.0),
+            historicalPrice(LocalDate(2024, 6, 14), 3.0)
         )
 
         val result = useCase(
@@ -597,6 +635,8 @@ class GetStockHistoryUseCaseTest {
         coEvery { stockDataProvider.resolveConversionSymbol("USD", "EUR") } returns "EUR=X"
         coEvery { stockDataProvider.getHistory("EUR=X", Period._1mo) } returns listOf(
             historicalPrice(LocalDate(2024, 6, 5), 0.9),
+            historicalPrice(LocalDate(2024, 6, 9), 0.9),
+            historicalPrice(LocalDate(2024, 6, 13), 0.9),
             historicalPrice(LocalDate(2024, 6, 15), 0.95)
         )
 
@@ -672,6 +712,9 @@ class GetStockHistoryUseCaseTest {
         coEvery { stockDataProvider.resolveConversionSymbol("USD", "EUR") } returns "EUR=X"
         coEvery { stockDataProvider.getHistory("EUR=X", Period._1mo) } returns listOf(
             historicalPrice(LocalDate(2024, 6, 2), 0.9),
+            historicalPrice(LocalDate(2024, 6, 6), 0.9),
+            historicalPrice(LocalDate(2024, 6, 10), 0.9),
+            historicalPrice(LocalDate(2024, 6, 14), 0.9),
             historicalPrice(LocalDate(2024, 6, 15), 0.95)
         )
 

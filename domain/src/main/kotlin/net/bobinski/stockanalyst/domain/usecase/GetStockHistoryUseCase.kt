@@ -9,6 +9,7 @@ import kotlinx.datetime.plus
 import net.bobinski.stockanalyst.core.time.CurrentTimeProvider
 import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.model.DataAdjustment
+import net.bobinski.stockanalyst.domain.model.ConversionRates
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
 import net.bobinski.stockanalyst.domain.model.HistoryPartialReason
 import net.bobinski.stockanalyst.domain.model.PriceAdjustment
@@ -72,7 +73,8 @@ class GetStockHistoryUseCase(
                 // FX may already be on today's session while a one-day equity response still
                 // contains yesterday (or Friday). Keep prior FX sessions for the as-of lookup.
                 val conversionPeriod = if (fetchPeriod == Period._1d) Period._5d else fetchPeriod
-                val convHistory = stockDataProvider.getHistory(it, conversionPeriod)
+                val conversionInterval = if (interval.isIntraday) interval else Interval.DAILY
+                val convHistory = stockDataProvider.getHistory(it, conversionPeriod, conversionInterval)
                 if (convHistory.isEmpty()) throw BackendDataException.insufficientConversion(it)
                 convHistory
             }
@@ -80,14 +82,15 @@ class GetStockHistoryUseCase(
             val history = historyDeferred.await()
             if (history.isEmpty()) throw BackendDataException.missingHistory(symbol)
 
-            val conversionStart = conversionHistory?.minOf { it.date }
-            val partial = if (conversionStart != null) {
-                if (history.none { it.date >= conversionStart }) {
+            val conversionRates = conversionHistory?.let(::ConversionRates)
+            val unavailablePrices = history.filter { conversionRates != null && conversionRates.rateFor(it) == null }.toSet()
+            val partial = if (conversionRates != null) {
+                if (unavailablePrices.size == history.size) {
                     throw BackendDataException.insufficientConversion(conversionSymbol)
                 }
                 conversionTrimAffectsRequestedResult(
                     history = history,
-                    conversionStart = conversionStart,
+                    removedPrices = unavailablePrices,
                     requestedRange = range,
                     requiredPreviousBars = requiredPreviousBars
                 )
@@ -98,8 +101,8 @@ class GetStockHistoryUseCase(
                 injectDividends(history, dailyPrices, interval)
             } else history
 
-            val conversionCoveredPrices = if (conversionStart != null) {
-                pricesWithDividends.filter { it.date >= conversionStart }
+            val conversionCoveredPrices = if (conversionRates != null) {
+                pricesWithDividends.filter { conversionRates.rateFor(it) != null }
             } else pricesWithDividends
             val sortedPrices = conversionCoveredPrices.sortedBy { it.sortKey }
 
@@ -194,11 +197,10 @@ class GetStockHistoryUseCase(
 
     private fun conversionTrimAffectsRequestedResult(
         history: Collection<HistoricalPrice>,
-        conversionStart: LocalDate,
+        removedPrices: Set<HistoricalPrice>,
         requestedRange: Pair<LocalDate, LocalDate>?,
         requiredPreviousBars: Int
     ): Boolean {
-        val removedPrices = history.filter { it.date < conversionStart }
         if (removedPrices.isEmpty()) return false
         if (requestedRange == null) return true
 
@@ -217,7 +219,7 @@ class GetStockHistoryUseCase(
         val warmupStartIndex = (firstRequestedIndex - requiredPreviousBars).coerceAtLeast(0)
         return usablePrices
             .subList(warmupStartIndex, firstRequestedIndex)
-            .any { it.date < conversionStart }
+            .any { it in removedPrices }
     }
 
     private fun extendedPeriod(period: Period, interval: Interval, warmupBars: Int): Period {

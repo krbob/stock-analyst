@@ -1,6 +1,7 @@
 package net.bobinski.stockanalyst.domain.usecase
 
 import net.bobinski.stockanalyst.domain.model.BollingerValue
+import net.bobinski.stockanalyst.domain.model.ConversionRates
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
 import net.bobinski.stockanalyst.domain.model.IndicatorCatalog
 import net.bobinski.stockanalyst.domain.model.Indicators
@@ -31,7 +32,11 @@ object CalculateIndicatorSeries {
         val keys = requested.intersect(validKeys)
         if (keys.isEmpty()) return Indicators()
 
-        val sorted = data.sortedBy { it.sortKey }
+        val rates = conversion?.let(::ConversionRates)
+        val sorted = data.filter { day ->
+            setOf(day.open, day.close, day.low, day.high).all(Double::isFinite) &&
+                (rates == null || rates.rateFor(day) != null)
+        }.sortedBy { it.sortKey }
         val bars = sorted.toBarSeries(conversion, barDuration)
         val close = ClosePriceIndicator(bars)
         val barTimes = sorted.mapNotNull { day ->

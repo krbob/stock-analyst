@@ -162,6 +162,13 @@ After a successful conversion:
 - technical indicators are recomputed from the converted price series. RSI remains
   dimensionless; monetary indicator outputs reflect the target-currency series.
 
+Intraday history and indicator requests use FX observations at or before each
+candle timestamp, rather than the final FX candle of its calendar date. Coarser
+history uses daily FX with an as-of date lookup. A rate must be positive, finite,
+and no older than four days. Uncovered candles are omitted and relevant coverage
+loss is marked `PARTIAL`; no usable conversion coverage returns `422`. Prices in
+the native currency are never retained under the target currency label.
+
 A one-day history request fetches five days of daily FX observations. Before an
 exchange opens, its latest equity session can precede the latest FX session,
 especially across a weekend. Conversion still selects the last FX rate on or before

@@ -5,6 +5,7 @@ import kotlinx.coroutines.coroutineScope
 import net.bobinski.stockanalyst.core.time.CurrentTimeProvider
 import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.model.DataAdjustment
+import net.bobinski.stockanalyst.domain.model.ConversionRates
 import net.bobinski.stockanalyst.domain.model.IndicatorCatalog
 import net.bobinski.stockanalyst.domain.model.LatestIndicators
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider
@@ -44,11 +45,13 @@ class GetLatestIndicatorsUseCase(
 
         var conversionTrimmedHistory = false
         val conversionHistory = conversionSymbol?.let {
-            val convHistory = stockDataProvider.getHistory(it, period, resolvedInterval)
+            val conversionInterval = if (resolvedInterval.isIntraday) resolvedInterval else Interval.DAILY
+            val conversionPeriod = if (period == Period._1d) Period._5d else period
+            val convHistory = stockDataProvider.getHistory(it, conversionPeriod, conversionInterval)
             if (convHistory.isEmpty()) throw BackendDataException.insufficientConversion(it)
-            val convMinDate = convHistory.minOf { p -> p.date }
+            val rates = ConversionRates(convHistory)
             val originalSize = history.size
-            history = history.filter { p -> p.date >= convMinDate }
+            history = history.filter { p -> rates.rateFor(p) != null }
             conversionTrimmedHistory = history.size < originalSize
             if (history.isEmpty()) throw BackendDataException.insufficientConversion(it)
             convHistory

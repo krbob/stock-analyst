@@ -10,6 +10,19 @@ import org.junit.jupiter.api.Test
 class CalculateIndicatorSeriesTest {
 
     @Test
+    fun `indicator timestamps follow the candles with usable FX`() {
+        val prices = (0 until 40).map { price(LocalDate(2024, 6, 1).plus(it), 100.0 + it) }
+        val conversion = prices.drop(10).map { it.copy(close = 2.0) }
+
+        val result = CalculateIndicatorSeries.compute(prices, setOf("bb"), conversion = conversion)
+
+        val bands = checkNotNull(result.bb)
+        assertEquals(11, bands.size)
+        assertEquals(LocalDate(2024, 6, 30), bands.first().date)
+        assertEquals(LocalDate(2024, 7, 10), bands.last().date)
+    }
+
+    @Test
     fun `sma50 series has correct length`() {
         val data = risingPrices(100)
 

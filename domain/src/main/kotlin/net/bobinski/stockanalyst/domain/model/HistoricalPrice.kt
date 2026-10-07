@@ -11,7 +11,6 @@ import org.ta4j.core.BaseBarSeriesBuilder
 import org.ta4j.core.num.DecimalNum
 import org.ta4j.core.num.NaN
 import java.time.Duration
-import java.util.TreeMap
 import kotlin.time.toJavaInstant
 
 @Serializable
@@ -33,20 +32,14 @@ fun Collection<HistoricalPrice>.toBarSeries(
     conversion: Collection<HistoricalPrice>?,
     barDuration: Duration = Duration.ofDays(1)
 ): BarSeries {
-    val conversionLookup = conversion?.toSortedLookup()
+    val conversionLookup = conversion?.let(::ConversionRates)
     return BaseBarSeriesBuilder().withBars(sortedBy { it.sortKey }.mapNotNull { day ->
-        day.toBar(conversionLookup?.priceFor(day.date), barDuration)
+        day.toBar(conversionLookup?.let { it.rateFor(day) ?: Double.NaN }, barDuration)
     }).build()
 }
 
-private fun Collection<HistoricalPrice>.toSortedLookup(): TreeMap<LocalDate, Double> =
-    associateTo(TreeMap()) { it.date to it.close }
-
-private fun TreeMap<LocalDate, Double>.priceFor(date: LocalDate): Double =
-    floorEntry(date)?.value ?: Double.NaN
-
 private fun HistoricalPrice.toBar(conversion: Double?, barDuration: Duration): Bar? {
-    if (setOf(open, close, low, high).any { it.isNaN() }) {
+    if (setOf(open, close, low, high).any { !it.isFinite() }) {
         return null
     }
     if (conversion != null && !conversion.isFinite()) return null
@@ -72,10 +65,10 @@ private fun HistoricalPrice.toBar(conversion: Double?, barDuration: Duration): B
 fun List<HistoricalPrice>.convertPrices(
     conversion: Collection<HistoricalPrice>
 ): List<HistoricalPrice> {
-    val lookup = conversion.associateTo(TreeMap<LocalDate, Double>()) { it.date to it.close }
-    return map { price ->
-        val rate = lookup.floorEntry(price.date)?.value
-        if (rate != null && rate.isFinite()) {
+    val lookup = ConversionRates(conversion)
+    return mapNotNull { price ->
+        val rate = lookup.rateFor(price)
+        if (rate != null) {
             price.copy(
                 open = price.open * rate,
                 close = price.close * rate,
@@ -83,6 +76,6 @@ fun List<HistoricalPrice>.convertPrices(
                 high = price.high * rate,
                 dividend = price.dividend * rate
             )
-        } else price
+        } else null
     }
 }
