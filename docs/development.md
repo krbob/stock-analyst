@@ -196,6 +196,11 @@ live Yahoo, but remains non-blocking because an external outage must not invalid
 reproducible build. A green Renovate pull request therefore proves the deterministic
 contract and fixture coverage, not a live Yahoo request.
 
+The canary compares GBP-normalized VOD.L spot and history prices to detect upstream
+quotation-unit changes. It also requests TLT `5d/1m` with RSI and checks that dividend
+actions are not repeated within a session. These checks avoid fixed prices or payout
+dates so that they remain useful between dependency updates.
+
 ## Renovate policy
 
 Renovate inherits the shared monthly ecosystem policy. On the first day of each month

@@ -56,6 +56,29 @@ if ! jq --exit-status '
   exit 1
 fi
 
+subunit_quote=$(curl --fail --silent --show-error --retry 2 --retry-delay 2 \
+  "${base_url}/v1/quote/VOD.L")
+subunit_history=$(curl --fail --silent --show-error --retry 2 --retry-delay 2 \
+  "${base_url}/v1/history/VOD.L?period=5d&interval=1d")
+if ! jq --exit-status --argjson quote "${subunit_quote}" '
+  .currency == "GBP" and $quote.currency == "GBP" and
+  (.prices[-1].close / $quote.lastPrice | . > 0.5 and . < 2)
+' <<<"${subunit_history}" >/dev/null; then
+  echo "Live Yahoo canary found inconsistent spot/history currency units." >&2
+  exit 1
+fi
+
+minute_history=$(curl --fail --silent --show-error --retry 2 --retry-delay 2 \
+  "${base_url}/v1/history/TLT?period=5d&interval=1m&indicators=rsi&dividends=true")
+if ! jq --exit-status '
+  .interval == "1m" and .period == "5d" and
+  (.prices | length > 14) and (.indicators.rsi | length > 0) and
+  ([.prices[] | select(.dividend > 0)] | group_by(.date) | all(length == 1))
+' <<<"${minute_history}" >/dev/null; then
+  echo "Live Yahoo canary minute-history indicator/action assertion failed." >&2
+  exit 1
+fi
+
 missing_status=$(curl --silent --show-error \
   --output /tmp/stock-analyst-canary-missing.json \
   --write-out '%{http_code}' \
@@ -71,4 +94,4 @@ if ! jq --exit-status \
   exit 1
 fi
 
-echo "Live Yahoo canary passed for quote, bounded/max history, provenance and typed 404."
+echo "Live Yahoo canary passed for quote, history, currency units, minute indicators/actions, provenance and typed 404."
