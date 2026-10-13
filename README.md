@@ -89,6 +89,7 @@ The API exposes:
 The Python adapter also exposes `/health` and `/metrics` on its internal network.
 Successful readiness probes do not produce HTTP client logs; non-2xx responses,
 timeouts and transport failures remain visible as warnings.
+Daily FX histories can reuse fresh wider cached periods without renewing their TTL.
 Configuration, cache TTLs, retry budgets, circuit-breaker behavior and troubleshooting
 are covered by the [Operations guide](docs/operations.md).
 

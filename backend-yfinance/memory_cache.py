@@ -41,6 +41,7 @@ def estimate_cache_entry_bytes(key, value):
 class _CacheEntry:
     value: object
     expires_at: float
+    stored_at: float
     size_bytes: int
 
 
@@ -69,12 +70,12 @@ class ByteBoundedTTLCache:
         self._total_bytes = 0
         self._lock = threading.Lock()
 
-    def get(self, key):
+    def get(self, key, *, max_age=None):
         now = self._clock()
         with self._lock:
             self._remove_expired(now)
             entry = self._entries.get(key)
-            if entry is None:
+            if entry is None or (max_age is not None and now - entry.stored_at >= max_age):
                 return None
             self._entries.move_to_end(key)
             value = entry.value
@@ -101,6 +102,7 @@ class ByteBoundedTTLCache:
             self._entries[key] = _CacheEntry(
                 value=stored_value,
                 expires_at=now + ttl,
+                stored_at=now,
                 size_bytes=size_bytes,
             )
             self._total_bytes += size_bytes

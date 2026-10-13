@@ -3,6 +3,8 @@ import math
 import os
 import time
 import traceback
+from datetime import datetime, timezone
+from calendar import monthrange
 from dataclasses import asdict, dataclass, replace
 
 import pandas as pd
@@ -341,7 +343,39 @@ class BasicInfo:
 
 def get_history(symbol, period, interval="1d"):
     key = f"history:{symbol}:{period}:{interval}"
+    # Daily FX has no dividend/split transformations. Reuse a sufficiently young wider
+    # response without assigning it a new TTL or altering its date coverage.
+    covering = _covering_fx_history(symbol, period, interval)
+    if covering is not None:
+        return covering
     return _coalesced_cached_load(key, lambda: _load_history(symbol, period, interval, key))
+
+
+def _covering_fx_history(symbol, period, interval):
+    months_by_period = {"1mo": 1, "3mo": 3, "6mo": 6, "1y": 12, "2y": 24, "5y": 60, "10y": 120}
+    months = months_by_period.get(period)
+    if not symbol.endswith("=X") or interval != "1d" or months is None:
+        return None
+    today = datetime.now(timezone.utc).date()
+    absolute_month = today.year * 12 + today.month - 1 - months
+    year, month_index = divmod(absolute_month, 12)
+    month = month_index + 1
+    cutoff = today.replace(year=year, month=month, day=min(today.day, monthrange(year, month)[1])).isoformat()
+    for wider, width in months_by_period.items():
+        if width <= months:
+            continue
+        try:
+            cached = _history_cache.get(f"history:{symbol}:{wider}:1d", max_age=HISTORY_CACHE_SECONDS[period])
+        except Exception:
+            logger.warning("Covering FX cache read failed for %s", symbol, exc_info=True)
+            return None
+        if not cached or min(point.date for point in cached) > cutoff:
+            continue
+        selected = [point for point in cached if cutoff <= point.date <= today.isoformat()]
+        if selected:
+            _metrics.record_cache_lookup("history", "hit")
+            return selected
+    return None
 
 
 def _load_history(symbol, period, interval, cache_key):

@@ -1916,3 +1916,41 @@ class TestSearchEndpoint:
             response = client.get("/search/test")
 
             assert response.headers["Cache-Control"] == f"public, max-age={SEARCH_CACHE_SECONDS}"
+
+class TestCoveringFxCache:
+    @staticmethod
+    def prices():
+        return [HistoricalPrice(date, 4.0, 4.0, 4.0, 4.0, 0, 0.0) for date in
+                ("2024-10-13", "2025-10-12", "2025-10-13", "2026-10-12", "2026-10-13")]
+
+    def test_reuses_wider_daily_fx_without_refreshing_its_ttl(self):
+        clock = FakeClock()
+        cache = ByteBoundedTTLCache(100_000, 10, clock=clock)
+        cache.set("history:EURPLN=X:10y:1d", self.prices(), 86400)
+        with patch("app._history_cache", cache), patch("app.datetime") as date, patch("app.yf.Ticker") as ticker:
+            date.now.return_value = datetime(2026, 10, 13, tzinfo=timezone.utc)
+            result = get_history("EURPLN=X", "1y")
+            assert [p.date for p in result] == ["2025-10-13", "2026-10-12", "2026-10-13"]
+            ticker.assert_not_called()
+            assert not cache.contains("history:EURPLN=X:1y:1d")
+            result.clear()
+            assert len(get_history("EURPLN=X", "1y")) == 3
+            clock.advance(14400)
+            ticker.return_value.history.return_value = _sample_history("2026-10-13")
+            ticker.return_value.get_history_metadata.return_value = {"currency": "PLN"}
+            get_history("EURPLN=X", "1y")
+            ticker.assert_called_once()
+
+    @pytest.mark.parametrize("symbol,interval", [("AAPL", "1d"), ("EURPLN=X", "1h"), ("EURPLN=X", "1wk")])
+    def test_never_reuses_equities_or_other_intervals(self, symbol, interval):
+        _history_cache.set(f"history:{symbol}:10y:1d", self.prices(), 86400)
+        with patch("app._load_history", return_value=[]) as loader:
+            get_history(symbol, "1y", interval)
+            loader.assert_called_once()
+
+    def test_missing_requested_prefix_loads_upstream(self):
+        _history_cache.set("history:EURPLN=X:10y:1d", self.prices()[-2:], 86400)
+        with patch("app.datetime") as date, patch("app._load_history", return_value=[]) as loader:
+            date.now.return_value = datetime(2026, 10, 13, tzinfo=timezone.utc)
+            get_history("EURPLN=X", "1y")
+            loader.assert_called_once()

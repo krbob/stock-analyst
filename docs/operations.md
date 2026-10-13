@@ -105,6 +105,13 @@ cached; an empty but successful search result is cached. Failures are never reta
 Values are copied at the cache boundary so a caller cannot mutate the retained
 entry.
 
+For daily FX (`=X`) histories from one month through ten years, a shorter request can reuse
+an already cached wider period covering its start. Reuse is limited by both the original
+entry expiry and the shorter period's maximum age. It trims to the requested calendar
+window, preserves observations, and creates no new cache entry or TTL. Intraday,
+weekly/monthly candles, equities and session-count periods (`1d`/`5d`) keep exact-key behavior.
+Insufficient coverage or an entry too old for the shorter period triggers the normal loader.
+
 ### TTLs
 
 An intraday history interval always uses 30 seconds, regardless of requested period.
