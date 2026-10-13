@@ -16,6 +16,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import kotlinx.io.IOException
 import kotlinx.serialization.encodeToString
@@ -38,13 +39,13 @@ class BackendProviderTest {
     private val jsonHeaders = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString())
 
     @Test
-    fun `readiness reflects backend health status`() = runTest {
+    fun `readiness reflects backend health status`() = runBlocking {
         assertTrue(providerWith("ok", HttpStatusCode.OK).isReady())
         assertFalse(providerWith("busy", HttpStatusCode.ServiceUnavailable).isReady())
     }
 
     @Test
-    fun `readiness propagates cancellation`() = runTest {
+    fun `readiness propagates cancellation`() = runBlocking<Unit> {
         val engine = MockEngine { throw CancellationException("cancelled") }
         val provider = BackendProvider(HttpClient(engine), "http://localhost:8081")
 

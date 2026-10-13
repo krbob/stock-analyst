@@ -4,7 +4,6 @@ import io.ktor.server.application.Application
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
-import kotlinx.coroutines.withTimeoutOrNull
 import net.bobinski.stockanalyst.route.compareRoute
 import net.bobinski.stockanalyst.route.healthRoute
 import net.bobinski.stockanalyst.route.historyRoute
@@ -20,9 +19,7 @@ fun Application.configureRouting() {
 
     routing {
         healthRoute {
-            withTimeoutOrNull(BACKEND_READINESS_TIMEOUT_MS) {
-                backendProvider.isReady()
-            } == true
+            backendProvider.isReady()
         }
         metricsRoute()
         openApiRoute()
@@ -35,8 +32,6 @@ fun Application.configureRouting() {
         }
     }
 }
-
-private const val BACKEND_READINESS_TIMEOUT_MS = 1_000L
 
 private fun Route.marketDataRoutes() {
     quoteRoute()

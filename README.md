@@ -87,6 +87,8 @@ The API exposes:
 - `GET /health` as a legacy liveness alias.
 
 The Python adapter also exposes `/health` and `/metrics` on its internal network.
+Successful readiness probes do not produce HTTP client logs; non-2xx responses,
+timeouts and transport failures remain visible as warnings.
 Configuration, cache TTLs, retry budgets, circuit-breaker behavior and troubleshooting
 are covered by the [Operations guide](docs/operations.md).
 

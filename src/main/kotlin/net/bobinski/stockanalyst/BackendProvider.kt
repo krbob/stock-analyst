@@ -14,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.withTimeoutOrNull
 import net.bobinski.stockanalyst.domain.error.BackendDataException
 import net.bobinski.stockanalyst.domain.model.BasicInfo
 import net.bobinski.stockanalyst.domain.model.HistoricalPrice
@@ -123,7 +124,17 @@ internal class BackendProvider(
         else "${from.uppercase()}${to.uppercase()}=X"
 
     internal suspend fun isReady(): Boolean = try {
-        client.get("$backendUrl/health").status.isSuccess()
+        val ready = withTimeoutOrNull(BACKEND_READINESS_TIMEOUT_MS) {
+            val status = client.get("$backendUrl/health").status
+            if (!status.isSuccess()) {
+                logger.warn("Data backend readiness probe returned {}", status)
+            }
+            status.isSuccess()
+        }
+        if (ready == null) {
+            logger.warn("Data backend readiness probe timed out after {} ms", BACKEND_READINESS_TIMEOUT_MS)
+        }
+        ready == true
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
@@ -171,3 +182,5 @@ internal class BackendProvider(
         workScope.cancel()
     }
 }
+
+private const val BACKEND_READINESS_TIMEOUT_MS = 1_000L

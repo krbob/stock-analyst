@@ -31,6 +31,12 @@ network.
 Liveness deliberately does not depend on Yahoo or the adapter. Use `/healthz` for a
 container liveness probe and `/readyz` for readiness and rollout gates.
 
+Incoming health, readiness and metrics probes are excluded from routine access
+logs. The HTTP client also omits adapter `/health` traffic; readiness explicitly
+logs warnings for non-2xx responses, exceptions and its one-second deadline.
+Successful probes stay silent. Caller cancellation still propagates without an
+availability warning. Docker's ten-second probe interval is unchanged.
+
 ### Python adapter
 
 | Path | Success | Meaning |

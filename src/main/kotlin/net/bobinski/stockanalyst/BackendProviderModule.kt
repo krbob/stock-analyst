@@ -10,9 +10,11 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.HttpTimeoutConfig
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logging
+import io.ktor.client.plugins.logging.LoggingConfig
 import io.ktor.client.plugins.logging.LoggingFormat
 import io.ktor.client.request.accept
 import io.ktor.http.ContentType
+import io.ktor.http.encodedPath
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 import net.bobinski.stockanalyst.domain.provider.StockDataProvider
@@ -34,8 +36,7 @@ val BackendProviderModule = module {
                 configureBackendTransportRetries()
             }
             install(Logging) {
-                level = LogLevel.INFO
-                format = LoggingFormat.OkHttp
+                configureBackendLogging()
             }
         }
     } onClose { client ->
@@ -54,6 +55,14 @@ val BackendProviderModule = module {
     single<StockDataProvider> {
         get<BackendProvider>()
     }
+}
+
+internal fun LoggingConfig.configureBackendLogging() {
+    level = LogLevel.INFO
+    // Ktor 3.6's OkHttp response logger ignores request filters.
+    format = LoggingFormat.Default
+    // Readiness failures are reported by BackendProvider, including the probe deadline.
+    filter { request -> request.url.encodedPath != "/health" }
 }
 
 internal fun HttpRequestRetryConfig.configureBackendTransportRetries() {
