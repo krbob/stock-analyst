@@ -8,7 +8,7 @@ koin-version = "4.2.2"
 ta4j-version = "0.25.0"
 detekt-version = "2.0.0-alpha.6"
 cyclonedx-version = "3.4.1"
-micrometer-version = "1.17.1"
+micrometer-version = "1.17.2"
 
 [libraries]
 # Server
