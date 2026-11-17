@@ -208,7 +208,11 @@ def _raise_classified_upstream_error(error, symbol=None):
     if isinstance(error, YFRateLimitError):
         raise UpstreamRateLimitError() from error
     if symbol is not None and (
-        isinstance(error, YFTzMissingError) or _is_upstream_http_not_found(error)
+        isinstance(error, YFTzMissingError)
+        or _is_upstream_http_not_found(error)
+        # yfinance 1.7 uses this exact ValueError when its ISIN lookup returns
+        # no ticker. Other ValueErrors can indicate malformed upstream data.
+        or (isinstance(error, ValueError) and str(error) == f"Invalid ISIN number: {symbol.upper()}")
     ):
         raise SymbolNotFoundError(symbol) from error
     raise UpstreamDataError() from error
@@ -379,7 +383,11 @@ def _covering_fx_history(symbol, period, interval):
 
 
 def _load_history(symbol, period, interval, cache_key):
-    ticker = yf.Ticker(symbol)
+    try:
+        ticker = yf.Ticker(symbol)
+    except Exception as error:
+        logger.warning("Failed to initialize ticker for %s", symbol, exc_info=True)
+        _raise_classified_upstream_error(error, symbol)
     try:
         # Yahoo normally returns OHLC, volume and dividends already expressed on the latest
         # split basis, even when dividend auto-adjustment is disabled. `repair=True` makes

@@ -931,6 +931,36 @@ class TestInfoEndpoint:
         assert "Internal details" not in str(response.get_json())
 
 
+class TestTickerInitializationErrors:
+    @pytest.mark.parametrize("path", ["/info/{symbol}", "/history/{symbol}/1y"])
+    @pytest.mark.parametrize("symbol", ["PL0000117024", "pl0000117024"])
+    def test_unresolved_isin_returns_not_found(self, client, path, symbol):
+        with patch("app.yf.Ticker", side_effect=ValueError(f"Invalid ISIN number: {symbol.upper()}")):
+            response = client.get(path.format(symbol=symbol))
+
+        assert response.status_code == 404
+        assert response.get_json()["error"] == f"Symbol not found: {symbol}"
+        assert "Retry-After" not in response.headers
+        assert _upstream_circuit.failure_count == 0
+
+    @pytest.mark.parametrize("path", ["/info/PL0000117024", "/history/PL0000117024/1y"])
+    @pytest.mark.parametrize("error,status", [
+        (ValueError("Unexpected provider data"), 502),
+        (RuntimeError("Invalid ISIN number: PL0000117024"), 502),
+        (ValueError("Invalid ISIN number: US0378331005"), 502),
+        (_http_error(403), 502),
+        (YFRateLimitError(), 429),
+    ])
+    def test_other_initialization_failures_are_not_unknown_symbols(self, client, path, error, status):
+        with patch("app.yf.Ticker", side_effect=error):
+            response = client.get(path)
+
+        assert response.status_code == status
+        if status == 429:
+            assert response.headers["Retry-After"] == str(RATE_LIMIT_RETRY_AFTER_SECONDS)
+            assert _upstream_circuit.state == CircuitState.OPEN
+
+
 class TestCacheHeaders:
     def test_info_cache_5_minutes(self, client, mock_ticker):
         mock_ticker(info={"longName": "Test"})
