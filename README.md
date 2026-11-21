@@ -46,6 +46,28 @@ This repository's Compose stack is the complete API tier. To evaluate the browse
 [three-service Compose quick start in Stock Analyst UI](https://github.com/krbob/stock-analyst-ui#complete-docker-stack);
 it wires the frontend proxy, this API and the private yfinance adapter with readiness checks.
 
+### Apple container on macOS
+
+On Apple silicon, start the published ARM64 images on two networks. The adapter needs outbound access to
+Yahoo Finance. Only the API joins the frontend network. These commands use `jq` to read the adapter's current
+address and work with the default Apple DNS settings.
+
+~~~bash
+container system start
+container network create stock-provider
+container network create stock-frontend
+container run -d --rm --name stock-yfinance --network stock-provider \
+  ghcr.io/krbob/stock-analyst-backend-yfinance:main
+provider_ip=$(container inspect stock-yfinance | jq -er '.[0].status.networks[0].ipv4Address | split("/")[0]')
+container run -d --rm --name stock-api --network stock-provider --network stock-frontend \
+  -e BACKEND_URL="http://${provider_ip}:8081" -p 127.0.0.1:8080:8080 ghcr.io/krbob/stock-analyst:main
+curl --fail --retry 30 --retry-all-errors --retry-delay 1 http://127.0.0.1:8080/readyz
+~~~
+
+To add the browser UI, follow the [Apple container instructions in Stock Analyst UI](https://github.com/krbob/stock-analyst-ui#apple-container-on-macos).
+After stopping the UI, run `container stop stock-api stock-yfinance` and `container network delete stock-frontend stock-provider`.
+If you recreate the adapter, read its new address before starting the API.
+
 ## API
 
 The canonical API is versioned under `/v1`:
